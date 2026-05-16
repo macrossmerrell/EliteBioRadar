@@ -4,6 +4,8 @@ A standalone portable Windows application for Elite Dangerous Odyssey. Displays 
 
 Designed to run on a second monitor or touchscreen alongside the game. **VR ready** — can be pinned in Meta Quest, Virtual Desktop, or any VR environment that supports pinning Windows applications into your playspace.
 
+Latest release can be found here:  https://github.com/macrossmerrell/EliteBioRadar/releases
+
 ---
 
 ## Interface Overview
