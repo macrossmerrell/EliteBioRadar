@@ -8,7 +8,8 @@ Designed to run on a second monitor or touchscreen alongside the game. **VR read
 
 ## Interface Overview
 
-![image](screenshots/fullscan.png)
+![image](https://github.com/macrossmerrell/EliteBioRadar/blob/d2e1391d325d5258877fbde3fcadded7f2b292ba/screenshots/Fullscan.png)
+
 - **Top menu** shows: 
    - The name of the current system.
    - How many bio sites on selected / current planet.
@@ -35,6 +36,8 @@ Designed to run on a second monitor or touchscreen alongside the game. **VR read
  
 --- 
 ## Settings Overview
+
+![image](https://github.com/macrossmerrell/EliteBioRadar/blob/d2e1391d325d5258877fbde3fcadded7f2b292ba/screenshots/SettingsMenu.png)
 
 Checkboxes to: 
 - Enable Bio Survey Sidebar.
