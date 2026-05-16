@@ -1,0 +1,78 @@
+<Window x:Class="EliteBioRadar.AboutWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="About Elite Bio Radar"
+        Width="420" Height="320"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        Background="#0a1a1a"
+        BorderBrush="#1a4444"
+        BorderThickness="1"
+        FontFamily="Consolas">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- App name -->
+        <TextBlock Grid.Row="0" Text="ELITE BIO RADAR"
+                   Foreground="#00e5ff" FontSize="22" FontWeight="Bold"
+                   HorizontalAlignment="Center" Margin="0,0,0,4"/>
+
+        <!-- Version -->
+        <TextBlock Grid.Row="1" x:Name="txtVersion" Text="Version 1.0.0"
+                   Foreground="#44aaaa" FontSize="13"
+                   HorizontalAlignment="Center" Margin="0,0,0,16"/>
+
+        <!-- Description -->
+        <TextBlock Grid.Row="2"
+                   Text="Real-time planetary bio-organism radar for Elite Dangerous Odyssey."
+                   Foreground="#88bbbb" FontSize="12"
+                   TextWrapping="Wrap" TextAlignment="Center"
+                   Margin="0,0,0,20"/>
+
+        <!-- Separator -->
+        <Border Grid.Row="3" BorderBrush="#1a4444" BorderThickness="0,1,0,0"
+                VerticalAlignment="Center" Margin="0,0,0,16"/>
+
+        <!-- Credits -->
+        <StackPanel Grid.Row="4" Margin="0,0,0,8">
+            <TextBlock Text="CREDITS" Foreground="#00e5ff" FontSize="11"
+                       FontWeight="Bold" Margin="0,0,0,6"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="Radar icon: " Foreground="#44aaaa" FontSize="12"/>
+                <TextBlock x:Name="lnkFlaticon" Text="Good Ware via Flaticon"
+                           Foreground="#00e5ff" FontSize="12"
+                           Cursor="Hand" TextDecorations="Underline"
+                           MouseLeftButtonUp="LnkFlaticon_Click"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Source: " Foreground="#44aaaa" FontSize="12"/>
+                <TextBlock x:Name="lnkGitHub" Text="github.com/macrossmerrell/EliteBioRadar"
+                           Foreground="#00e5ff" FontSize="12"
+                           Cursor="Hand" TextDecorations="Underline"
+                           MouseLeftButtonUp="LnkGitHub_Click"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- License -->
+        <TextBlock Grid.Row="5"
+                   Text="Released under the MIT License. See LICENSE for details."
+                   Foreground="#335555" FontSize="11"
+                   TextWrapping="Wrap" Margin="0,0,0,16"/>
+
+        <!-- Close button -->
+        <Button Grid.Row="6" Content="Close" Click="BtnClose_Click"
+                HorizontalAlignment="Center"
+                Width="100" Height="30"
+                Background="#1a3333" Foreground="#00e5ff"
+                BorderBrush="#1a4444" FontFamily="Consolas" FontSize="13"/>
+    </Grid>
+</Window>

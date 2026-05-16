@@ -1,0 +1,22 @@
+# Build output
+bin/
+obj/
+
+# Published app (users download this separately, not committed to repo)
+bin/Release/net8.0-windows/BioRadar-App/
+
+# User data files (generated at runtime, personal to each user)
+EliteBioRadar.cache.json
+EliteBioRadar.settings.json
+EliteBioRadar.earnings.json
+EliteBioRadar.log
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+
+# OS
+.DS_Store
+Thumbs.db
