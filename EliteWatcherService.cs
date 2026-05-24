@@ -25,7 +25,8 @@ namespace EliteBioRadar
         public string StarSystem        { get; private set; } = "";
         public string CachedBodyName    { get; private set; } = "";
         public bool   WasFootfalled     { get; private set; } = false;
-        private bool  _pendingFirstFootfall = false;
+        private bool  _pendingFirstFootfall     = false;
+        private string _pendingFirstFootfallBody = "";
         private string _backfillSystem  = "";  // correct system derived during backfill
         private bool  _bodySetByStatus  = false;
 
@@ -47,10 +48,11 @@ namespace EliteBioRadar
 
         public void ClearCurrentBody()
         {
-            CurrentBody           = "";
-            _bodySetByStatus      = false;
-            WasFootfalled         = false;
-            _pendingFirstFootfall = false;
+            CurrentBody               = "";
+            _bodySetByStatus          = false;
+            WasFootfalled             = false;
+            _pendingFirstFootfall     = false;
+            _pendingFirstFootfallBody = "";
             lock (ScannedOrganisms) ScannedOrganisms.Clear();
             lock (KnownGenera)      KnownGenera.Clear();
             lock (CompletedGenera)  CompletedGenera.Clear();
@@ -208,13 +210,55 @@ namespace EliteBioRadar
                 if (destObj != null)
                 {
                     var destName = destObj.Value<string>("Name") ?? "";
-                    if (!string.IsNullOrEmpty(destName) && destName != TargetedBody)
+                    if (!string.IsNullOrEmpty(destName))
                     {
+                        bool nameChanged = destName != TargetedBody;
                         TargetedBody = destName;
-                        lock (_bodyBioSignals)
-                            TargetedBodyBioCount = _bodyBioSignals.TryGetValue(destName, out var bc) ? bc : 0;
-                        Log.Write($"Targeting: {destName} bio={TargetedBodyBioCount}");
-                        StatusUpdated?.Invoke(this, new StatusUpdatedEventArgs { Status = status });
+
+                        // Look up bio count — prefer SystemBioPlanets (backfilled) over _bodyBioSignals
+                        int bioCount = 0;
+                        lock (_planetLock)
+                        {
+                            var tp = SystemBioPlanets.FirstOrDefault(p =>
+                                string.Equals(p.FullBodyName, destName, StringComparison.OrdinalIgnoreCase));
+                            if (tp != null) bioCount = tp.BioCount;
+                        }
+                        if (bioCount == 0)
+                            lock (_bodyBioSignals)
+                                _bodyBioSignals.TryGetValue(destName, out bioCount);
+
+                        bool bioChanged = bioCount != TargetedBodyBioCount;
+                        TargetedBodyBioCount = bioCount;
+
+                        if (nameChanged || (bioChanged && bioCount > 0))
+                        {
+                            Log.Write($"Targeting: {destName} bio={TargetedBodyBioCount}");
+                            if (string.IsNullOrEmpty(CurrentBody) && bioCount > 0)
+                            {
+                                BiologyCount = bioCount;
+
+                                // Load cache data for this body so sidebar shows known genera + completed scans
+                                var cached = ScanCache.LoadForBody(destName);
+                                lock (KnownGenera)
+                                {
+                                    KnownGenera.Clear();
+                                    foreach (var g in cached.KnownGenera)
+                                        KnownGenera.Add(g);
+                                }
+                                lock (ScannedOrganisms)
+                                {
+                                    ScannedOrganisms.Clear();
+                                    foreach (var o in cached.Organisms)
+                                        ScannedOrganisms.Add(o);
+                                }
+                                WasFootfalled = cached.WasFootfalled;
+
+                                BodyChanged?.Invoke(this, new BodyChangedEventArgs
+                                    { BodyName = destName, BioCount = bioCount });
+                            }
+                            else
+                                StatusUpdated?.Invoke(this, new StatusUpdatedEventArgs { Status = status });
+                        }
                     }
                 }
 
@@ -223,6 +267,11 @@ namespace EliteBioRadar
                     // Approaching or landed on a new body — load its cache
                     CurrentBody      = status.BodyName;
                     _bodySetByStatus = true;
+                    WasFootfalled    = false;
+                    // Only clear pending FF if we've moved to a different body than the one being scanned
+                    if (!string.Equals(status.BodyName, _pendingFirstFootfallBody, StringComparison.OrdinalIgnoreCase))
+                        _pendingFirstFootfall = false;
+                        _pendingFirstFootfallBody = "";
                     lock (ScannedOrganisms)
                     {
                         ScannedOrganisms.Clear();
@@ -260,6 +309,28 @@ namespace EliteBioRadar
             catch { }
         }
 
+        // Called when user clicks a planet in the Biological Sites panel while on a different body
+        // Loads that planet's cache data into display state temporarily
+        public void PreviewPlanet(string fullBodyName)
+        {
+            if (string.Equals(fullBodyName, CurrentBody, StringComparison.OrdinalIgnoreCase))
+                return; // already on this planet — no preview needed
+
+            var cached = ScanCache.LoadForBody(fullBodyName);
+            lock (KnownGenera)      { KnownGenera.Clear();      foreach (var g in cached.KnownGenera)  KnownGenera.Add(g); }
+            lock (ScannedOrganisms) { ScannedOrganisms.Clear(); foreach (var o in cached.Organisms)    ScannedOrganisms.Add(o); }
+            lock (CompletedGenera)  CompletedGenera.Clear();
+
+            var planet = SystemBioPlanets.FirstOrDefault(p =>
+                string.Equals(p.FullBodyName, fullBodyName, StringComparison.OrdinalIgnoreCase));
+            BiologyCount  = planet?.BioCount ?? cached.BiologyCount;
+            WasFootfalled = cached.WasFootfalled;
+
+            Log.Write($"PreviewPlanet: '{fullBodyName}' genera={KnownGenera.Count} scans={ScannedOrganisms.Count}");
+            BodyChanged?.Invoke(this, new BodyChangedEventArgs
+                { BodyName = fullBodyName, BioCount = BiologyCount });
+        }
+
         // ---------------------------------------------------------------
         private void JournalLoop(CancellationToken ct)
         {
@@ -289,8 +360,34 @@ namespace EliteBioRadar
                         BackfillJournal(latest);
                         Log.Write($"JournalLoop: backfill done, {ScannedOrganisms.Count} organisms loaded");
 
-                        // Scan all journals for bio planets in current system
-                        BackfillSystemPlanets(_backfillSystem);
+                        // Determine current system — search recent journals for last FSDJump/Location
+                        string systemForPlanets = _backfillSystem;
+                        if (string.IsNullOrEmpty(systemForPlanets))
+                        {
+                            foreach (var jf in Directory.GetFiles(_journalDir, "Journal.*.log")
+                                .OrderByDescending(f => f).Take(10))
+                            {
+                                foreach (var line in SafeReadAllLines(jf).AsEnumerable().Reverse())
+                                {
+                                    var o = TryParse(line); if (o == null) continue;
+                                    var ev = o.Value<string>("event");
+                                    if (ev == "FSDJump" || ev == "CarrierJump" || ev == "Location")
+                                    {
+                                        systemForPlanets = o.Value<string>("StarSystem") ?? "";
+                                        if (!string.IsNullOrEmpty(systemForPlanets)) break;
+                                    }
+                                }
+                                if (!string.IsNullOrEmpty(systemForPlanets)) break;
+                            }
+                        }
+
+                        if (!string.IsNullOrEmpty(systemForPlanets))
+                        {
+                            StarSystem = systemForPlanets;
+                            BackfillSystemPlanets(systemForPlanets);
+                        }
+                        else
+                            Log.Write("JournalLoop: no system found in journals, skipping BackfillSystemPlanets");
 
                         // Set position to END of file so the tail only picks up new events
                         // Never replay historical lines as live events
@@ -498,6 +595,34 @@ namespace EliteBioRadar
                 }
 
                 Log.Write($"BackfillSystemPlanets: found {SystemBioPlanets.Count} bio planets");
+
+                // Sync targeted body bio count so sidebar shows unknown slots
+                // After building the planet list, refresh the sidebar if we're in space
+                // targeting a planet with bio signals
+                if (string.IsNullOrEmpty(CurrentBody))
+                {
+                    var target = !string.IsNullOrEmpty(TargetedBody) ? TargetedBody
+                        : CurrentStatus?.BodyName ?? "";
+
+                    if (!string.IsNullOrEmpty(target))
+                    {
+                        lock (_planetLock)
+                        {
+                            var tp = SystemBioPlanets.FirstOrDefault(p =>
+                                string.Equals(p.FullBodyName, target, StringComparison.OrdinalIgnoreCase));
+                            if (tp != null && tp.BioCount > 0)
+                            {
+                                TargetedBody         = target;
+                                TargetedBodyBioCount = tp.BioCount;
+                                BiologyCount         = tp.BioCount;
+                                Log.Write($"BackfillSystemPlanets: firing BodyChanged for '{target}' bio={tp.BioCount}");
+                                BodyChanged?.Invoke(this, new BodyChangedEventArgs
+                                    { BodyName = target, BioCount = tp.BioCount });
+                            }
+                        }
+                    }
+                }
+
                 PlanetListChanged?.Invoke(this, EventArgs.Empty);
             }
             catch (Exception ex)
@@ -530,11 +655,19 @@ namespace EliteBioRadar
                         var ev = o.Value<string>("event");
                         if (ev == "FSDJump" || ev == "CarrierJump")
                         {
-                            // Jumped away — no current body
-                            Log.Write("Backfill: latest event was FSDJump, no current body");
+                            // Jumped to a new system — capture the destination system
+                            var jumpSystem = o.Value<string>("StarSystem") ?? "";
+                            if (!string.IsNullOrEmpty(jumpSystem))
+                            {
+                                StarSystem      = jumpSystem;
+                                _backfillSystem = jumpSystem;
+                            }
+                            Log.Write($"Backfill: latest event was FSDJump to '{jumpSystem}', no current body");
                             break;
                         }
-                        if (ev == "ApproachBody" || ev == "Location" || ev == "Touchdown" || ev == "Disembark")
+                        // Only Touchdown/Disembark guarantee a landable planet body
+                        // Location/ApproachBody can match star names, not just landable bodies
+                        if (ev == "Touchdown" || ev == "Disembark")
                         {
                             CurrentBody = o.Value<string>("Body") ?? o.Value<string>("BodyName") ?? "";
                             if (!string.IsNullOrEmpty(CurrentBody))
@@ -548,7 +681,7 @@ namespace EliteBioRadar
 
                 if (string.IsNullOrEmpty(CurrentBody))
                 {
-                    Log.Write("Backfill: no current body, skipping");
+                    Log.Write("Backfill: no current body, skipping scan backfill");
                     return;
                 }
 
@@ -608,6 +741,17 @@ namespace EliteBioRadar
                                 activeBody = obj.Value<string>("Body") ?? obj.Value<string>("BodyName") ?? activeBody;
                                 if (obj["Latitude"]  != null) activeLat = obj.Value<double>("Latitude");
                                 if (obj["Longitude"] != null) activeLon = obj.Value<double>("Longitude");
+
+                                // Confirm first footfall if pending — covers the case where
+                                // Disembark was replayed as backfill (e.g. app started after landing)
+                                if (_pendingFirstFootfall &&
+                                    string.Equals(activeBody, CurrentBody, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    WasFootfalled         = true;
+                                    _pendingFirstFootfall = false;
+                        _pendingFirstFootfallBody = "";
+                                    Log.Write($"Backfill Disembark: First Footfall confirmed for '{CurrentBody}'");
+                                }
                                 break;
                             }
 
@@ -815,7 +959,8 @@ namespace EliteBioRadar
                         (string.Equals(bodyName, CurrentBody, StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(bodyName, TargetedBody, StringComparison.OrdinalIgnoreCase)))
                     {
-                        _pendingFirstFootfall = !wasFootfalled;
+                        _pendingFirstFootfall     = !wasFootfalled;
+                        _pendingFirstFootfallBody = bodyName;
                         if (backfill && _pendingFirstFootfall)
                             WasFootfalled = true;
                         Log.Write($"Scan: {bodyName} WasFootfalled={wasFootfalled} → PendingFF={_pendingFirstFootfall}");
@@ -828,11 +973,14 @@ namespace EliteBioRadar
                     // Player stepped off ship — if pending FF, now confirm it
                     if (_pendingFirstFootfall && !backfill)
                     {
-                        WasFootfalled = true;
+                        WasFootfalled         = true;
                         _pendingFirstFootfall = false;
-                        Log.Write($"Disembark: First Footfall confirmed for '{CurrentBody}'");
+                        _pendingFirstFootfallBody = "";
+                        // Use body from event if CurrentBody not yet set (e.g. status poll hasn't fired)
+                        var disembarkBody = obj.Value<string>("Body") ?? obj.Value<string>("BodyName") ?? CurrentBody;
+                        Log.Write($"Disembark: First Footfall confirmed for '{disembarkBody}'");
                         BodyChanged?.Invoke(this, new BodyChangedEventArgs
-                            { BodyName = CurrentBody, BioCount = BiologyCount, GeoCount = GeologyCount });
+                            { BodyName = disembarkBody, BioCount = BiologyCount, GeoCount = GeologyCount });
                     }
                     break;
                 }
@@ -912,7 +1060,6 @@ namespace EliteBioRadar
                         TargetedBodyBioCount = bio;
 
                     // SAASignalsFound (detailed surface scan) includes a Genuses array
-                    // with the actual genus names present on the planet
                     if (evt == "SAASignalsFound")
                     {
                         var genuses = obj["Genuses"];
@@ -932,6 +1079,13 @@ namespace EliteBioRadar
                                 }
                             }
                             Log.Write($"SAASignalsFound: {KnownGenera.Count} genera: {string.Join(", ", KnownGenera)}");
+
+                            // If in space (no current body), set TargetedBody so sidebar shows genera
+                            if (string.IsNullOrEmpty(CurrentBody) && !string.IsNullOrEmpty(body))
+                            {
+                                TargetedBody         = body;
+                                TargetedBodyBioCount = bio;
+                            }
                         }
                     }
 
@@ -1225,6 +1379,7 @@ namespace EliteBioRadar
                         CurrentBody           = "";
                         WasFootfalled         = false;
                         _pendingFirstFootfall = false;
+                        _pendingFirstFootfallBody = "";
                         BodyChanged?.Invoke(this, new BodyChangedEventArgs { BodyName = "" });
                     }
                     break;
@@ -1250,8 +1405,12 @@ namespace EliteBioRadar
                         lock (ScannedOrganisms) ScannedOrganisms.Clear();
                         lock (KnownGenera)      KnownGenera.Clear();
                         lock (CompletedGenera)  CompletedGenera.Clear();
-                        BiologyCount = 0; GeologyCount = 0;
-                        CurrentBody = "";
+                        BiologyCount          = 0;
+                        GeologyCount          = 0;
+                        CurrentBody           = "";
+                        WasFootfalled         = false;
+                        _pendingFirstFootfall = false;
+                        _pendingFirstFootfallBody = "";
                         BodyChanged?.Invoke(this, new BodyChangedEventArgs { BodyName = "" });
                     }
                     break;

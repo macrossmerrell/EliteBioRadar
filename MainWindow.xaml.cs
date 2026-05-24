@@ -20,6 +20,7 @@ namespace EliteBioRadar
         private double _scaleMetres  = 1000;
         private double _defaultScale = 1000;
         private bool   _autoScale    = false;
+        private bool   _radarAnimation = true;
         private bool _settingsInitializing = true;
         private bool _showSidebar    = false;
         private bool _planetOverlay  = false;
@@ -64,6 +65,8 @@ namespace EliteBioRadar
 
             chkPlanetOverlay.IsChecked  = _planetOverlay;
             chkKeepPlanetOpen.IsChecked = saved.KeepPlanetPanelOpen;
+            _radarAnimation = saved.RadarAnimation;
+            chkRadarAnimation.IsChecked = _radarAnimation;
             if (_planetPanelOpen) ApplyPlanetPanelState();
 
             // Load earnings
@@ -84,7 +87,7 @@ namespace EliteBioRadar
             UpdateScaleLabel();
             _settingsInitializing = false;  // Allow settings saves from here on
 
-            _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+            _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
             _refreshTimer.Tick += (_, __) => RefreshAll();
             _refreshTimer.Start();
 
@@ -141,6 +144,7 @@ namespace EliteBioRadar
                         txtBodyName.Text = cachedBody;
                         UpdateBioCounter();
                         UpdateSidebar();
+                        UpdatePlanetPanel();
                         RefreshAll();
                     }
                     else
@@ -148,6 +152,7 @@ namespace EliteBioRadar
                         // In space or body mismatch — clear everything
                         Log.Write($"Post-assign: in space (status='{statusBody}', cached='{cachedBody}') — clearing state");
                         svc.ClearCurrentBody();
+                        UpdatePlanetPanel();
                         RefreshAll();
                     }
                 });
@@ -204,7 +209,7 @@ namespace EliteBioRadar
                 }
             }
 
-            _renderer.Draw(status, organisms, _scaleMetres, _activeGenus);
+            _renderer.Draw(status, organisms, _scaleMetres, _activeGenus, _radarAnimation);
 
             UpdatePotentialPayout();
             UpdateEarningsDisplay();
@@ -843,6 +848,12 @@ namespace EliteBioRadar
             SaveSettings();
         }
 
+        private void ChkRadarAnimation_Changed(object sender, RoutedEventArgs e)
+        {
+            _radarAnimation = chkRadarAnimation.IsChecked == true;
+            SaveSettings();
+        }
+
         private void ChkPlanetOverlay_Changed(object sender, RoutedEventArgs e)
         {
             _planetOverlay = chkPlanetOverlay.IsChecked == true;
@@ -984,6 +995,13 @@ namespace EliteBioRadar
                         VerticalAlignment = VerticalAlignment.Center,
                     });
 
+                    var capturedPlanet = planet;
+                    row.Cursor = System.Windows.Input.Cursors.Hand;
+                    row.MouseLeftButtonUp += (_, __) =>
+                    {
+                        _watcher.PreviewPlanet(capturedPlanet.FullBodyName);
+                    };
+
                     planetStack.Children.Add(row);
                 }
             });
@@ -999,6 +1017,7 @@ namespace EliteBioRadar
                 DefaultScale        = _defaultScale,
                 PlanetOverlay       = _planetOverlay,
                 KeepPlanetPanelOpen = chkKeepPlanetOpen?.IsChecked == true && _planetPanelOpen,
+                RadarAnimation      = _radarAnimation,
             });
         }
 

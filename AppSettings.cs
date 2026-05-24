@@ -11,6 +11,7 @@ namespace EliteBioRadar
         public double DefaultScale         { get; set; } = 1000;
         public bool   PlanetOverlay        { get; set; } = false;
         public bool   KeepPlanetPanelOpen  { get; set; } = false;
+        public bool   RadarAnimation       { get; set; } = true;
     }
 
     public static class AppSettings

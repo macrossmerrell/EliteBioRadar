@@ -4,62 +4,65 @@ A standalone portable Windows application for Elite Dangerous Odyssey. Displays 
 
 Designed to run on a second monitor or touchscreen alongside the game. **VR ready** — can be pinned in Meta Quest, Virtual Desktop, or any VR environment that supports pinning Windows applications into your playspace.
 
-Latest release can be found here:  https://github.com/macrossmerrell/EliteBioRadar/releases
-
 ---
 
 ## Interface Overview
 
 ![image](https://github.com/macrossmerrell/EliteBioRadar/blob/d2e1391d325d5258877fbde3fcadded7f2b292ba/screenshots/Fullscan.png)
 
-- **Top menu** shows: 
+- **Top menu** shows:
    - The name of the current system.
    - How many bio sites on selected / current planet.
    - The current radar scaling.
    - Potential earnings (once a DSS has been completed on the planet).
 - **Bottom menu** shows:
   - Current Latitude and Longitude (if on planet).
-  - Active heading (on Foot, Ship, SRV, or Fighter).
+  - Active heading (on foot, ship, SRV, or fighter).
   - Altitude.
   - The distance to nearest previous scan location.
-  - Color PIPs to identify how many scans on the current biological sample have been completed.
+  - Colour PIPs to identify how many scans on the current biological sample have been completed.
   - How much you have earned since using the app / since log file importation.
-- **Biological** and **Bio Survey** side-panels can be activated and deactivated for your desired look and information.
+- **Biological Sites** and **Bio Survey** side-panels can be activated and deactivated for your desired look and information.
 - **Biological Sites** side-panel:
-   - Shows planets with Biological Sites as identified by FSS.
+   - Shows planets with biological sites as identified by FSS.
    - Shows an arrow on your current planet.
-   - Greys out planet name once biological scans have been completed.
+   - Greys out planet name once all biological scans have been completed.
+   - Clicking a planet in the list previews that planet's bio data in the Bio Survey sidebar.
 - **Bio Survey** side-panel:
-   - First Footfall notification (will not highlight on non first footfall planets).
-   - Biological types from DSS scan.
-   - Biological Genus is clickable, opening a browser to its elite-dangerous.fandom.com/wiki page.
-   - Shows payout for the completed biological scan (adjust for regular and first footfall values).
+   - First Footfall notification (activates the moment you step off your ship on an unvisited planet).
+   - Biological types from DSS scan, shown as unknowns until DSS is completed.
+   - Biological genus name is clickable, opening a browser to its elite-dangerous.fandom.com/wiki page.
+   - Shows payout for each completed biological scan (adjusted for regular and first footfall values).
    - Shows total scanned payout for the current planet.
- 
---- 
+
+---
+
 ## Settings Overview
 
 ![image](https://github.com/macrossmerrell/EliteBioRadar/blob/d2e1391d325d5258877fbde3fcadded7f2b292ba/screenshots/SettingsMenu.png)
 
-Checkboxes to: 
+Checkboxes to:
 - Enable Bio Survey Sidebar.
-- Allow Planet information panel overlay radar (not typically recommended).
-- Keep Biological Sites panel open.
+- Allow Planet information panel to overlay radar (not typically recommended).
+- Keep Biological Sites panel open between sessions.
+- Enable radar scan animation (expanding pulse effect).
 - Auto Scale radar (highly recommended).
 - Default Scale for radar (when not using auto scale).
-   - In this mode, the scaling can adjusted using the scroll wheel of mouse when hovering over the radar.
+   - In this mode, scaling can be adjusted using the scroll wheel when hovering over the radar.
 - Journal Scanning:
-   - You can choose to scan all journal files for lifetime earnings.
-   - You can select start / end dates of journal files to scan.  Helpful to know current exploration outing profits.
-   - You can clear your earning if you want to start a fresh count. 
-  
+   - Scan all journal files for lifetime earnings.
+   - Select start / end dates of journal files to scan — helpful for tracking current exploration outing profits.
+   - Clear earnings to start a fresh count.
+
 ---
+
 ## Features
 
 ### Radar
 - **North-up display** — ship always centred, North always at the top
 - **Heading arrow** — shows your current facing direction
-- **Colony range rings** — diagonal-hatched fill per organism showing the species exclusion zone (minimum distance between scans of the same genus), colour-matched to the scan dot
+- **Colony range rings** — solid border with diagonal-hatched fill per organism showing the species exclusion zone (minimum distance between scans of the same genus), colour-matched to the scan dot
+- **Scan animation** — optional expanding pulse effect that sweeps outward from the centre, lighting up each range ring as it passes
 - **Mouse-wheel zoom** — 100m to 10km range
 - **Auto-scale mode** — automatically zooms to keep all active scan sites in view (ignores completed grey dots)
 - **Scan dot colours:**
@@ -71,10 +74,11 @@ Checkboxes to:
 
 ### Biological Sites Panel (left toggle)
 - Lists every planet in the current system that has biological signals
-- Populated from FSS and DSS scans, backfilled from journal history on startup
-- Shows short body name and bio signal count — e.g. `▶ 5 C (2)`
+- Populated from FSS and DSS scans, backfilled from journal history on startup — including planets scanned in previous sessions
+- Shows short body name and bio signal count — e.g. `▶ A 4 (3)`
 - Current body highlighted with a `▶` indicator
 - Planet names go grey once all biology on that body is fully logged
+- **Click any planet** to preview its bio data in the Bio Survey sidebar
 - Toggle button (planet icon) at the top-left of the radar opens/closes the panel
 - **Settings options:**
   - Panel can shrink the radar or overlay on top of it
@@ -83,15 +87,15 @@ Checkboxes to:
 ### Bio Survey Sidebar (right)
 - Lists all biology types on the current planet
 - Populated from DSS (`SAASignalsFound`) with genus names
-- Shows while orbiting a targeted planet (before landing)
-- Unknown slots shown as `? Unknown` until scanned
+- Shows while orbiting a targeted planet (before landing) — unknowns shown if genus names not yet available
+- Unknown slots shown as `? Unknown` until DSS is completed
 - Each entry shows:
   - Genus name (underlined, links to the Elite Dangerous Wiki)
-  - Species name
+  - Species name once identified
   - `Payout:` or `FF Payout:` with the expected credit value
   - Pip indicators showing scan progress (blue → green → orange)
 - Completed organisms remain listed with all pips filled
-- **First Footfall indicator** at the top — `✓ First Footfall` (gold, confirms when you Disembark) or `○ First Footfall` (dim)
+- **First Footfall indicator** at the top — `✓ First Footfall` (gold, confirms the moment you Disembark) or `○ First Footfall` (dim)
 - **Total Payout** shown at the bottom of the sidebar
 - Scrollable with a slim 6px scrollbar
 
@@ -122,6 +126,7 @@ Checkboxes to:
 - Show Bio Survey Sidebar
 - Biological Sites panel overlays radar (vs shrinking it)
 - Keep Bio Sites panel open between sessions
+- Radar scan animation (expandng pulse effect)
 - Auto Scale
 - Default Scale (200m – 10km)
 - Earnings section with journal scan and clear options
@@ -154,7 +159,7 @@ EliteBioRadar is a standard Windows application and works in any VR environment 
 - **SteamVR** with desktop overlay tools
 - Any headset using Windows Mixed Reality
 
-Launch the app before entering VR, then pin or overlay it in your preferred position. The app's dark theme and high-contrast cyan colour scheme are optimised for readability at typical VR overlay distances.
+Launch the app before entering VR, then pin or overlay it in your preferred position. The app's dark theme and high-contrast colour scheme are optimised for readability at typical VR overlay distances.
 
 ---
 
@@ -181,8 +186,7 @@ Requires **.NET 8.0 SDK** (Windows only). See [BUILDING.md](BUILDING.md) for ful
 
 ```
 dotnet restore
-dotnet build -c Release
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+dotnet publish -c Release
 ```
 
 Output: `bin\Release\net8.0-windows\BioRadar-App\`
@@ -203,15 +207,18 @@ Elite Dangerous writes `Status.json` every ~250ms. The app polls every 300ms wit
 | `FSSBodySignals` | FSS scan — registers biology signal counts per body |
 | `Scan` | Planet scan — provides `WasFootfalled` for payout calculation |
 | `Disembark` | Confirms First Footfall when player steps off ship on an unvisited planet |
-| `ApproachBody` / `Touchdown` | Body detection — loads cached scan history |
+| `Touchdown` | Body detection — loads cached scan history |
 | `LeaveBody` | Clears radar display, preserves cache |
 | `FSDJump` | Clears display, wipes cache for old body, clears planet list |
 
 ### Journal backfill
 On startup, the app scans up to 20 recent journal files to rebuild state for the current body — including scan dot positions, genus names, bio counts, and first footfall status. The Biological Sites panel scans all journal files to find every planet with bio signals in the current system. This works whether or not the game is running.
 
+### First Footfall detection
+The `Scan` event (fired during DSS from orbit) carries a `WasFootfalled` flag. If false, the app sets a pending first footfall state. This is confirmed — and the `✓ First Footfall` indicator activated — only when a `Disembark` event fires, meaning you physically stepped off your ship on the planet surface.
+
 ### Colony ranges
-Each genus has a community-documented minimum distance between scan sites. The radar draws this as a dashed ring with a colour-matched diagonal hatch fill. Examples: Bacterium = 500m, Osseus = 800m, Tubus = 800m, Aleoida = 150m.
+Each genus has a community-documented minimum distance between scan sites. Active scan rings use a solid border with a colour-matched diagonal hatch fill. Completed rings use a faint dashed border only. Examples: Bacterium = 500m, Osseus = 800m, Tubus = 800m, Aleoida = 150m.
 
 ### No interference design
 Uses polling instead of `FileSystemWatcher` for `Status.json` to avoid conflicts with Stream Deck plugins or other tools. All file reads use `FileShare.ReadWrite | FileShare.Delete`.

@@ -264,6 +264,15 @@
                            Foreground="#446666" FontFamily="Consolas" FontSize="11"
                            Margin="0,0,0,8" TextWrapping="Wrap"/>
 
+                <CheckBox x:Name="chkRadarAnimation" Foreground="#00e5ff" FontFamily="Consolas"
+                          FontSize="13" Margin="0,5"
+                          Checked="ChkRadarAnimation_Changed" Unchecked="ChkRadarAnimation_Changed">
+                    Radar scan animation
+                </CheckBox>
+                <TextBlock Text="  Expanding pulse on radar background"
+                           Foreground="#446666" FontFamily="Consolas" FontSize="11"
+                           Margin="0,0,0,8" TextWrapping="Wrap"/>
+
                 <CheckBox x:Name="chkAutoScale" Foreground="#00e5ff" FontFamily="Consolas"
                           FontSize="13" Margin="0,5"
                           Checked="ChkAutoScale_Changed" Unchecked="ChkAutoScale_Changed">

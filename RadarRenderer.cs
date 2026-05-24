@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -14,9 +15,13 @@ namespace EliteBioRadar
         private static readonly Color ColNorthLine = Color.FromArgb(0xaa, 0x66, 0xff, 0xff);
         private static readonly Color ColHeading   = Color.FromRgb(0x00, 0xff, 0xcc);
         private static readonly Color ColShip      = Color.FromRgb(0x00, 0xff, 0xcc);
-        private static readonly Color ColScan1     = Color.FromRgb(0x44, 0xaa, 0xff);   // 1st scan – blue
-        private static readonly Color ColScan2     = Color.FromRgb(0x00, 0xff, 0x44);   // 2nd scan – green
-        private static readonly Color ColScanFull  = Color.FromRgb(0xff, 0xaa, 0x00);   // logged  – orange
+        private static readonly Color ColScan1     = Color.FromRgb(0x00, 0xa3, 0xff);
+        private static readonly Color ColScan2     = Color.FromRgb(0x00, 0xff, 0x44);
+        private static readonly Color ColScanFull  = Color.FromRgb(0xff, 0xaa, 0x00);
+
+        // Pulse animation — one full sweep inner→outer every 1.25 seconds
+        private readonly Stopwatch _pulse = Stopwatch.StartNew();
+        private const double PulseCycleSecs = 2.5;
 
         private readonly Canvas _canvas;
 
@@ -24,7 +29,7 @@ namespace EliteBioRadar
 
         // ---------------------------------------------------------------
         public void Draw(EliteStatus status, List<ScannedOrganism> organisms,
-                         double scaleMetres, string? activeGenus = null)
+                         double scaleMetres, string? activeGenus = null, bool radarAnimation = true)
         {
             _canvas.Children.Clear();
 
@@ -39,20 +44,56 @@ namespace EliteBioRadar
             // Background disc
             DrawDisc(cx, cy, r, Color.FromRgb(0x05, 0x10, 0x10), Colors.Transparent);
 
-            // Range rings
+            // Pulse phase — 0.0 to 1.0 sweeping inner→outer over PulseCycleSecs
+            double pulsePhase = _pulse.Elapsed.TotalSeconds % PulseCycleSecs / PulseCycleSecs;
+            double discR = radarAnimation ? pulsePhase * r : 0;
+
+            // Expanding disc — only drawn when animation is enabled
+            if (radarAnimation && discR > 1)
+            {
+                int steps = 32;
+                for (int s = steps; s >= 1; s--)
+                {
+                    double stepR    = discR * s / steps;
+                    double radial   = (double)s / steps;
+                    double gradient = 0.3 + 0.7 * radial;
+                    double edgeFade = Math.Max(0, 1.0 - Math.Max(0, (discR / r - 0.92) / 0.08));
+                    byte   alpha    = (byte)(2.5 * gradient * edgeFade);
+                    if (alpha < 2) continue;
+                    DrawDisc(cx, cy, stepR,
+                        Color.FromArgb(alpha, 0x00, 0xe5, 0xff),
+                        Colors.Transparent);
+                }
+            }
+
+            // Range rings — peak brightness when wave front is AT the ring, fade after
             for (int i = 1; i <= 4; i++)
             {
-                double ringR = r * i / 4.0;
-                DrawCircle(cx, cy, ringR, 1, ColGridRing);
+                double ringR       = r * i / 4.0;
+                double distToFront = discR - ringR;
+
+                double waveIntensity;
+                if (distToFront < 0)
+                    waveIntensity = Math.Max(0, 1.0 + distToFront / (r * 0.08));
+                else
+                    waveIntensity = Math.Max(0, 1.0 - distToFront / (r * 0.20));
+
+                double edgeFade   = Math.Max(0, 1.0 - Math.Max(0, (discR / r - 0.92) / 0.08));
+                waveIntensity    *= edgeFade;
+
+                byte alpha   = (byte)Math.Min(0xff, 0x55 + waveIntensity * 0x22);
+                double thick = 1.0 + waveIntensity * 0.4;
+                DrawCircle(cx, cy, ringR, thick,
+                    Color.FromArgb(alpha, 0x00, 0xe5, 0xff));
+
                 double labelMetres = scaleMetres * i / 4.0;
                 string labelStr = labelMetres >= 1000
                     ? $"{labelMetres / 1000:F1}km" : $"{labelMetres:F0}m";
-                // Draw label just inside the ring (not outside) to avoid sidebar clipping
                 DrawText(cx + ringR - 28, cy - 8, labelStr, 9,
                     Color.FromArgb(0x88, 0x00, 0xe5, 0xff));
             }
 
-            // Crosshairs and diagonals
+                        // Crosshairs and diagonals
             DrawLine(cx, cy - r, cx, cy + r, 1, ColGridLine);
             DrawLine(cx - r, cy, cx + r, cy, 1, ColGridLine);
             DrawLine(cx - r * 0.707, cy - r * 0.707, cx + r * 0.707, cy + r * 0.707, 0.5, ColGridLine);
@@ -134,7 +175,7 @@ namespace EliteBioRadar
                 {
                     // Diagonal hatch fill matching the dot colour
                     DrawHatchedDisc(sx, sy, rangePixels, col);
-                    DrawDashedCircle(sx, sy, rangePixels, col);
+                    DrawCircle(sx, sy, rangePixels, 1.5, Color.FromArgb(0xcc, col.R, col.G, col.B));
                 }
             }
 
@@ -220,11 +261,11 @@ namespace EliteBioRadar
         private void DrawHatchedDisc(double cx, double cy, double radius, Color col)
         {
             // Build a diagonal line tile brush matching the dot colour
-            var hatchColor = Color.FromArgb(0x28, col.R, col.G, col.B);
+            var hatchColor = Color.FromArgb(0xbb, col.R, col.G, col.B);
             var drawing = new DrawingGroup();
 
             // Tile size — spacing between diagonal lines
-            const double tile = 12.0;
+            const double tile = 8.0;
 
             // Two lines per tile to create a clean diagonal pattern
             // Line from top-left to bottom-right of tile
