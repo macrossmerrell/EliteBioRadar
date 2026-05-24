@@ -39,7 +39,7 @@ Designed to run on a second monitor or touchscreen alongside the game. **VR read
 
 ## Settings Overview
 
-![image](https://github.com/macrossmerrell/EliteBioRadar/blob/d2e1391d325d5258877fbde3fcadded7f2b292ba/screenshots/SettingsMenu.png)
+![image](https://github.com/macrossmerrell/EliteBioRadar/blob/08822e00401b9716780cb256aa0e54be13647ae4/screenshots/SettingsMenu.png)
 
 Checkboxes to:
 - Enable Bio Survey Sidebar.
