@@ -106,6 +106,12 @@
                         <TextBlock Text="/" Style="{StaticResource BarLabel}"/>
                         <TextBlock x:Name="txtBioCount" Text="0" Style="{StaticResource BarValue}"/>
                     </StackPanel>
+                    <StackPanel x:Name="geoCountPanel" Orientation="Horizontal" Margin="0,2,14,2" Visibility="Collapsed">
+                        <TextBlock Text="GEO: " Foreground="#ffaa00" FontFamily="Consolas" FontSize="14" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="txtGeoScanned" Text="0" Foreground="#ffaa00" FontFamily="Consolas" FontSize="14" VerticalAlignment="Center"/>
+                        <TextBlock Text="/" Foreground="#88bbbb" FontFamily="Consolas" FontSize="14" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="txtGeoCount" Text="0" Foreground="#ffaa00" FontFamily="Consolas" FontSize="14" VerticalAlignment="Center"/>
+                    </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,2,14,2">
                         <TextBlock Text="SCALE: " Style="{StaticResource BarLabel}"/>
                         <TextBlock x:Name="txtScale" Text="1000m" Style="{StaticResource BarValue}"/>
@@ -270,6 +276,15 @@
                     Radar scan animation
                 </CheckBox>
                 <TextBlock Text="  Expanding pulse on radar background"
+                           Foreground="#446666" FontFamily="Consolas" FontSize="11"
+                           Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                <CheckBox x:Name="chkShowGeo" Foreground="#00e5ff" FontFamily="Consolas"
+                          FontSize="13" Margin="0,5"
+                          Checked="ChkShowGeo_Changed" Unchecked="ChkShowGeo_Changed">
+                    Show Geological Sites Info
+                </CheckBox>
+                <TextBlock Text="  Shows geo planets panel and geo survey"
                            Foreground="#446666" FontFamily="Consolas" FontSize="11"
                            Margin="0,0,0,8" TextWrapping="Wrap"/>
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace EliteBioRadar
 {
@@ -80,8 +81,45 @@ namespace EliteBioRadar
     }
 
     // ---------------------------------------------------------------
-    //  Elite Status.json model
+    //  A discovered geological site (from CodexEntry)
     // ---------------------------------------------------------------
+    public class ScannedGeoSite
+    {
+        public double   Latitude    { get; set; }
+        public double   Longitude   { get; set; }
+        public string   Name        { get; set; } = "";  // localised name e.g. "Water Ice Geyser"
+        public int      EntryID     { get; set; }        // deduplicate by EntryID per body
+        public long     Payout      { get; set; }        // VoucherAmount from CodexEntry
+        public DateTime LastSeen    { get; set; } = DateTime.UtcNow;
+
+        // Wiki URL lookup
+        private static readonly Dictionary<string, string> _wikiSlugs =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "Fumarole",          "Fumarole" },
+            { "Ice Fumarole",      "Ice_Fumarole" },
+            { "Gas Vent",          "Gas_Vent" },
+            { "Geyser",            "Geyser" },
+            { "Ice Geyser",        "Ice_Geyser" },
+            { "Water Geyser",      "Geyser" },
+            { "Water Ice Geyser",  "Ice_Geyser" },
+            { "Lava Spout",        "Lava_Spout" },
+        };
+
+        public string WikiUrl
+        {
+            get
+            {
+                // Try exact match first, then partial
+                foreach (var kvp in _wikiSlugs)
+                    if (Name.IndexOf(kvp.Key, StringComparison.OrdinalIgnoreCase) >= 0)
+                        return $"https://elite-dangerous.fandom.com/wiki/{kvp.Value}";
+                return $"https://elite-dangerous.fandom.com/wiki/{Uri.EscapeDataString(Name.Replace(" ", "_"))}";
+            }
+        }
+    }
+
+
     public class EliteStatus
     {
         public uint   Flags        { get; set; }

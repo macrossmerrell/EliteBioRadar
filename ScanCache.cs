@@ -17,20 +17,34 @@ namespace EliteBioRadar
         public DateTime LastSeen   { get; set; }
     }
 
+    public class CachedGeoSite
+    {
+        public double   Latitude  { get; set; }
+        public double   Longitude { get; set; }
+        public string   Name      { get; set; } = "";
+        public int      EntryID   { get; set; }
+        public long     Payout    { get; set; }
+        public DateTime LastSeen  { get; set; }
+    }
+
     public class CachedBodyData
     {
-        public int               BiologyCount  { get; set; }
-        public bool              WasFootfalled { get; set; }
-        public List<string>      KnownGenera   { get; set; } = new();
-        public List<CachedOrganism> Scans      { get; set; } = new();
+        public int                  BiologyCount  { get; set; }
+        public int                  GeologyCount  { get; set; }
+        public bool                 WasFootfalled { get; set; }
+        public List<string>         KnownGenera   { get; set; } = new();
+        public List<CachedOrganism> Scans         { get; set; } = new();
+        public List<CachedGeoSite>  GeoSites      { get; set; } = new();
     }
 
     public class LoadedBodyData
     {
         public int                   BiologyCount  { get; set; }
+        public int                   GeologyCount  { get; set; }
         public bool                  WasFootfalled { get; set; }
         public List<string>          KnownGenera   { get; set; } = new();
         public List<ScannedOrganism> Organisms     { get; set; } = new();
+        public List<ScannedGeoSite>  GeoSites      { get; set; } = new();
     }
 
     public static class ScanCache
@@ -128,9 +142,11 @@ namespace EliteBioRadar
                         all[bodyName] = new CachedBodyData
                         {
                             BiologyCount  = bioCount,
+                            GeologyCount  = existing?.GeologyCount ?? 0,
                             WasFootfalled = footfalled,
                             KnownGenera   = genera,
                             Scans         = toSave,
+                            GeoSites      = existing?.GeoSites ?? new List<CachedGeoSite>(),
                         };
 
                     WriteAll(all);
@@ -154,9 +170,11 @@ namespace EliteBioRadar
                     all[bodyName] = new CachedBodyData
                     {
                         BiologyCount  = biologyCount,
+                        GeologyCount  = existing?.GeologyCount ?? 0,
                         WasFootfalled = wasFootfalled,
                         KnownGenera   = knownGenera.ToList(),
                         Scans         = existing?.Scans ?? new List<CachedOrganism>(),
+                        GeoSites      = existing?.GeoSites ?? new List<CachedGeoSite>(),
                     };
                     WriteAll(all);
                     Log.Write($"ScanCache: saved meta '{bodyName}' bio={biologyCount} ff={wasFootfalled}");
@@ -182,6 +200,61 @@ namespace EliteBioRadar
                 }
             }
             catch (Exception ex) { Log.Write($"ScanCache.ClearGenus error: {ex.Message}"); }
+        }
+
+        // ---------------------------------------------------------------
+        public static void SaveGeoSite(string bodyName, ScannedGeoSite site, int geoCount)
+        {
+            if (string.IsNullOrEmpty(bodyName)) return;
+            try
+            {
+                lock (_lock)
+                {
+                    var all = ReadAll();
+                    all.TryGetValue(bodyName, out var existing);
+                    var data = existing ?? new CachedBodyData();
+
+                    // Deduplicate by EntryID
+                    data.GeoSites ??= new List<CachedGeoSite>();
+                    if (!data.GeoSites.Any(g => g.EntryID == site.EntryID))
+                    {
+                        data.GeoSites.Add(new CachedGeoSite
+                        {
+                            Latitude  = site.Latitude,
+                            Longitude = site.Longitude,
+                            Name      = site.Name,
+                            EntryID   = site.EntryID,
+                            Payout    = site.Payout,
+                            LastSeen  = site.LastSeen,
+                        });
+                    }
+                    if (geoCount > 0) data.GeologyCount = geoCount;
+                    all[bodyName] = data;
+                    WriteAll(all);
+                    Log.Write($"ScanCache: saved geo site '{site.Name}' on '{bodyName}'");
+                }
+            }
+            catch (Exception ex) { Log.Write($"ScanCache.SaveGeoSite error: {ex.Message}"); }
+        }
+
+        // ---------------------------------------------------------------
+        public static void SaveGeoCount(string bodyName, int geoCount)
+        {
+            if (string.IsNullOrEmpty(bodyName) || geoCount <= 0) return;
+            try
+            {
+                lock (_lock)
+                {
+                    var all = ReadAll();
+                    all.TryGetValue(bodyName, out var existing);
+                    var data = existing ?? new CachedBodyData();
+                    data.GeologyCount = geoCount;
+                    data.GeoSites   ??= new List<CachedGeoSite>();
+                    all[bodyName] = data;
+                    WriteAll(all);
+                }
+            }
+            catch (Exception ex) { Log.Write($"ScanCache.SaveGeoCount error: {ex.Message}"); }
         }
 
         // ---------------------------------------------------------------
@@ -230,9 +303,10 @@ namespace EliteBioRadar
             return new LoadedBodyData
             {
                 BiologyCount  = cached.BiologyCount,
+                GeologyCount  = cached.GeologyCount,
                 WasFootfalled = cached.WasFootfalled,
                 KnownGenera   = cached.KnownGenera.ToList(),
-                Organisms    = cached.Scans.Select(c => new ScannedOrganism
+                Organisms     = cached.Scans.Select(c => new ScannedOrganism
                 {
                     Latitude   = c.Latitude,
                     Longitude  = c.Longitude,
@@ -241,6 +315,15 @@ namespace EliteBioRadar
                     ScanCount  = c.ScanCount,
                     IsComplete = c.IsComplete || c.ScanCount >= 3,
                     LastSeen   = c.LastSeen,
+                }).ToList(),
+                GeoSites = (cached.GeoSites ?? new List<CachedGeoSite>()).Select(g => new ScannedGeoSite
+                {
+                    Latitude  = g.Latitude,
+                    Longitude = g.Longitude,
+                    Name      = g.Name,
+                    EntryID   = g.EntryID,
+                    Payout    = g.Payout,
+                    LastSeen  = g.LastSeen,
                 }).ToList(),
             };
         }

@@ -12,6 +12,13 @@ namespace EliteBioRadar
         public bool   PlanetOverlay        { get; set; } = false;
         public bool   KeepPlanetPanelOpen  { get; set; } = false;
         public bool   RadarAnimation       { get; set; } = true;
+        public bool   ShowGeologicalSites  { get; set; } = false;
+
+        // Window position and size — null means "use OS default"
+        public double? WindowLeft   { get; set; } = null;
+        public double? WindowTop    { get; set; } = null;
+        public double? WindowWidth  { get; set; } = null;
+        public double? WindowHeight { get; set; } = null;
     }
 
     public static class AppSettings

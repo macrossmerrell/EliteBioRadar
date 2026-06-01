@@ -21,6 +21,7 @@ namespace EliteBioRadar
         private double _defaultScale = 1000;
         private bool   _autoScale    = false;
         private bool   _radarAnimation = true;
+        private bool   _showGeo        = false;
         private bool _settingsInitializing = true;
         private bool _showSidebar    = false;
         private bool _planetOverlay  = false;
@@ -63,10 +64,37 @@ namespace EliteBioRadar
             _planetOverlay = saved.PlanetOverlay;
             _planetPanelOpen = saved.KeepPlanetPanelOpen;
 
+            // Restore window position/size — verify it's on a connected screen first
+            if (saved.WindowLeft.HasValue && saved.WindowTop.HasValue)
+            {
+                var left   = saved.WindowLeft.Value;
+                var top    = saved.WindowTop.Value;
+                var width  = saved.WindowWidth  ?? this.Width;
+                var height = saved.WindowHeight ?? this.Height;
+
+                // Check if the saved position falls within any connected screen's bounds
+                bool onScreen = System.Windows.Forms.Screen.AllScreens.Any(s =>
+                    left < s.WorkingArea.Right  &&
+                    left + width  > s.WorkingArea.Left &&
+                    top  < s.WorkingArea.Bottom &&
+                    top  + height > s.WorkingArea.Top);
+
+                if (onScreen)
+                {
+                    this.Left   = left;
+                    this.Top    = top;
+                    this.Width  = width;
+                    this.Height = height;
+                    this.WindowStartupLocation = WindowStartupLocation.Manual;
+                }
+            }
+
             chkPlanetOverlay.IsChecked  = _planetOverlay;
             chkKeepPlanetOpen.IsChecked = saved.KeepPlanetPanelOpen;
             _radarAnimation = saved.RadarAnimation;
             chkRadarAnimation.IsChecked = _radarAnimation;
+            _showGeo = saved.ShowGeologicalSites;
+            chkShowGeo.IsChecked = _showGeo;
             if (_planetPanelOpen) ApplyPlanetPanelState();
 
             // Load earnings
@@ -90,6 +118,9 @@ namespace EliteBioRadar
             _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
             _refreshTimer.Tick += (_, __) => RefreshAll();
             _refreshTimer.Start();
+
+            // Save position whenever the window is moved or resized
+            this.LocationChanged += (_, __) => SaveSettings();
 
             System.Threading.Tasks.Task.Run(StartWatcher);
             Log.Write("Loaded event done");
@@ -311,10 +342,6 @@ namespace EliteBioRadar
         {
             if (_watcher == null) return;
 
-            // Count completed genera from two sources:
-            // 1. CompletedGenera list (set during current session via Analyse event)
-            // 2. Distinct genera in ScannedOrganisms where ALL dots are IsComplete=true
-            //    (covers genera completed in previous sessions, loaded from cache)
             var completedFromSession = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             lock (_watcher.CompletedGenera)
                 foreach (var o in _watcher.CompletedGenera)
@@ -336,6 +363,19 @@ namespace EliteBioRadar
 
             txtBioScanned.Text = completedFromSession.Count.ToString();
             txtBioCount.Text   = total.ToString();
+
+            // Geo counter — show only when geo signals exist
+            int geoTotal = _watcher.GeologyCount;
+            int geoFound = 0;
+            lock (_watcher.KnownGeoSites)
+                geoFound = _watcher.KnownGeoSites.Select(g => g.EntryID).Distinct().Count();
+
+            if (geoCountPanel != null)
+            {
+                geoCountPanel.Visibility = geoTotal > 0 ? Visibility.Visible : Visibility.Collapsed;
+                if (txtGeoScanned != null) txtGeoScanned.Text = geoFound.ToString();
+                if (txtGeoCount   != null) txtGeoCount.Text   = geoTotal.ToString();
+            }
         }
 
         // ---------------------------------------------------------------
@@ -410,7 +450,8 @@ namespace EliteBioRadar
                 var  species  = scanned?.Species ?? completedOrg?.Species ?? "";
                 var  fullName = !string.IsNullOrEmpty(species) ? $"{genus} {species}".Trim() : genus;
                 var  payout   = PayoutData.GetValue(fullName, ff);
-                if (payout > 0) sidebarTotal += payout;
+                // Only add to total once the organism is fully scanned
+                if (isDone && payout > 0) sidebarTotal += payout;
 
                 var nameColor = isDone ? Color.FromRgb(0x00, 0x99, 0xaa) :
                     dotCount == 0 ? Color.FromRgb(0x44, 0x88, 0x88) :
@@ -426,11 +467,13 @@ namespace EliteBioRadar
             foreach (var org in snap.Where(o => !shown.Contains(o.Genus)))
             {
                 shown.Add(org.Genus);
-                bool isActive = string.Equals(org.Genus, _activeGenus, StringComparison.OrdinalIgnoreCase);
-                int  dotCount = snap.Count(o => string.Equals(o.Genus, org.Genus, StringComparison.OrdinalIgnoreCase));
-                var  fullName = !string.IsNullOrEmpty(org.Species) ? $"{org.Genus} {org.Species}".Trim() : org.Genus;
-                var  payout   = PayoutData.GetValue(fullName, ff);
-                if (payout > 0) sidebarTotal += payout;
+                bool isActive  = string.Equals(org.Genus, _activeGenus, StringComparison.OrdinalIgnoreCase);
+                int  dotCount  = snap.Count(o => string.Equals(o.Genus, org.Genus, StringComparison.OrdinalIgnoreCase));
+                bool isDoneOrg = completed.Any(c => string.Equals(c.Genus, org.Genus, StringComparison.OrdinalIgnoreCase));
+                var  fullName  = !string.IsNullOrEmpty(org.Species) ? $"{org.Genus} {org.Species}".Trim() : org.Genus;
+                var  payout    = PayoutData.GetValue(fullName, ff);
+                // Only add to total once the organism is fully scanned
+                if (isDoneOrg && payout > 0) sidebarTotal += payout;
 
                 var nameColor = dotCount switch
                 {
@@ -448,12 +491,13 @@ namespace EliteBioRadar
                 sidebarStack.Children.Add(MakeSidebarEntry(
                     "?", "Unknown", 0, Color.FromRgb(0x44, 0x66, 0x66), false, 0));
 
-            // Completed genera at bottom
+            // Completed genera at bottom (any that weren't already listed via knownGenera)
             foreach (var comp in completed.Where(c => !shown.Contains(c.Genus)))
             {
                 shown.Add(comp.Genus);
                 var fullName = !string.IsNullOrEmpty(comp.Species) ? $"{comp.Genus} {comp.Species}".Trim() : comp.Genus;
                 var payout   = PayoutData.GetValue(fullName, ff);
+                if (payout > 0) sidebarTotal += payout;
                 sidebarStack.Children.Add(MakeSidebarEntry(
                     comp.Genus, comp.Species, 3, Color.FromRgb(0x00, 0x99, 0xaa), false, payout, ff));
             }
@@ -497,6 +541,89 @@ namespace EliteBioRadar
                     FontSize   = 13,
                 });
             }
+
+            // Geological survey section — only shown when setting is enabled
+            if (_showGeo)
+            {
+            List<ScannedGeoSite> geoSnap;
+            lock (_watcher.KnownGeoSites) geoSnap = _watcher.KnownGeoSites.ToList();
+            int totalGeo = _watcher.GeologyCount;
+
+            if (totalGeo > 0 || geoSnap.Count > 0)
+            {
+                // Spacer — matches the gap used in the planet panel
+                sidebarStack.Children.Add(new Border { Height = 16 });
+                sidebarStack.Children.Add(new Border
+                {
+                    BorderBrush     = new SolidColorBrush(Color.FromRgb(0x44, 0x33, 0x00)),
+                    BorderThickness = new Thickness(0, 1, 0, 0),
+                    Margin          = new Thickness(0, 0, 0, 8),
+                });
+
+                sidebarStack.Children.Add(new TextBlock
+                {
+                    Text       = "GEO SURVEY",
+                    Foreground = new SolidColorBrush(Color.FromRgb(0xff, 0xaa, 0x00)),
+                    FontFamily = new FontFamily("Consolas"),
+                    FontSize   = 13,
+                    FontWeight = FontWeights.Bold,
+                    Margin     = new Thickness(0, 0, 0, 6),
+                });
+
+                // Known geo sites
+                foreach (var site in geoSnap.GroupBy(g => g.EntryID).Select(g => g.First()))
+                {
+                    var geoPanel = new StackPanel { Margin = new Thickness(0, 4, 0, 4) };
+
+                    // Site name — clickable wiki link
+                    var nameTb = new TextBlock
+                    {
+                        FontFamily   = new FontFamily("Consolas"),
+                        FontSize     = 13,
+                        TextWrapping = TextWrapping.Wrap,
+                        Cursor       = System.Windows.Input.Cursors.Hand,
+                        Margin       = new Thickness(0, 0, 0, 2),
+                    };
+                    nameTb.Inlines.Add(new System.Windows.Documents.Run(site.Name)
+                    {
+                        Foreground      = new SolidColorBrush(Color.FromRgb(0xff, 0xaa, 0x00)),
+                        TextDecorations = TextDecorations.Underline,
+                    });
+                    var capturedUrl = site.WikiUrl;
+                    nameTb.MouseLeftButtonUp += (_, __) =>
+                    {
+                        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(capturedUrl) { UseShellExecute = true }); } catch { }
+                    };
+                    geoPanel.Children.Add(nameTb);
+
+                    // Payout
+                    if (site.Payout > 0)
+                        geoPanel.Children.Add(new TextBlock
+                        {
+                            Text       = $"Payout: {PayoutData.FormatCredits(site.Payout)}",
+                            Foreground = new SolidColorBrush(Color.FromRgb(0xff, 0xd7, 0x00)),
+                            FontFamily = new FontFamily("Consolas"),
+                            FontSize   = 12,
+                        });
+
+                    sidebarStack.Children.Add(geoPanel);
+                }
+
+                // Unknown slots for unscanned geo sites
+                int knownGeoCount = geoSnap.Select(g => g.EntryID).Distinct().Count();
+                for (int u = knownGeoCount; u < totalGeo; u++)
+                {
+                    sidebarStack.Children.Add(new TextBlock
+                    {
+                        Text       = "? Unknown",
+                        Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xff, 0xaa, 0x00)),
+                        FontFamily = new FontFamily("Consolas"),
+                        FontSize   = 13,
+                        Margin     = new Thickness(0, 4, 0, 4),
+                    });
+                }
+            }
+            } // end if (_showGeo)
         }
 
         private UIElement MakeSidebarEntry(string genus, string species,
@@ -854,6 +981,15 @@ namespace EliteBioRadar
             SaveSettings();
         }
 
+        private void ChkShowGeo_Changed(object sender, RoutedEventArgs e)
+        {
+            _showGeo = chkShowGeo.IsChecked == true;
+            if (_settingsInitializing) return;
+            SaveSettings();
+            UpdatePlanetPanel();
+            UpdateSidebar();
+        }
+
         private void ChkPlanetOverlay_Changed(object sender, RoutedEventArgs e)
         {
             _planetOverlay = chkPlanetOverlay.IsChecked == true;
@@ -926,17 +1062,30 @@ namespace EliteBioRadar
                     .OrderBy(p => p.ShortName, StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
-                if (planets.Count == 0)
+                if (planets.Count == 0 && !_showGeo)
                 {
                     planetStack.Children.Add(new TextBlock
                     {
-                        Text       = "No bio planets\nscanned yet",
-                        Foreground = new SolidColorBrush(Color.FromRgb(0x33, 0x55, 0x55)),
-                        FontFamily = new FontFamily("Consolas"),
-                        FontSize   = 12,
+                        Text         = "No bio planets\nscanned yet",
+                        Foreground   = new SolidColorBrush(Color.FromRgb(0x33, 0x55, 0x55)),
+                        FontFamily   = new FontFamily("Consolas"),
+                        FontSize     = 12,
                         TextWrapping = TextWrapping.Wrap,
                     });
                     return;
+                }
+
+                if (planets.Count == 0 && _showGeo)
+                {
+                    planetStack.Children.Add(new TextBlock
+                    {
+                        Text         = "No bio planets\nscanned yet",
+                        Foreground   = new SolidColorBrush(Color.FromRgb(0x33, 0x55, 0x55)),
+                        FontFamily   = new FontFamily("Consolas"),
+                        FontSize     = 12,
+                        TextWrapping = TextWrapping.Wrap,
+                        Margin       = new Thickness(0, 0, 0, 4),
+                    });
                 }
 
                 foreach (var planet in planets)
@@ -1004,6 +1153,72 @@ namespace EliteBioRadar
 
                     planetStack.Children.Add(row);
                 }
+
+                // Geological Sites section — only shown when setting is enabled
+                if (_showGeo)
+                {
+                    var geoPlanets = _watcher.SystemGeoPlanets
+                        .OrderBy(p => p.ShortName, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+
+                    if (geoPlanets.Count > 0)
+                    {
+                        // Spacer between bio and geo
+                        planetStack.Children.Add(new Border { Height = 16 });
+
+                        planetStack.Children.Add(new TextBlock
+                        {
+                            Text         = "GEOLOGICAL SITES",
+                            Foreground   = new SolidColorBrush(Color.FromRgb(0xff, 0xaa, 0x00)),
+                            FontFamily   = new FontFamily("Consolas"),
+                            FontSize     = 13,
+                            FontWeight   = FontWeights.Bold,
+                            TextWrapping = TextWrapping.Wrap,
+                            Margin       = new Thickness(0, 0, 0, 6),
+                        });
+
+                        foreach (var planet in geoPlanets)
+                        {
+                            bool isCurrent = string.Equals(planet.FullBodyName, _watcher.CurrentBody,
+                                StringComparison.OrdinalIgnoreCase);
+                            bool allDone   = planet.DiscoveredCount >= planet.GeoCount && planet.GeoCount > 0;
+
+                            var geoFg = allDone
+                                ? Color.FromArgb(0x66, 0xff, 0xaa, 0x00)
+                                : Color.FromRgb(0xff, 0xaa, 0x00);
+
+                            var row2 = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2) };
+
+                            row2.Children.Add(new TextBlock
+                            {
+                                Text       = isCurrent ? "▶ " : "  ",
+                                Foreground = new SolidColorBrush(Color.FromRgb(0xff, 0xaa, 0x00)),
+                                FontFamily = new FontFamily("Consolas"),
+                                FontSize   = 12,
+                                Width      = 18,
+                                VerticalAlignment = VerticalAlignment.Center,
+                            });
+
+                            row2.Children.Add(new TextBlock
+                            {
+                                Text       = $"{planet.ShortName.ToUpper()} ({planet.GeoCount})",
+                                Foreground = new SolidColorBrush(geoFg),
+                                FontFamily = new FontFamily("Consolas"),
+                                FontSize   = 12,
+                                VerticalAlignment = VerticalAlignment.Center,
+                            });
+
+                            var capturedGeoPlanet = planet;
+                            row2.Cursor = System.Windows.Input.Cursors.Hand;
+                            row2.MouseLeftButtonUp += (_, __) =>
+                            {
+                                _watcher.PreviewPlanet(capturedGeoPlanet.FullBodyName);
+                            };
+
+                            planetStack.Children.Add(row2);
+                        }
+                    }
+                }
             });
         }
 
@@ -1012,12 +1227,17 @@ namespace EliteBioRadar
             if (_settingsInitializing) return;
             AppSettings.Save(new AppSettingsData
             {
-                ShowSidebar         = _showSidebar,
-                AutoScale           = _autoScale,
-                DefaultScale        = _defaultScale,
-                PlanetOverlay       = _planetOverlay,
-                KeepPlanetPanelOpen = chkKeepPlanetOpen?.IsChecked == true && _planetPanelOpen,
-                RadarAnimation      = _radarAnimation,
+                ShowSidebar          = _showSidebar,
+                AutoScale            = _autoScale,
+                DefaultScale         = _defaultScale,
+                PlanetOverlay        = _planetOverlay,
+                KeepPlanetPanelOpen  = chkKeepPlanetOpen?.IsChecked == true && _planetPanelOpen,
+                RadarAnimation       = _radarAnimation,
+                ShowGeologicalSites  = _showGeo,
+                WindowLeft           = this.Left,
+                WindowTop            = this.Top,
+                WindowWidth          = this.Width,
+                WindowHeight         = this.Height,
             });
         }
 
@@ -1067,6 +1287,7 @@ namespace EliteBioRadar
         {
             if (_renderer == null) return;
             RefreshAll();
+            SaveSettings();
         }
     }
 }
