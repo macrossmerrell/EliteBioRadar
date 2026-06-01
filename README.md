@@ -10,7 +10,7 @@ Latest Release can be found here: https://github.com/macrossmerrell/EliteBioRada
 
 ## Application Overview
 
-![image](https://github.com/macrossmerrell/EliteBioRadar/blob/d2e1391d325d5258877fbde3fcadded7f2b292ba/screenshots/Fullscan.png)
+![image](https://github.com/macrossmerrell/EliteBioRadar/blob/5d9d98f6237ca4c07e0eb21e17d7e87d41348ad4/screenshots/fullscan2.png)
 
 - **Top menu** shows:
    - The name of the current system.
