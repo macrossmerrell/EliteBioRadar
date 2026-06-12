@@ -2,7 +2,9 @@
 
 A standalone portable Windows application for Elite Dangerous Odyssey. Displays a real-time radar of bio-organism scan locations on planetary surfaces, tracks biological and geological sites across an entire star system, tracks payout values, and helps you navigate between biology sites efficiently.
 
-Designed to run on a second monitor or touchscreen alongside the game. **VR ready** — can be pinned in Meta Quest, Virtual Desktop, or any VR environment that supports pinning Windows applications into your playspace.
+Designed to run on a second monitor or touchscreen alongside the game. 
+
+**VR ready** — can be pinned in Meta Quest, Virtual Desktop, or any VR environment that supports pinning Windows applications into your playspace.
 
 Latest Release can be found here: https://github.com/macrossmerrell/EliteBioRadar/releases
 
@@ -10,7 +12,7 @@ Latest Release can be found here: https://github.com/macrossmerrell/EliteBioRada
 
 ## Application Overview
 
-![image](https://github.com/macrossmerrell/EliteBioRadar/blob/5d9d98f6237ca4c07e0eb21e17d7e87d41348ad4/screenshots/fullscan2.png)
+![image](https://github.com/macrossmerrell/EliteBioRadar/blob/d2e1391d325d5258877fbde3fcadded7f2b292ba/screenshots/Fullscan.png)
 
 - **Top menu** shows:
    - The name of the current system.
@@ -43,17 +45,33 @@ Latest Release can be found here: https://github.com/macrossmerrell/EliteBioRada
 
 ---
 
-## What's New in Version 2.0.0
+## What's New in Version 2.4.0
+
+### Geological Site Markers
+**First scanned** geological site is now marked directly on the radar display. 
+
+- When you scan a **new** geological type on a body, an X appears at that location in the same amber color used by the GEO sidebar panel. 
+- As you zoom out, the marker automatically transitions to a compact dot to keep the display clean at wider scales. 
+- Off-screen sites are clamped to the radar edge so you always know which direction to head. Markers persist across sessions via the scan cache and are restored on body revisit.
+
+### Refresh & Auto-Recovery
+
+⟳ **Refresh button** — added to the top bar next to the settings gear. Clicking it performs a full journal re-read and state rebuild without needing to restart the app. Useful when the app picks up incorrect data after Elite Dangerous rolls over to a new journal file mid-session.
+
+**Automatic log snapshot** — before any refresh runs, the app automatically saves a timestamped copy of the diagnostic log to the app folder (EliteBioRadar_YYYY-MM-DD_HH-MM-SS.log), capturing exactly what the app saw at the moment the problem occurred. No dialog, no extra steps.
+
+**Automatic journal file detection** — the app now watches for new Journal.*.log files being created by the game and triggers a refresh automatically, so most journal rollover issues resolve themselves without any manual intervention.
 
 ### Total Payout Display
-- **Total Payout** in the Bio Survey sidebar now only appears once biological scans are complete — it no longer shows prematurely while scanning is in progress
-- The total increments organism by organism as each one is fully logged, rather than showing a speculative total upfront
-- Total Payout now correctly persists across app restarts — completed scans are restored from cache and reflected in the total immediately on launch
+
+**Total Payout** in the Bio Survey sidebar now only appears once biological scans are complete — it no longer shows prematurely while scanning is in progress.
+- The total increments organism by organism as each one is fully logged, rather than showing a speculative total.
+- Total Payout now correctly persists across app restarts — completed scans are restored from cache and reflected in the total immediately on launch.
 
 ### Geological Sites
-- New **Show Geological Sites Info** toggle in settings — displays a dedicated Geological Sites panel listing planets with geological signals in the current system
-- Toggling the geological sites option now instantly refreshes the Bio Survey sidebar without requiring the sidebar to be manually toggled off and on
-- Geological sites are populated from `FSSBodySignals` and `SAASignalsFound` events, consistent with how the game reveals them (geo sites on a body only appear after that body has been DSS scanned)
+**Show Geological Sites Info** toggle in settings — displays a dedicated Geological Sites panel listing planets with geological signals in the current system.
+- Toggling the geological sites option now instantly refreshes the Bio Survey sidebar without requiring the sidebar to be manually toggled off and on.
+- Geological sites are populated from `FSSBodySignals` and `SAASignalsFound` events, consistent with how the game reveals them (geo sites on a body only appear after that body has been DSS scanned).
 
 ### Session & Journal Improvements
 - **Correct system detection on startup** — the app now scans recent journal files during startup to establish the current system before any backfill runs, preventing stale data from a previous system appearing in the sidebars
@@ -88,6 +106,7 @@ Latest Release can be found here: https://github.com/macrossmerrell/EliteBioRada
   - 🟠 Orange — third scan (Sample) — turns grey when Analyse completes
   - ⚫ Grey — fully logged, shown as a faint reference marker
 - **Off-screen indicators** — dots outside the current zoom range are clamped to the radar edge
+- **Geological scan markers** — discovered geological sites are shown on the radar as distinct markers separate from biological scan dots, so you can see geo site locations alongside your bio scan history
 
 ### Biological Sites Panel (left toggle)
 - Lists every planet in the current system that has biological signals
@@ -128,6 +147,7 @@ Latest Release can be found here: https://github.com/macrossmerrell/EliteBioRada
 - BIO counter — completed/total (e.g. `2/3`)
 - Current zoom scale with scroll hint
 - **POTENTIAL:** — total possible payout for the current planet
+- **⟳ Refresh button** — forces a full journal re-read and state rebuild without restarting the app. Useful if the app picks up incorrect data after a journal file switch. Automatically saves a timestamped log snapshot to the app folder before refreshing (see [Log Snapshots](#log-snapshots) below)
 
 ### Bottom Bar
 - Live latitude, longitude, heading, and altitude
@@ -251,6 +271,11 @@ Each genus has a community-documented minimum distance between scan sites. Activ
 ### No interference design
 Uses polling instead of `FileSystemWatcher` for `Status.json` to avoid conflicts with Stream Deck plugins or other tools. All file reads use `FileShare.ReadWrite | FileShare.Delete`.
 
+A `FileSystemWatcher` is used exclusively to detect when Elite Dangerous creates a new `Journal.*.log` file. When a new journal is detected, the app waits 1.5 seconds for the game to finish writing the file header, then automatically triggers a full state refresh — the same operation as clicking the ⟳ Refresh button manually.
+
+### Log Snapshots
+Each time the ⟳ Refresh button is clicked, the app saves a timestamped copy of the current diagnostic log to the app folder before wiping and rebuilding state. The snapshot filename follows the format `EliteBioRadar_YYYY-MM-DD_HH-MM-SS.log`. This preserves a point-in-time record of what the app saw before the refresh, which is useful for diagnosing journal-switch issues. Snapshots accumulate in the app folder and can be safely deleted at any time.
+
 ### Single instance
 A named system mutex prevents more than one instance of the app from running simultaneously, protecting the cache file from concurrent write conflicts.
 
@@ -266,6 +291,7 @@ These files are created next to the exe and are excluded from the repository:
 | `EliteBioRadar.settings.json` | Saved app settings, including window position and size |
 | `EliteBioRadar.earnings.json` | Persistent earnings history |
 | `EliteBioRadar.log` | Diagnostic log (overwritten each launch) |
+| `EliteBioRadar_YYYY-MM-DD_HH-MM-SS.log` | Timestamped log snapshot — created automatically each time the ⟳ Refresh button is clicked, capturing state at the moment of refresh |
 
 ---
 

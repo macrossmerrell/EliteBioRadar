@@ -14,9 +14,9 @@
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <PublishDir>bin\Release\net8.0-windows\BioRadar-App</PublishDir>
-    <Version>2.0.0</Version>
-    <AssemblyVersion>2.0.0.0</AssemblyVersion>
-    <FileVersion>2.0.0.0</FileVersion>
+    <Version>2.4.0</Version>
+    <AssemblyVersion>2.4.0.0</AssemblyVersion>
+    <FileVersion>2.4.0.0</FileVersion>
     <Product>Elite Bio Radar</Product>
     <Company>macrossmerrell</Company>
     <Copyright>Copyright © 2026 macrossmerrell</Copyright>

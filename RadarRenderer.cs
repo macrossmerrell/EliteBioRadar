@@ -29,7 +29,8 @@ namespace EliteBioRadar
 
         // ---------------------------------------------------------------
         public void Draw(EliteStatus status, List<ScannedOrganism> organisms,
-                         double scaleMetres, string? activeGenus = null, bool radarAnimation = true)
+                         double scaleMetres, string? activeGenus = null, bool radarAnimation = true,
+                         List<ScannedGeoSite>? geoSites = null)
         {
             _canvas.Children.Clear();
 
@@ -115,6 +116,16 @@ namespace EliteBioRadar
                 {
                     foreach (var org in organisms)
                         DrawOrganism(org, status, cx, cy, r, pixelsPerMetre, activeGenus);
+                }
+            }
+
+            // Geological sites
+            if (status.HasPosition && geoSites != null && geoSites.Count > 0)
+            {
+                lock (geoSites)
+                {
+                    foreach (var site in geoSites)
+                        DrawGeoSite(site, status, cx, cy, r, pixelsPerMetre);
                 }
             }
 
@@ -208,6 +219,61 @@ namespace EliteBioRadar
             {
                 string distStr = dist < 1000 ? $"{dist:F0}m" : $"{dist / 1000:F2}km";
                 DrawText(sx + 6, sy - 5, distStr, 8, Color.FromArgb(0xaa, col.R, col.G, col.B));
+            }
+        }
+
+        // ---------------------------------------------------------------
+        private static readonly Color ColGeo = Color.FromRgb(0xff, 0xaa, 0x00); // matches sidebar "GEO:" text
+
+        private void DrawGeoSite(ScannedGeoSite site, EliteStatus status,
+                                 double cx, double cy, double r, double pixelsPerMetre)
+        {
+            double dist    = EliteWatcherService.DistanceMeters(
+                status.Latitude, status.Longitude, site.Latitude, site.Longitude, status.PlanetRadius);
+            double bearing = EliteWatcherService.BearingDeg(
+                status.Latitude, status.Longitude, site.Latitude, site.Longitude);
+
+            double angleRad = (bearing - 90) * Math.PI / 180.0;
+            double px = dist * pixelsPerMetre * Math.Cos(angleRad);
+            double py = dist * pixelsPerMetre * Math.Sin(angleRad);
+
+            bool offscreen = (px * px + py * py) > r * r;
+            if (offscreen)
+            {
+                double norm = Math.Sqrt(px * px + py * py);
+                px = px / norm * (r - 8);
+                py = py / norm * (r - 8);
+            }
+
+            double sx = cx + px;
+            double sy = cy + py;
+
+            // X arm length scales with zoom; below 4px threshold, collapse to a dot
+            // At default 500m scale with a ~200px radius: pixelsPerMetre ≈ 0.4 → arm = 6
+            // Zoomed way out pixelsPerMetre drops and arm shrinks naturally
+            double arm = Math.Min(6.0, Math.Max(2.0, pixelsPerMetre * 15));
+            bool useDot = arm < 4.0 || offscreen;
+
+            if (useDot)
+            {
+                // Small filled dot — still clearly geo-amber, just compact
+                double dotR = offscreen ? 2.5 : 2.5;
+                DrawDisc(sx, sy, dotR, Color.FromArgb(0xcc, ColGeo.R, ColGeo.G, ColGeo.B), Colors.Transparent);
+            }
+            else
+            {
+                // X mark — two diagonal lines crossing at (sx, sy)
+                DrawLine(sx - arm, sy - arm, sx + arm, sy + arm, 1.5, Color.FromArgb(0xdd, ColGeo.R, ColGeo.G, ColGeo.B));
+                DrawLine(sx + arm, sy - arm, sx - arm, sy + arm, 1.5, Color.FromArgb(0xdd, ColGeo.R, ColGeo.G, ColGeo.B));
+                // Small centre dot so the crossing point is crisp
+                DrawDisc(sx, sy, 1.5, Color.FromArgb(0xff, ColGeo.R, ColGeo.G, ColGeo.B), Colors.Transparent);
+            }
+
+            // Distance label — only on-screen, skip if too zoomed out (arm collapsed)
+            if (!offscreen && !useDot)
+            {
+                string distStr = dist < 1000 ? $"{dist:F0}m" : $"{dist / 1000:F2}km";
+                DrawText(sx + arm + 3, sy - 8, distStr, 8, Color.FromArgb(0xaa, ColGeo.R, ColGeo.G, ColGeo.B));
             }
         }
 

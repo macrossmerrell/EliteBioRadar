@@ -201,6 +201,57 @@ namespace EliteBioRadar
             _watcher?.Dispose();
         }
 
+        private void BtnRefresh_Click(object sender, RoutedEventArgs e)
+        {
+            if (_watcher == null) return;
+
+            Log.Write("BtnRefresh_Click: user triggered ForceRefresh");
+
+            // Snapshot the current log before wiping state so there's a point-in-time
+            // record of exactly what the app saw when the problem occurred.
+            // File lands in the app folder with a timestamp — no dialog, no extra steps.
+            try
+            {
+                var appDir   = AppDomain.CurrentDomain.BaseDirectory;
+                var src      = System.IO.Path.Combine(appDir, "EliteBioRadar.log");
+                var stamp    = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+                var snapPath = System.IO.Path.Combine(appDir, $"EliteBioRadar_{stamp}.log");
+                if (System.IO.File.Exists(src))
+                {
+                    System.IO.File.Copy(src, snapPath, overwrite: false);
+                    Log.Write($"BtnRefresh_Click: log snapshot saved to {System.IO.Path.GetFileName(snapPath)}");
+                }
+            }
+            catch (Exception snapEx)
+            {
+                Log.Write($"BtnRefresh_Click: log snapshot failed — {snapEx.Message}");
+            }
+
+            // Disable button briefly so the user gets visual feedback and can't spam it
+            btnRefresh.IsEnabled = false;
+            btnRefresh.Opacity   = 0.4;
+
+            _watcher.ForceRefresh();
+
+            // Clear UI immediately — the journal loop will repopulate within its next tick
+            txtBodyName.Text = "Refreshing…";
+            UpdateBioCounter();
+            UpdateSidebar();
+            UpdatePlanetPanel();
+            RefreshAll();
+
+            // Re-enable after a short delay (backfill typically takes < 1 second)
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+            timer.Tick += (_, __) =>
+            {
+                timer.Stop();
+                btnRefresh.IsEnabled = true;
+                btnRefresh.Opacity   = 1.0;
+                Log.Write("BtnRefresh_Click: button re-enabled");
+            };
+            timer.Start();
+        }
+
         // ---------------------------------------------------------------
         private void RefreshAll()
         {
@@ -245,7 +296,7 @@ namespace EliteBioRadar
             UpdatePotentialPayout();
             UpdateEarningsDisplay();
 
-            // Nearest organism
+            // Nearest organism — incomplete only, so completed genera don't crowd out active ones
             ScannedOrganism? closest = null;
             double minDist = double.MaxValue;
             if (status.HasPosition && organisms.Count > 0)
@@ -254,6 +305,7 @@ namespace EliteBioRadar
                 {
                     foreach (var o in organisms)
                     {
+                        if (o.IsComplete) continue;
                         var d = EliteWatcherService.DistanceMeters(
                             status.Latitude, status.Longitude,
                             o.Latitude, o.Longitude, status.PlanetRadius);

@@ -157,8 +157,16 @@ namespace EliteBioRadar
         }
 
         // ---------------------------------------------------------------
+        // Both knownGenera and wasFootfalled are nullable:
+        //   - Pass knownGenera = null to preserve whatever the cache already has
+        //     (use this when saving from FSSBodySignals where no Genuses array exists,
+        //      or when the event body isn't the body we're currently tracking).
+        //   - Pass wasFootfalled = null to preserve cached FF.
+        //     When a value IS passed, FF is sticky-true: once true in cache it stays true,
+        //     since First Footfall is a game permanence that can never be undone.
         public static void SaveBodyMeta(string bodyName, int biologyCount,
-                                        IEnumerable<string> knownGenera, bool wasFootfalled = false)
+                                        IEnumerable<string>? knownGenera = null,
+                                        bool? wasFootfalled = null)
         {
             if (string.IsNullOrEmpty(bodyName)) return;
             try
@@ -167,17 +175,28 @@ namespace EliteBioRadar
                 {
                     var all = ReadAll();
                     all.TryGetValue(bodyName, out var existing);
+
+                    // FF: sticky-true. Never demote true→false from any source.
+                    bool finalFF = wasFootfalled.HasValue
+                        ? ((existing?.WasFootfalled == true) || wasFootfalled.Value)
+                        : (existing?.WasFootfalled ?? false);
+
+                    // KnownGenera: preserve existing if caller passes null
+                    var finalGenera = knownGenera?.ToList()
+                                      ?? existing?.KnownGenera
+                                      ?? new List<string>();
+
                     all[bodyName] = new CachedBodyData
                     {
-                        BiologyCount  = biologyCount,
+                        BiologyCount  = biologyCount > 0 ? biologyCount : existing?.BiologyCount ?? 0,
                         GeologyCount  = existing?.GeologyCount ?? 0,
-                        WasFootfalled = wasFootfalled,
-                        KnownGenera   = knownGenera.ToList(),
+                        WasFootfalled = finalFF,
+                        KnownGenera   = finalGenera,
                         Scans         = existing?.Scans ?? new List<CachedOrganism>(),
                         GeoSites      = existing?.GeoSites ?? new List<CachedGeoSite>(),
                     };
                     WriteAll(all);
-                    Log.Write($"ScanCache: saved meta '{bodyName}' bio={biologyCount} ff={wasFootfalled}");
+                    Log.Write($"ScanCache: saved meta '{bodyName}' bio={biologyCount} ff={finalFF} (FFarg={(wasFootfalled.HasValue ? wasFootfalled.Value.ToString() : "null")})");
                 }
             }
             catch (Exception ex) { Log.Write($"ScanCache.SaveBodyMeta error: {ex.Message}"); }
