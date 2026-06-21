@@ -45,6 +45,12 @@ namespace EliteBioRadar
         // system. Cleared as soon as any real location event arrives.
         private bool _awaitingLocationFix = false;
 
+        // Set to true while BackfillJournal is processing the newest (first) journal file.
+        // Used by the cross-genus abandonment logic — only abandon within the newest file,
+        // never let an older file's Log event remove dots placed by the newer file.
+        private bool _backfillIsLatestFile = false;
+        private string _backfillLastIncompleteGenus = "";
+
         private readonly object _planetLock = new();
 
         // When the user previews another planet, we stash the current body's full
@@ -815,6 +821,15 @@ namespace EliteBioRadar
                             trackSystem = obj.Value<string>("StarSystem") ?? trackSystem;
                         if (ev == "ApproachBody" || ev == "Touchdown")
                             trackBody = obj.Value<string>("Body") ?? obj.Value<string>("BodyName") ?? trackBody;
+                        // Also track from Disembark and Location — covers sessions where player
+                        // started landed (no Touchdown) or on foot (no ApproachBody/Touchdown).
+                        // Without this, Analyse events for genera completed in those sessions
+                        // would not be found in journalCompleted, causing CompletedCount to be wrong.
+                        if (ev == "Disembark" || ev == "Location")
+                        {
+                            var locBody = obj.Value<string>("Body") ?? obj.Value<string>("BodyName") ?? "";
+                            if (!string.IsNullOrEmpty(locBody)) trackBody = locBody;
+                        }
                         if (ev == "ScanOrganic" && obj.Value<string>("ScanType") == "Analyse" &&
                             string.Equals(trackSystem, system, StringComparison.OrdinalIgnoreCase) &&
                             !string.IsNullOrEmpty(trackBody))
@@ -1182,8 +1197,12 @@ namespace EliteBioRadar
                     if (found) break;
                 }
 
+                _backfillLastIncompleteGenus = "";
+                bool _isFirstBackfillFile = true;
                 foreach (var file in files)
                 {
+                    _backfillIsLatestFile = _isFirstBackfillFile;
+                    _isFirstBackfillFile  = false;
                     string? activeBody = null;
                     double  activeLat  = 0, activeLon = 0;
 
@@ -1203,6 +1222,12 @@ namespace EliteBioRadar
                                 activeBody = obj.Value<string>("Body") ?? obj.Value<string>("BodyName") ?? activeBody;
                                 var locSys = obj.Value<string>("StarSystem") ?? "";
                                 if (!string.IsNullOrEmpty(locSys)) StarSystem = locSys;
+                                // Location events include Latitude/Longitude when the player starts
+                                // landed or on foot — use them so subsequent ScanOrganic events
+                                // in the same journal have a valid position (covers StartLanded sessions
+                                // where there is no Touchdown event to set activeLat/activeLon).
+                                if (obj["Latitude"]  != null) activeLat = obj.Value<double>("Latitude");
+                                if (obj["Longitude"] != null) activeLon = obj.Value<double>("Longitude");
                                 break;
                             }
 
@@ -1316,6 +1341,27 @@ namespace EliteBioRadar
                     }
                 }
                 Log.Write($"Backfill: system for BackfillSystemPlanets='{_backfillSystem}'");
+
+                // End-of-backfill abandonment cleanup: if the newest journal had an
+                // in-progress scan of a specific genus, remove all OTHER incomplete genera
+                // from ScannedOrganisms. These represent abandoned scan attempts from older
+                // sessions that were superseded by the current in-progress scan.
+                if (!string.IsNullOrEmpty(_backfillLastIncompleteGenus))
+                {
+                    lock (ScannedOrganisms)
+                    {
+                        var abandoned = ScannedOrganisms
+                            .Where(o => !o.IsComplete &&
+                                   !string.Equals(o.Genus, _backfillLastIncompleteGenus,
+                                       StringComparison.OrdinalIgnoreCase))
+                            .ToList();
+                        if (abandoned.Count > 0)
+                        {
+                            foreach (var a in abandoned) ScannedOrganisms.Remove(a);
+                            Log.Write($"Backfill: removed {abandoned.Count} abandoned incomplete dot(s) for genera other than '{_backfillLastIncompleteGenus}'");
+                        }
+                    }
+                }
 
                 // Check if the player has left the body since the last scan
                 // by finding whether LeaveBody/FSDJump appears after the last ScanOrganic
@@ -1522,9 +1568,19 @@ namespace EliteBioRadar
                             _awaitingLocationFix = false;
                             CurrentBody = disembarkBody;
                             Log.Write($"Disembark: location fix received for '{disembarkBody}' — clearing _awaitingLocationFix, triggering backfill");
+                            var disKnownSystem = StarSystem;
                             Task.Run(() =>
                             {
-                                try { BackfillJournal(_currentJournalFile); }
+                                try
+                                {
+                                    BackfillJournal(_currentJournalFile);
+                                    if (!string.IsNullOrEmpty(disKnownSystem) &&
+                                        !string.Equals(disKnownSystem, StarSystem, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        Log.Write($"Disembark backfill: restoring StarSystem to '{disKnownSystem}' (was corrupted to '{StarSystem}' by older journal events)");
+                                        StarSystem = disKnownSystem;
+                                    }
+                                }
                                 catch (Exception ex) { Log.Write($"Disembark backfill error: {ex.Message}"); }
                             });
                         }
@@ -1562,8 +1618,11 @@ namespace EliteBioRadar
                     // Store per-body so we can show counts when targeting any planet
                     lock (_bodyBioSignals) _bodyBioSignals[body] = bio;
 
-                    // Update planet bio list for current system
-                    if (bio > 0)
+                    // Update planet bio list for current system.
+                    // Skip during backfill — BackfillSystemPlanets builds the list correctly
+                    // after backfill completes with a valid StarSystem. Updating it mid-backfill
+                    // risks adding wrong short names when StarSystem is empty (e.g. post-ForceRefresh).
+                    if (bio > 0 && !backfill)
                     {
                         // Derive system name reliably from CurrentBody or existing planet entries
                         // rather than StarSystem which may reflect a different current location
@@ -1577,15 +1636,37 @@ namespace EliteBioRadar
                                     body.StartsWith(p.FullBodyName.Contains(" ")
                                         ? string.Join(" ", p.FullBodyName.Split(' ').Take(p.FullBodyName.Split(' ').Length - 2))
                                         : p.FullBodyName, StringComparison.OrdinalIgnoreCase));
-                                if (match == null)
+                                if (match != null && !string.IsNullOrEmpty(match.ShortName))
                                 {
-                                    // Derive from CurrentBody — strip last 1-2 tokens to get system
-                                    var parts = CurrentBody.Split(' ');
-                                    for (int i = parts.Length - 1; i >= 2; i--)
+                                    // Derive system from the existing entry's verified FullBodyName/ShortName
+                                    // so we're never relying on StarSystem which may be stale from backfill
+                                    var suffix = " " + match.ShortName;
+                                    if (match.FullBodyName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                                        systemForShortName = match.FullBodyName.Substring(0, match.FullBodyName.Length - suffix.Length);
+                                }
+                                else if (match == null)
+                                {
+                                    // Prefer StarSystem directly when it's a valid prefix of body —
+                                    // StarSystem is now reliably maintained (see Location/Disembark
+                                    // backfill restoration fixes). Only fall back to the token-strip
+                                    // loop if StarSystem is empty or doesn't match, since that loop
+                                    // can over-match when CurrentBody equals body itself (the planet
+                                    // you're currently standing on), incorrectly consuming part of the
+                                    // body's own designation (e.g. orbit number) into the "system" name.
+                                    if (!string.IsNullOrEmpty(StarSystem) &&
+                                        body.StartsWith(StarSystem, StringComparison.OrdinalIgnoreCase))
                                     {
-                                        var candidate = string.Join(" ", parts.Take(i));
-                                        if (body.StartsWith(candidate, StringComparison.OrdinalIgnoreCase))
-                                        { systemForShortName = candidate; break; }
+                                        systemForShortName = StarSystem;
+                                    }
+                                    else
+                                    {
+                                        var parts = CurrentBody.Split(' ');
+                                        for (int i = parts.Length - 1; i >= 2; i--)
+                                        {
+                                            var candidate = string.Join(" ", parts.Take(i));
+                                            if (body.StartsWith(candidate, StringComparison.OrdinalIgnoreCase))
+                                            { systemForShortName = candidate; break; }
+                                        }
                                     }
                                 }
                             }
@@ -1607,11 +1688,19 @@ namespace EliteBioRadar
                         PlanetListChanged?.Invoke(this, EventArgs.Empty);
                     }
 
-                    // Update SystemGeoPlanets live for geo-only or mixed planets
-                    if (geo > 0)
+                    // Update SystemGeoPlanets live for geo-only or mixed planets.
+                    // Skip during backfill for same reason as bio planets above.
+                    if (geo > 0 && !backfill)
                     {
                         string systemForGeo = StarSystem;
-                        if (!string.IsNullOrEmpty(CurrentBody))
+                        // Only fall back to the token-strip loop if StarSystem isn't already a
+                        // valid prefix of body. The loop can over-match when CurrentBody equals
+                        // body itself (standing on the planet being scanned), incorrectly consuming
+                        // part of the body's own designation (e.g. orbit number) into "system",
+                        // which produces a too-short short name (e.g. "A" instead of "1 A").
+                        if (!(!string.IsNullOrEmpty(StarSystem) &&
+                              body.StartsWith(StarSystem, StringComparison.OrdinalIgnoreCase))
+                            && !string.IsNullOrEmpty(CurrentBody))
                         {
                             var parts = CurrentBody.Split(' ');
                             for (int i = parts.Length - 1; i >= 2; i--)
@@ -1745,11 +1834,18 @@ namespace EliteBioRadar
 
                     bool isCurrentBody   = string.Equals(codexBody, CurrentBody, StringComparison.OrdinalIgnoreCase);
                     bool isDisplayedBody = string.Equals(codexBody, DisplayedBody, StringComparison.OrdinalIgnoreCase);
+                    // During backfill, DisplayedBody is only synced to CurrentBody at the very end
+                    // of BackfillJournal — so while the file loop is still running, DisplayedBody
+                    // can be empty even though we ARE backfilling CurrentBody (not previewing
+                    // something else). Treat that case as displayed too, so geo sites discovered
+                    // on the body actually being loaded aren't silently dropped.
+                    bool isLoadingCurrentBody = backfill && isCurrentBody && string.IsNullOrEmpty(DisplayedBody);
 
-                    // Update in-memory KnownGeoSites ONLY if we're actually displaying this
-                    // body. Otherwise the user is previewing a different planet and adding
-                    // this site to in-memory would pollute the previewed display.
-                    if (isDisplayedBody)
+                    // Update in-memory KnownGeoSites if we're displaying this body, OR if we're
+                    // mid-backfill for this exact body and DisplayedBody just hasn't synced yet.
+                    // Otherwise the user is previewing a different planet and adding this site to
+                    // in-memory would pollute the previewed display.
+                    if (isDisplayedBody || isLoadingCurrentBody)
                     {
                         lock (KnownGeoSites)
                         {
@@ -1852,10 +1948,13 @@ namespace EliteBioRadar
                                 string.Equals(o.Genus, genus, StringComparison.OrdinalIgnoreCase));
                         if (!alreadyComplete)
                         {
+                            // Require ScanCount==3 to distinguish genuine completions from corrupt
+                            // cache entries written by the old "grey on switch" code (which set
+                            // IsComplete=true with ScanCount=1 when the player switched genera).
                             lock (ScannedOrganisms)
                                 alreadyComplete = ScannedOrganisms.Any(o =>
                                     string.Equals(o.Genus, genus, StringComparison.OrdinalIgnoreCase)
-                                    && o.IsComplete)
+                                    && o.IsComplete && o.ScanCount == 3)
                                     && !ScannedOrganisms.Any(o =>
                                     string.Equals(o.Genus, genus, StringComparison.OrdinalIgnoreCase)
                                     && !o.IsComplete);
@@ -1906,28 +2005,32 @@ namespace EliteBioRadar
 
                     lock (ScannedOrganisms)
                     {
-                        // During live scanning, if the genus switches, grey out the previous
-                        // incomplete genus. Skip this during backfill — we replay history in
-                        // journal order and the Analyse event will handle completion correctly.
-                        if (!backfill)
+                        // When a Log scan fires for a new genus, any other genus that has
+                        // incomplete dots (no Analyse yet) is considered abandoned — remove those
+                        // dots entirely so the Bio Survey shows 0 pips for that genus.
+                        // During backfill: only abandon within the newest journal file. Older files
+                        // are processed after the newest, so a Log from an old session must NOT
+                        // remove dots correctly placed by the newer session.
+                        if (scanNum == 1 && (!backfill || _backfillIsLatestFile))
                         {
-                            var incompleteDifferentGenus = ScannedOrganisms
+                            var abandonedGenera = ScannedOrganisms
                                 .Where(o => !string.Equals(o.Genus, genus, StringComparison.OrdinalIgnoreCase)
                                          && !o.IsComplete)
                                 .Select(o => o.Genus)
                                 .Distinct(StringComparer.OrdinalIgnoreCase)
                                 .ToList();
 
-                            foreach (var oldGenus in incompleteDifferentGenus)
+                            foreach (var oldGenus in abandonedGenera)
                             {
-                                var toGrey = ScannedOrganisms
+                                var toRemove = ScannedOrganisms
                                     .Where(o => string.Equals(o.Genus, oldGenus, StringComparison.OrdinalIgnoreCase)
                                              && !o.IsComplete)
                                     .ToList();
-                                foreach (var o in toGrey) o.IsComplete = true;
-                                ScanCache.SaveForBody(CurrentBody, ScannedOrganisms, BiologyCount, KnownGenera, WasFootfalled);
-                                Log.Write($"Greyed incomplete dots for '{oldGenus}' — switched to '{genus}'");
+                                foreach (var o in toRemove) ScannedOrganisms.Remove(o);
+                                Log.Write($"ScanOrganic: removed abandoned dots for '{oldGenus}' — switched to '{genus}'");
                             }
+                            if (!backfill)
+                                ScanCache.SaveForBody(CurrentBody, ScannedOrganisms, BiologyCount, KnownGenera, WasFootfalled);
                         }
 
                         // Get highest scan number already recorded for this genus genus
@@ -1944,6 +2047,30 @@ namespace EliteBioRadar
                                 .Where(o => string.Equals(o.Genus, genus, StringComparison.OrdinalIgnoreCase))
                                 .ToList();
                             foreach (var o in genusOrgs) o.IsComplete = true;
+
+                            // If no dots exist for this genus (Log/Sample were all skipped due to
+                            // missing or positionless journal data), add a synthetic completion record
+                            // so the Bio Survey correctly shows the genus as complete. Latitude=0/Longitude=0
+                            // means HasPosition=false, so the radar renderer skips it entirely — no
+                            // spurious dot appears on screen.
+                            if (!genusOrgs.Any())
+                            {
+                                ScannedOrganisms.Add(new ScannedOrganism
+                                {
+                                    Genus      = genus,
+                                    Species    = species,
+                                    ScanCount  = 3,
+                                    IsComplete = true,
+                                    Latitude   = 0.0,
+                                    Longitude  = 0.0,
+                                });
+                                Log.Write($"Analyse: no dots for {genus} — added synthetic completion record (position unavailable)");
+                            }
+
+                            // Track the last incomplete genus started in the newest file,
+                            // so the end-of-backfill cleanup can remove other abandoned genera.
+                            if (backfill && _backfillIsLatestFile && scanNum != 4)
+                                _backfillLastIncompleteGenus = genus;
 
                             // Add to CompletedGenera for sidebar
                             lock (CompletedGenera)
@@ -2028,19 +2155,21 @@ namespace EliteBioRadar
                         {
                             // Scan 1 (Log) or 2 (Sample) — add a new dot at this location
 
-                            // If this is a fresh Log (scan 1) for a genus that has
-                            // greyed-out abandoned dots, clear them so the sidebar
-                            // pips reset to show the new attempt from scratch
+                            // If this is a fresh Log (scan 1), clear any previous dots for this
+                            // genus — including corrupt IsComplete=true/ScanCount<3 entries written
+                            // by the old "grey on switch" code. A genuine completion always has
+                            // ScanCount==3, so anything with ScanCount<3 and IsComplete=true is
+                            // safe to remove when starting a new scan sequence for the same genus.
                             if (scanNum == 1)
                             {
-                                var abandoned = ScannedOrganisms
+                                var toRemove = ScannedOrganisms
                                     .Where(o => string.Equals(o.Genus, genus, StringComparison.OrdinalIgnoreCase)
-                                             && o.IsComplete)
+                                             && (!o.IsComplete || o.ScanCount < 3))
                                     .ToList();
-                                if (abandoned.Count > 0)
+                                if (toRemove.Count > 0)
                                 {
-                                    foreach (var a in abandoned) ScannedOrganisms.Remove(a);
-                                    Log.Write($"Cleared {abandoned.Count} abandoned grey dots for '{genus}' — restarting scan");
+                                    foreach (var r in toRemove) ScannedOrganisms.Remove(r);
+                                    Log.Write($"Cleared {toRemove.Count} stale/corrupt dots for '{genus}' — starting fresh scan");
                                 }
                             }
 
@@ -2132,14 +2261,36 @@ namespace EliteBioRadar
                             _awaitingLocationFix = false;
                             var locBody = obj.Value<string>("Body") ?? "";
                             var bodyType = obj.Value<string>("BodyType") ?? "";
-                            // Only treat as a landable body if BodyType is Planet (not Star/Belt etc.)
-                            if (!string.IsNullOrEmpty(locBody) && bodyType == "Planet")
+                            var locOnFoot = obj.Value<bool?>("OnFoot") ?? false;
+                            var locHasLatLon = obj["Latitude"] != null && obj["Longitude"] != null;
+                            // BodyType=="Planet" alone is NOT proof of being ON the planet — Location
+                            // events report the nearest body even while in supercruise just passing by
+                            // (no OnFoot, no Latitude/Longitude, often followed by StartJump/SupercruiseEntry).
+                            // Require OnFoot=true OR Latitude/Longitude present to confirm the player is
+                            // actually on the surface before treating this as the current body and
+                            // triggering a backfill (which can otherwise pull stale scan data and
+                            // incorrectly activate First Footfall for a planet never actually visited
+                            // this session).
+                            if (!string.IsNullOrEmpty(locBody) && bodyType == "Planet" && (locOnFoot || locHasLatLon))
                             {
                                 CurrentBody = locBody;
                                 Log.Write($"Location/CarrierJump: location fix received — on planet '{locBody}' in '{sys}', triggering backfill");
+                                var locKnownSystem = sys;
                                 Task.Run(() =>
                                 {
-                                    try { BackfillJournal(_currentJournalFile); }
+                                    try
+                                    {
+                                        BackfillJournal(_currentJournalFile);
+                                        // BackfillJournal may update StarSystem from older journal events
+                                        // (e.g. FSDJumps to previous systems). Restore the confirmed system
+                                        // from the Location event that triggered this backfill.
+                                        if (!string.IsNullOrEmpty(locKnownSystem) &&
+                                            !string.Equals(locKnownSystem, StarSystem, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            Log.Write($"Location backfill: restoring StarSystem to '{locKnownSystem}' (was corrupted to '{StarSystem}' by older journal events)");
+                                            StarSystem = locKnownSystem;
+                                        }
+                                    }
                                     catch (Exception ex) { Log.Write($"Location backfill error: {ex.Message}"); }
                                 });
                             }

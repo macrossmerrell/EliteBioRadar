@@ -18,6 +18,7 @@ namespace EliteBioRadar
         private static readonly Color ColScan1     = Color.FromRgb(0x00, 0xa3, 0xff);
         private static readonly Color ColScan2     = Color.FromRgb(0x00, 0xff, 0x44);
         private static readonly Color ColScanFull  = Color.FromRgb(0xff, 0xaa, 0x00);
+        private static readonly Color ColGeo       = Color.FromRgb(0xff, 0xaa, 0x00); // matches GEO SURVEY sidebar text
 
         // Pulse animation — one full sweep inner→outer every 1.25 seconds
         private readonly Stopwatch _pulse = Stopwatch.StartNew();
@@ -119,8 +120,9 @@ namespace EliteBioRadar
                 }
             }
 
-            // Geological sites
-            if (status.HasPosition && geoSites != null && geoSites.Count > 0)
+            // Geological sites — amber X on-screen, dim grey dot clamped to the
+            // radar edge when off-screen (same pattern as organism off-screen dots)
+            if (status.HasPosition && geoSites != null)
             {
                 lock (geoSites)
                 {
@@ -223,8 +225,6 @@ namespace EliteBioRadar
         }
 
         // ---------------------------------------------------------------
-        private static readonly Color ColGeo = Color.FromRgb(0xff, 0xaa, 0x00); // matches sidebar "GEO:" text
-
         private void DrawGeoSite(ScannedGeoSite site, EliteStatus status,
                                  double cx, double cy, double r, double pixelsPerMetre)
         {
@@ -248,33 +248,23 @@ namespace EliteBioRadar
             double sx = cx + px;
             double sy = cy + py;
 
-            // X arm length scales with zoom; below 4px threshold, collapse to a dot
-            // At default 500m scale with a ~200px radius: pixelsPerMetre ≈ 0.4 → arm = 6
-            // Zoomed way out pixelsPerMetre drops and arm shrinks naturally
-            double arm = Math.Min(6.0, Math.Max(2.0, pixelsPerMetre * 15));
-            bool useDot = arm < 4.0 || offscreen;
-
-            if (useDot)
+            if (offscreen)
             {
-                // Small filled dot — still clearly geo-amber, just compact
-                double dotR = offscreen ? 2.5 : 2.5;
-                DrawDisc(sx, sy, dotR, Color.FromArgb(0xcc, ColGeo.R, ColGeo.G, ColGeo.B), Colors.Transparent);
-            }
-            else
-            {
-                // X mark — two diagonal lines crossing at (sx, sy)
-                DrawLine(sx - arm, sy - arm, sx + arm, sy + arm, 1.5, Color.FromArgb(0xdd, ColGeo.R, ColGeo.G, ColGeo.B));
-                DrawLine(sx + arm, sy - arm, sx - arm, sy + arm, 1.5, Color.FromArgb(0xdd, ColGeo.R, ColGeo.G, ColGeo.B));
-                // Small centre dot so the crossing point is crisp
-                DrawDisc(sx, sy, 1.5, Color.FromArgb(0xff, ColGeo.R, ColGeo.G, ColGeo.B), Colors.Transparent);
+                // Off-screen — dim amber dot at the edge, same geo color family, not grey
+                DrawDisc(sx, sy, 4, Color.FromArgb(0xaa, ColGeo.R, ColGeo.G, ColGeo.B), Colors.Transparent);
+                return;
             }
 
-            // Distance label — only on-screen, skip if too zoomed out (arm collapsed)
-            if (!offscreen && !useDot)
-            {
-                string distStr = dist < 1000 ? $"{dist:F0}m" : $"{dist / 1000:F2}km";
-                DrawText(sx + arm + 3, sy - 8, distStr, 8, Color.FromArgb(0xaa, ColGeo.R, ColGeo.G, ColGeo.B));
-            }
+            // On-screen — amber X matching the GEO SURVEY sidebar heading color
+            double half = 7;
+            DrawLine(sx - half, sy - half, sx + half, sy + half, 2, ColGeo);
+            DrawLine(sx - half, sy + half, sx + half, sy - half, 2, ColGeo);
+
+            string label   = site.Name.Length > 0
+                ? site.Name.Substring(0, Math.Min(8, site.Name.Length)).ToUpper() : "GEO";
+            string distStr = dist < 1000 ? $"{dist:F0}m" : $"{dist / 1000:F2}km";
+            DrawText(sx + 10, sy - 14, label, 9, ColGeo);
+            DrawText(sx + 10, sy - 2, distStr, 8, Color.FromArgb(0xaa, ColGeo.R, ColGeo.G, ColGeo.B));
         }
 
         // ---------------------------------------------------------------

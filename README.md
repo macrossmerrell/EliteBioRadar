@@ -45,6 +45,15 @@ Latest Release can be found here: https://github.com/macrossmerrell/EliteBioRada
 
 ---
 
+### What's New in Version 2.5.0
+
+**Bug Fixes & Improvments**
+- Abandoned scan detection — switching to a different organism mid-scan without completing the previous one now correctly clears the Bio Survey pips for the abandoned genus instead of leaving it stuck at partial completion.
+- Corrupt cache recovery — the app now automatically detects and cleans up stale incomplete-but-marked-complete cache entries left behind by earlier versions, so affected genera display correctly without manual cache deletion.
+- Cross-session abandonment logic — fixed an issue where an older session's in-progress scan could incorrectly wipe a newer session's scan progress for a different genus during journal backfill.
+- False "First Footfall" on flyby — fixed an issue where simply passing near a planet in supercruise (without landing) could incorrectly trigger First Footfall and load stale scan data for that planet.
+- Planet name truncation after journal switch — fixed a system-name detection bug that occasionally caused the currently-displayed planet's short name to be cut too short (e.g. "A" instead of "1 A") after a journal rollover.
+
 ## What's New in Version 2.4.0
 
 ### Geological Site Markers
@@ -80,7 +89,10 @@ Latest Release can be found here: https://github.com/macrossmerrell/EliteBioRada
 - **Planet list rebuilt cleanly on system change** — the Biological Sites and Geological Sites panels are now fully cleared and rebuilt when switching systems, preventing leftover entries from a previous system appearing alongside the current one
 - **Progressive journal search** — on startup the app searches up to 60 journal files in batches of 10 (starting from 20) when looking for scan history, rather than stopping at a hard limit of 20 files. Expansion only occurs if scan data has not yet been found, so typical sessions are unaffected
 - **FSDJump system tracking fix** — corrected an issue where `StarSystem` was read from the wrong JSON field name in journal events, causing system identification to silently fall back to body-name prefix matching and occasionally match bodies from other systems
-- **CompletedGenera restored from cache on startup** — completed organisms loaded from cache at launch are now correctly registered as completed, so the Total Payout and sidebar completion state are accurate from the moment the app opens
+- **Completed Genera restored from cache on startup** — completed organisms loaded from cache at launch are now correctly registered as completed, so the Total Payout and sidebar completion state are accurate from the moment the app opens
+- **Abandoned scan detection** — when switching to a different organism mid-scan without completing the previous one (no Analyse event), the Bio Survey now correctly clears the pips for the abandoned genus. Previously, switching genera left both showing partial pips. The abandoned genus resets to zero and will rebuild correctly if re-scanned later.
+- **Corrupt cache recovery** — a previous version of the abandoned scan logic saved greyed (incomplete) organisms to the cache instead of removing them, causing them to appear fully complete on the next app launch. The app now detects and clears these corrupt entries automatically during startup backfill, so no manual cache deletion is required going forward.
+- **Cross-session abandonment logic** — the backfill now correctly handles the case where an in-progress scan from an older session exists alongside a newer session's scan of a different genus. Previously, the older session's data could incorrectly remove the newer session's scan dots on app restart.
 
 ### Window Management
 - **Window position and size persistence** — the app now remembers its position and size between sessions, including which monitor it was on. Position is saved automatically as you move or resize the window

@@ -78,6 +78,12 @@ namespace EliteBioRadar
             string.IsNullOrEmpty(Species) ? Genus : $"{Genus} {Species}";
 
         public int ColonyRange => ColonyRanges.GetRange(Genus, Species);
+
+        // False when this is a synthetic completion record — Analyse fired but all
+        // Log/Sample scans were skipped due to no position data (e.g. missing journal).
+        // Used to suppress radar rendering while still allowing the Bio Survey to show
+        // the genus as complete. Computed from lat/lon so no cache format changes needed.
+        public bool HasPosition => Latitude != 0.0 || Longitude != 0.0;
     }
 
     // ---------------------------------------------------------------

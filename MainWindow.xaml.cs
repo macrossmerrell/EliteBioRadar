@@ -241,15 +241,15 @@ namespace EliteBioRadar
             RefreshAll();
 
             // Re-enable after a short delay (backfill typically takes < 1 second)
-            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
-            timer.Tick += (_, __) =>
+            var refreshBtnTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+            refreshBtnTimer.Tick += (_, __) =>
             {
-                timer.Stop();
+                refreshBtnTimer.Stop();
                 btnRefresh.IsEnabled = true;
                 btnRefresh.Opacity   = 1.0;
                 Log.Write("BtnRefresh_Click: button re-enabled");
             };
-            timer.Start();
+            refreshBtnTimer.Start();
         }
 
         // ---------------------------------------------------------------
@@ -291,7 +291,10 @@ namespace EliteBioRadar
                 }
             }
 
-            _renderer.Draw(status, organisms, _scaleMetres, _activeGenus, _radarAnimation);
+            var geoSites = _watcher?.KnownGeoSites ?? new List<ScannedGeoSite>();
+            List<ScannedGeoSite> geoSnapForRadar;
+            lock (geoSites) geoSnapForRadar = geoSites.ToList();
+            _renderer.Draw(status, organisms, _scaleMetres, _activeGenus, _radarAnimation, geoSnapForRadar);
 
             UpdatePotentialPayout();
             UpdateEarningsDisplay();
