@@ -12,7 +12,7 @@ Latest Release can be found here: https://github.com/macrossmerrell/EliteBioRada
 
 ## Application Overview
 
-![image](https://github.com/macrossmerrell/EliteBioRadar/blob/d2e1391d325d5258877fbde3fcadded7f2b292ba/screenshots/Fullscan.png)
+![image](https://github.com/macrossmerrell/EliteBioRadar/blob/e6a68f403e648b42e44c283b7357baebfe9a29af/screenshots/fullscan2.png)
 
 - **Top menu** shows:
    - The name of the current system.
@@ -26,6 +26,8 @@ Latest Release can be found here: https://github.com/macrossmerrell/EliteBioRada
   - The distance to nearest previous scan location.
   - Colour PIPs to identify how many scans on the current biological sample have been completed.
   - How much you have earned since using the app / since log file importation.
+
+![image](https://github.com/macrossmerrell/EliteBioRadar/blob/e6a68f403e648b42e44c283b7357baebfe9a29af/screenshots/SettingsMenu2.png)
 - **Biological Sites**, **Geological Sites**, and **Bio Survey** side-panels can be activated and deactivated for your desired look and information.
 - **Biological Sites** side-panel:
    - Shows planets with biological sites as identified by FSS.
