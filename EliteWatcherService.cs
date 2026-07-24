@@ -824,6 +824,14 @@ namespace EliteBioRadar
             dest.FullRouteHops = _routeCache.KnownHops;
             dest.TotalRouteJumps = _routeCache.KnownHops.Count;
             dest.TotalRouteLy    = _routeCache.TotalRouteLy;
+            // RemainingJumpsInRoute otherwise only gets set from the journal's FSDTarget event,
+            // which can lag several jumps behind NavRoute.json on an auto-plotted route (the
+            // route advances on every jump; a fresh FSDTarget doesn't always re-fire for each
+            // one). NavRoute.json's own hop count is read far more often (every Status poll tick)
+            // and is what FullRouteHops/hopIndex/the dimmed "already passed" rows are built from,
+            // so keep this in lockstep with that instead of the possibly-stale journal value —
+            // otherwise HOP x/y and the passed-row highlighting visibly disagree with the list.
+            dest.RemainingJumpsInRoute = currentHops.Count - 1;
         }
 
         private static RouteHop CloneHop(RouteHop h) => new RouteHop

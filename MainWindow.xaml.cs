@@ -592,7 +592,9 @@ namespace EliteBioRadar
                 "GEO SIGNALS", hasGeo ? $"{detail.GeoSignalCount} found" : "None", keyBrush: InfoOrangeBrush);
 
             AddCallout(planetPanelCanvas, new (double, double)[] { (375, 213), (412, 180), (470, 180) }, 180, true,
-                "GRAVITY", detail.SurfaceGravity > 0 ? $"{detail.SurfaceGravity:F2} G" : "—");
+                // Journal's SurfaceGravity is m/s², not G (confirmed against real data — values
+                // range up to ~30, Earth is 9.8) — convert using standard gravity (9.80665 m/s²/G).
+                "GRAVITY", detail.SurfaceGravity > 0 ? $"{detail.SurfaceGravity / 9.80665:F2} G" : "—");
             AddCallout(planetPanelCanvas, new (double, double)[] { (410, 290), (470, 290) }, 290, true,
                 "ATMOSPHERE", FormatAtmosphere(detail.AtmosphereType));
             AddCallout(planetPanelCanvas, new (double, double)[] { (375, 367), (412, 400), (470, 400) }, 400, true,
