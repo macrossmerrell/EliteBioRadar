@@ -1,7 +1,0 @@
-C:\Elite Bio Radar Repository\EliteBioRadar\bin\Release\net8.0-windows\BioRadar-App\EliteBioRadar.pdb
-C:\Elite Bio Radar Repository\EliteBioRadar\bin\Release\net8.0-windows\BioRadar-App\D3DCompiler_47_cor3.dll
-C:\Elite Bio Radar Repository\EliteBioRadar\bin\Release\net8.0-windows\BioRadar-App\PenImc_cor3.dll
-C:\Elite Bio Radar Repository\EliteBioRadar\bin\Release\net8.0-windows\BioRadar-App\PresentationNative_cor3.dll
-C:\Elite Bio Radar Repository\EliteBioRadar\bin\Release\net8.0-windows\BioRadar-App\vcruntime140_cor3.dll
-C:\Elite Bio Radar Repository\EliteBioRadar\bin\Release\net8.0-windows\BioRadar-App\wpfgfx_cor3.dll
-C:\Elite Bio Radar Repository\EliteBioRadar\bin\Release\net8.0-windows\BioRadar-App\EliteBioRadar.exe
