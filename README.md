@@ -14,36 +14,48 @@ Latest Release can be found here: https://github.com/macrossmerrell/EliteBioRada
 
 ## Application Overview
 
-![image](https://github.com/macrossmerrell/EliteBioRadar/blob/e6a68f403e648b42e44c283b7357baebfe9a29af/screenshots/fullscan2.png)
+![image](https://github.com/macrossmerrell/EliteBioRadar/blob/669e4cc2e8c27867c3fa8925104955077e02f87f/screenshots/elitebioradar.gif)
 
-- **Top menu** shows:
-   - The name of the current system.
-   - How many bio sites on selected / current planet.
-   - The current radar scaling.
-   - Potential earnings (once a DSS has been completed on the planet).
-- **Bottom menu** shows:
-  - Current Latitude and Longitude (if on planet).
-  - Active heading (on foot, ship, SRV, or fighter).
-  - Altitude.
-  - The distance to nearest previous scan location.
-  - Colour PIPs to identify how many scans on the current biological sample have been completed.
-  - How much you have earned since using the app / since log file importation.
-- **Biological Sites**, **Geological Sites**, and **Bio Survey** side-panels can be activated and deactivated for your desired look and information.
-- **Biological Sites** side-panel:
-   - Shows planets with biological sites as identified by FSS.
-   - Shows an arrow on your current planet.
-   - Greys out planet name once all biological scans have been completed.
-   - Clicking a planet in the list previews that planet's bio data in the Bio Survey sidebar.
-- **Geological Sites** side-panel:
-   - Shows planets with geological signals as revealed by DSS.
-   - Displays the number of geological sites per planet and how many have been discovered.
-   - Clicking a geological site entry opens a browser to its Elite Dangerous Wiki page.
-- **Bio Survey** side-panel:
-   - First Footfall notification (activates the moment you step off your ship on an unvisited planet).
-   - Biological types from DSS scan, shown as unknowns until DSS is completed.
-   - Biological genus name is clickable, opening a browser to its elite-dangerous.fandom.com/wiki page.
-   - Shows payout for each completed biological scan (adjusted for regular and first footfall values).
-   - Shows total scanned payout for the current planet once all scans are complete.
+Elite Bio Radar isn't just a bio-scan radar anymore — it's a companion app, meant to immerse you into a new level of game information in a meaningful way that is directly impacted by choices and events occurring in game. You can stay up to date on a variety of information whether you are standing on a planet, cruising around the system, or jumping to the next system. Below is your tour:
+
+
+### 🛰️ RADAR
+Your planetary flight and boots on the ground interface. It has that classic radar look and feel, the way a real survey instrument should be — with colony-exclusion range rings around every organism you scan (so you know exactly how far you need to travel before that Bacterium counts as
+a *new* sample, not a repeat). Those scan outlines that tell their own story in color: blue for first contact, green for second, and orange for the final location while the genetic sampler sends that data home.  All scan zones turn grey the moment the submission is complete, still letting you know where you were. The radar even has the option to mark the locations of initial geological site scans as well.
+
+The radar can be set to auto-scale, keeping every active site in frame, and it even tells / shows you when you approach the ship departure boundary.
+
+
+### ☀️ STAR
+When you first arrive in system, this tab becomes your new home, providing you information on the vitals of a star including its class, solar mass, age, temperature, radius, rings. The star tab also gives you the that same information for any other star selected in game.  You can revisit this tab whether sitting in a system or traveling through supercruise. 
+
+### 🪐 PLANET
+Target a world and the planet tab takes over: class, gravity, atmosphere, bio and geo signal counts, and a scan-state tag that levels up as you do the work — `AUTOSCAN` → `DETAILED` → `MAPPED`. And mapping isn't just a checkbox here: once the DSS probes come back, a **Composition** readout appears 
+above the planet, telling you what makes up that body. 
+
+### 🧭 DESTINATION
+This is the one that actually does the math your ship's cockpit won't show you plainly: a **live-calculated jump range**, worked out from your FSD's real stats, current fuel, and current mass — not some stale number left over from the last time you docked. Below that, the entire plotted route, not just what's left of it — a scrollable timeline of everywhere you're headed, with a jump-counter (`HOP 6 / 33`) and a progress bar tracking the whole expedition, auto-scrolling to exactly where you are. Quit the app mid-route, come back tomorrow, and it still knows you're on hop 6 — the route is cached to disk, not just remembered for as long as the window stays open.
+
+**And it all switches itself.** Target a star, target a planet, start charging the FSD (read straight off `Status.json`, so it's instant — even mid-charge from inside a landable atmosphere), or touch down somewhere — the tab bar follows your lead without being asked. Prefer to drive it yourself? Click any tab and it'll stay exactly where you put it until something changes.
+
+**Biological & Geological Sites tracking** — a left-side panel listing every planet in the system with biological signals (and, optionally, geological ones too), backfilled from journal history so previous sessions' scans still show up. A right-side Bio Survey sidebar breaks down the current/targeted planet's organisms one by one, with clickable wiki links, live payout figures, and a First Footfall indicator that goes gold the instant you disembark on an unvisited world.
+
+**Scan Log — Galactic Survey** — a separate window (opened from the top bar) covering everything you've ever scanned, not just the current body, giving you a rich history of your travles. Biology, geology, stars, worlds, and rare phenomena, all organized by real in-game galactic region, with 
+lifetime totals, first-discovery breakdowns, and a date-range filter to narrow it down to a specific trip.
+
+**Earnings & payout tracking** — every completed bio scan's credit value is recorded (with the 5× First Footfall multiplier applied automatically), persisted across sessions, and rebuildable at any time from your full journal history.
+
+**Ship Departure Range warning** — a dashed ring on the radar centred on your ship's touchdown point, with a ship-anchor and a separate SRV-anchor dot, so you always know how far you can wander on foot or in an SRV before losing the ability to call your ship back.
+
+**Session persistence throughout** — scan locations, First Footfall status, earnings, and route progress all survive an app restart (and most of them survive a game restart too), so nothing resets just because you closed the window.
+
+**Second-monitor and VR ready** — designed to sit alongside the game on a second monitor or touchscreen, and works pinned into any VR environment that supports overlaying Windows applications (Meta Quest, Virtual Desktop, SteamVR, Windows Mixed Reality).
+
+### The interface at a glance
+- **Top bar**: current system, current/targeted body, BIO counter, radar scale, POTENTIAL payout, Scan Log access, ⟳ Refresh (to use if data ever stops refreshing in game), and ⚙ Settings.
+- **Bottom bar**: Lat/Long, heading, altitude, nearest scan distance, scan-progress pips, and earned total.
+- **Biological & Geological Sites** (left) and **Bio Survey** (right) side-panels toggle independently in settings.
+  - Biological and Geological Sites (left) stay mounted across all four tabs — keeping system points of interest at your fingertips.
 
 ---
 
