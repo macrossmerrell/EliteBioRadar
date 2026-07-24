@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <defs>
+    <radialGradient id="shade" cx="36%" cy="32%" r="75%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity=".5"/>
+      <stop offset="55%" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity=".35"/>
+    </radialGradient>
+    <clipPath id="clip"><circle cx="150" cy="150" r="105"/></clipPath>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#glow)">
+    <g clip-path="url(#clip)">
+      <rect x="45" y="45" width="210" height="210" fill="#dcecff"/>
+      <rect x="45" y="72" width="210" height="18" fill="#b8d4f2" opacity=".8"/>
+      <rect x="45" y="104" width="210" height="14" fill="#8fb8e0" opacity=".7"/>
+      <rect x="45" y="130" width="210" height="24" fill="#cde0f5" opacity=".6"/>
+      <rect x="45" y="168" width="210" height="16" fill="#7fa8d1" opacity=".7"/>
+      <rect x="45" y="196" width="210" height="20" fill="#bcd6f0" opacity=".7"/>
+      <rect x="45" y="226" width="210" height="12" fill="#6f98c2" opacity=".6"/>
+      <circle cx="150" cy="150" r="105" fill="url(#shade)"/>
+    </g>
+  </g>
+</svg>

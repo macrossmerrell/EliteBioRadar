@@ -20,6 +20,31 @@
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
+        <!-- RADAR/STAR/PLANET/DESTINATION mode tab bar — flat, no default button chrome.
+             Selected/unselected colouring is set in code-behind (UpdateModeTabHighlight)
+             since it tracks live app state rather than anything bindable here. -->
+        <Style x:Key="ModeTabButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#080d0d"/>
+            <Setter Property="Foreground" Value="#335555"/>
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderBrush" Value="#1a4444"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+            <Setter Property="Padding" Value="4,8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <!-- Thin scrollbar for sidebars — 4px wide, dark themed -->
         <Style x:Key="ThinScrollBar" TargetType="ScrollBar">
             <Setter Property="Width" Value="4"/>
@@ -75,6 +100,7 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -111,7 +137,26 @@
                     </Viewbox>
                 </Button>
 
+                <!-- Declared after btnSettings so it docks to Settings' visual left
+                     (DockPanel.Dock="Right" stacks right-to-left in declaration order) -->
+                <Button x:Name="btnScanLog" DockPanel.Dock="Right"
+                        Width="30" Height="30"
+                        Background="Transparent" BorderThickness="0"
+                        Cursor="Hand" Padding="0" VerticalAlignment="Center"
+                        Click="BtnScanLog_Click"
+                        ToolTip="Scan Log — browse everything scanned">
+                    <Viewbox Width="20" Height="20">
+                        <Canvas Width="24" Height="24">
+                            <Path Fill="#00e5ff" Data="M4,4H14V6H4V4M4,8H14V10H4V8M4,12H11V14H4V12M16,12.5L21,17.5L19.6,18.9L16.6,15.9L16.6,15.9L14,18.5V12.5H16Z"/>
+                        </Canvas>
+                    </Viewbox>
+                </Button>
+
                 <WrapPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                    <StackPanel Orientation="Horizontal" Margin="0,2,14,2">
+                        <TextBlock Text="SYSTEM: " Style="{StaticResource BarLabel}"/>
+                        <TextBlock x:Name="txtSystemName" Text="—" Style="{StaticResource BarValue}"/>
+                    </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,2,14,2">
                         <TextBlock Text="BODY: " Style="{StaticResource BarLabel}"/>
                         <TextBlock x:Name="txtBodyName" Text="—" Style="{StaticResource BarValue}" FontWeight="Bold"/>
@@ -141,8 +186,23 @@
             </DockPanel>
         </Border>
 
+        <!-- MODE TAB BAR — full app width, above everything else. Tabs are always
+             clickable — a click sets a manual override that sticks until either the user
+             clicks another tab or a genuine new in-game event fires (new scan, new target,
+             new route), at which point automatic mode-selection takes back over. -->
+        <UniformGrid x:Name="modeTabBar" Grid.Row="1" Columns="4" Background="#080d0d">
+            <Button x:Name="tabRadar" Tag="Radar" Click="ModeTab_Click"
+                    Content="◎ RADAR" Style="{StaticResource ModeTabButtonStyle}"/>
+            <Button x:Name="tabStar" Tag="Star" Click="ModeTab_Click"
+                    Content="☉ STAR" Style="{StaticResource ModeTabButtonStyle}"/>
+            <Button x:Name="tabPlanet" Tag="Planet" Click="ModeTab_Click"
+                    Content="◐ PLANET" Style="{StaticResource ModeTabButtonStyle}"/>
+            <Button x:Name="tabDestination" Tag="Destination" Click="ModeTab_Click"
+                    Content="→ DESTINATION" Style="{StaticResource ModeTabButtonStyle}"/>
+        </UniformGrid>
+
         <!-- MAIN CONTENT -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="planetCol" Width="0"/>
                 <ColumnDefinition Width="*"/>
@@ -159,27 +219,38 @@
                 </ScrollViewer>
             </Border>
 
-            <!-- PLANET TOGGLE BUTTON — always at left edge of radar column -->
-            <Button x:Name="btnPlanetPanel"
-                    Grid.Column="1"
-                    HorizontalAlignment="Left" VerticalAlignment="Top"
-                    Width="26" Height="26" Margin="4,4,0,0"
-                    Background="#0d1a1a" BorderBrush="#1a4444"
-                    BorderThickness="1" Padding="0"
-                    Cursor="Hand" Panel.ZIndex="10"
-                    Click="BtnPlanetPanel_Click"
-                    ToolTip="Planets with Biology">
-                <Viewbox Width="16" Height="16">
-                    <Canvas Width="24" Height="24">
-                        <Path x:Name="planetBtnIcon" Fill="#00e5ff"
-                              Data="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4C14.21,4 16.21,4.86 17.71,6.29C16.32,6.28 14.44,6.93 13.07,8.35C11.69,9.77 11.09,11.66 11.12,13.05C9.7,14.42 8.04,14.31 6.62,13.77C5.57,13.37 4.67,12.67 4.18,12.03C5.17,7.54 8.62,4 12,4M20,12C20,12.23 19.99,12.46 19.97,12.68C19.44,12.42 18.75,12.29 17.95,12.38C17.14,12.47 16.45,12.81 15.97,13.28C15.27,13.95 14.97,14.86 15.08,15.76C15.19,16.71 15.72,17.55 16.43,18.07C15.16,19.27 13.67,20 12,20C9.79,20 7.79,19.14 6.29,17.71L6.53,17.65C7.96,17.3 9.53,16.56 10.63,15.15C11.62,15.3 12.73,15.06 13.73,14.36C14.7,13.69 15.32,12.7 15.49,11.65C16.28,10.36 17.59,9.71 18.87,9.77C19.58,10.46 20,11.18 20,12Z"/>
-                    </Canvas>
-                </Viewbox>
-            </Button>
-
+            <!-- Mode tab bar + the four stage views (RADAR/STAR/PLANET/DESTINATION), all
+                 sharing the radar column. Tabs are always clickable — a click sets a manual
+                 override that sticks until either the user clicks another tab or a genuine
+                 new in-game event fires (new scan, new target, new route), at which point
+                 the override clears and automatic mode-selection takes over again. -->
             <Canvas x:Name="radarCanvas" Grid.Column="1"
                     Background="#080d0d" ClipToBounds="True"
                     MouseWheel="RadarCanvas_MouseWheel"/>
+
+            <!-- STAR / PLANET info panels — replace radarCanvas when no Lat/Lon is present.
+                 Fixed-size inner Canvas + Viewbox Stretch=Uniform mirrors the approved SVG
+                 mockup's viewBox/preserveAspectRatio trick: content scales uniformly with
+                 the panel, keeping the body's circle round regardless of window resize. -->
+            <Viewbox x:Name="starPanelViewbox" Grid.Column="1" Stretch="Uniform" Visibility="Collapsed">
+                <Canvas x:Name="starPanelCanvas" Width="620" Height="580" Background="#080d0d"/>
+            </Viewbox>
+
+            <Viewbox x:Name="planetPanelViewbox" Grid.Column="1" Stretch="Uniform" Visibility="Collapsed">
+                <Canvas x:Name="planetPanelCanvas" Width="620" Height="580" Background="#080d0d"/>
+            </Viewbox>
+
+            <!-- DESTINATION info panel — ordinary WPF layout, no viewBox-style scaling needed -->
+            <Grid x:Name="destinationPanel" Grid.Column="1" Background="#080d0d" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <StackPanel x:Name="destSummaryStack" Grid.Row="0" Margin="16"/>
+                <ScrollViewer Grid.Row="1" Style="{StaticResource ThinScrollViewer}">
+                    <StackPanel x:Name="destHopStack" Margin="16,0,16,16"/>
+                </ScrollViewer>
+            </Grid>
 
             <Border x:Name="sidebarPanel" Grid.Column="2"
                     Background="#0d1a1a" BorderBrush="#1a4444"
@@ -192,7 +263,7 @@
         </Grid>
 
         <!-- BOTTOM BAR -->
-        <Border Grid.Row="2" Background="#0d1a1a" BorderBrush="#1a4444"
+        <Border Grid.Row="3" Background="#0d1a1a" BorderBrush="#1a4444"
                 BorderThickness="0,1,0,0" Padding="8,6">
             <WrapPanel Orientation="Horizontal">
                 <StackPanel Orientation="Horizontal" Margin="0,2,14,2">
@@ -244,7 +315,7 @@
         </Border>
 
         <!-- SETTINGS POPUP -->
-        <Border x:Name="settingsPanel" Grid.Row="0" Grid.RowSpan="3"
+        <Border x:Name="settingsPanel" Grid.Row="0" Grid.RowSpan="4"
                 Background="#EE0d1a1a" BorderBrush="#1a4444" BorderThickness="1"
                 HorizontalAlignment="Right" VerticalAlignment="Top"
                 Margin="0,38,0,0" Padding="14" Width="280"
@@ -268,23 +339,11 @@
                     Show Bio Survey Sidebar
                 </CheckBox>
 
-                <CheckBox x:Name="chkPlanetOverlay" Foreground="#00e5ff" FontFamily="Consolas"
+                <CheckBox x:Name="chkBioSites" Foreground="#00e5ff" FontFamily="Consolas"
                           FontSize="13" Margin="0,5"
-                          Checked="ChkPlanetOverlay_Changed" Unchecked="ChkPlanetOverlay_Changed">
-                    Planet Panel overlays radar
+                          Checked="ChkBioSites_Changed" Unchecked="ChkBioSites_Changed">
+                    Show Bio Sites Sidebar
                 </CheckBox>
-                <TextBlock Text="  When unchecked, panel shrinks the radar"
-                           Foreground="#446666" FontFamily="Consolas" FontSize="11"
-                           Margin="0,0,0,4" TextWrapping="Wrap"/>
-
-                <CheckBox x:Name="chkKeepPlanetOpen" Foreground="#00e5ff" FontFamily="Consolas"
-                          FontSize="13" Margin="0,5"
-                          Checked="ChkKeepPlanetOpen_Changed" Unchecked="ChkKeepPlanetOpen_Changed">
-                    Keep Bio Sites panel open
-                </CheckBox>
-                <TextBlock Text="  Panel stays open between sessions"
-                           Foreground="#446666" FontFamily="Consolas" FontSize="11"
-                           Margin="0,0,0,8" TextWrapping="Wrap"/>
 
                 <CheckBox x:Name="chkRadarAnimation" Foreground="#00e5ff" FontFamily="Consolas"
                           FontSize="13" Margin="0,5"

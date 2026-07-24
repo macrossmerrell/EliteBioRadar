@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <defs>
+    <linearGradient id="comboGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00c2e0" stop-opacity=".55"/>
+      <stop offset="100%" stop-color="#e08a1f" stop-opacity=".55"/>
+    </linearGradient>
+    <linearGradient id="comboFill" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0a1a1d"/>
+      <stop offset="100%" stop-color="#1d1408"/>
+    </linearGradient>
+    <filter id="glow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <circle cx="78" cy="222" r="30" fill="url(#comboGlow)" filter="url(#glow)"/>
+  <circle cx="78" cy="222" r="19" fill="url(#comboFill)"/>
+  <path d="M78,203 A19,19 0 0 1 78,241 Z" fill="none" stroke="#ffb84d" stroke-width="2"/>
+  <path d="M78,203 A19,19 0 0 0 78,241 Z" fill="none" stroke="#7de6f5" stroke-width="2"/>
+  <ellipse cx="71" cy="222" rx="7" ry="5" fill="none" stroke="#7de6f5" stroke-width="1.6" transform="rotate(-18 71 222)"/>
+  <path d="M85,214 L91,225 L85,222.5 L79,225 Z" fill="#ffb84d"/>
+</svg>

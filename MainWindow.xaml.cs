@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
@@ -24,9 +25,21 @@ namespace EliteBioRadar
         private bool   _showGeo        = false;
         private bool _settingsInitializing = true;
         private bool _showSidebar    = false;
-        private bool _planetOverlay  = false;
-        private bool _planetPanelOpen = false;
+        private bool _showBioSites   = false;
         private string? _activeGenus = null;
+        private double _shipDepartureRangeMetres = 1975;
+
+        // Info panel (STAR/PLANET/DESTINATION/RADAR) mode state
+        private InfoPanelMode _lastMode = InfoPanelMode.Radar;
+        // Set by clicking a tab; sticks until either another tab is clicked or a genuine new
+        // in-game event fires (see StarScanUpdated/PlanetTargetUpdated/DestinationUpdated
+        // subscriptions below), at which point automatic mode-selection takes back over.
+        private InfoPanelMode? _manualMode;
+        private bool _wasHasPosition;
+        private BodyScanDetail? _lastRenderedStar;
+        private BodyScanDetail? _lastRenderedPlanet;
+        private string _lastScrolledNextSystem = "";
+        private const string IconBaseUri = "pack://application:,,,/Assets/";
 
         // Pip colours
         private static readonly SolidColorBrush PipEmptyBorder1  = new(Color.FromRgb(0x22, 0x44, 0x55));
@@ -61,8 +74,8 @@ namespace EliteBioRadar
             _scaleMetres   = saved.DefaultScale;
             _autoScale     = saved.AutoScale;
             _showSidebar   = saved.ShowSidebar;
-            _planetOverlay = saved.PlanetOverlay;
-            _planetPanelOpen = saved.KeepPlanetPanelOpen;
+            _showBioSites  = saved.KeepPlanetPanelOpen;
+            _shipDepartureRangeMetres = saved.ShipDepartureRangeMetres;
 
             // Restore window position/size — verify it's on a connected screen first
             if (saved.WindowLeft.HasValue && saved.WindowTop.HasValue)
@@ -89,13 +102,14 @@ namespace EliteBioRadar
                 }
             }
 
-            chkPlanetOverlay.IsChecked  = _planetOverlay;
-            chkKeepPlanetOpen.IsChecked = saved.KeepPlanetPanelOpen;
+            chkBioSites.IsChecked = _showBioSites;
+            planetCol.Width       = _showBioSites ? new GridLength(150) : new GridLength(0);
+            planetPanel.Visibility = _showBioSites ? Visibility.Visible : Visibility.Collapsed;
+            if (_showBioSites) UpdatePlanetPanel();
             _radarAnimation = saved.RadarAnimation;
             chkRadarAnimation.IsChecked = _radarAnimation;
             _showGeo = saved.ShowGeologicalSites;
             chkShowGeo.IsChecked = _showGeo;
-            if (_planetPanelOpen) ApplyPlanetPanelState();
 
             // Load earnings
             EarningsTracker.Load();
@@ -104,8 +118,7 @@ namespace EliteBioRadar
             // Apply to controls
             chkAutoScale.IsChecked = _autoScale;
             chkSidebar.IsChecked   = _showSidebar;
-            sidebarCol.Width       = _showSidebar ? new GridLength(180) : new GridLength(0);
-            sidebarPanel.Visibility = _showSidebar ? Visibility.Visible : Visibility.Collapsed;
+            UpdateSidebarVisibility();
 
             // Set default scale dropdown to match saved value
             foreach (System.Windows.Controls.ComboBoxItem item in cmbDefaultScale.Items)
@@ -135,9 +148,13 @@ namespace EliteBioRadar
                 Log.Write($"Journal dir: {journalDir}  exists={Directory.Exists(journalDir)}");
 
                 var svc = new EliteWatcherService(journalDir);
+                svc.ShipDepartureThresholdMetres = _shipDepartureRangeMetres;
                 svc.StatusUpdated     += (_, args) => Dispatcher.InvokeAsync(() => UpdateStatusBar(args.Status));
                 svc.BodyChanged       += (_, args) => Dispatcher.InvokeAsync(() => UpdateBodyInfo(args));
                 svc.PlanetListChanged += (_, __)   => UpdatePlanetPanel();
+                svc.StarScanUpdated     += (_, __) => Dispatcher.InvokeAsync(() => { _manualMode = null; RefreshAll(); });
+                svc.PlanetTargetUpdated += (_, __) => Dispatcher.InvokeAsync(() => { _manualMode = null; RefreshAll(); });
+                svc.DestinationUpdated  += (_, __) => Dispatcher.InvokeAsync(() => { _manualMode = null; RefreshAll(); });
                 svc.OrganismScanned   += (_, args) => Dispatcher.InvokeAsync(() =>
                 {
                     _activeGenus = args.Organism.Genus;
@@ -258,6 +275,38 @@ namespace EliteBioRadar
             var status    = _watcher?.CurrentStatus    ?? new EliteStatus();
             var organisms = _watcher?.ScannedOrganisms ?? new List<ScannedOrganism>();
 
+            var autoMode = ComputeMode(status);
+
+            // Landing (Lat/Long just became available) auto-switches to RADAR, same as any
+            // other genuine new event clearing a manual tab selection — but only at the moment
+            // of landing itself, not on every tick. Once shown, the player can click into
+            // another tab (e.g. to check planet info) and it stays put — same as clicking away
+            // from the STAR tab already works — until they either return to RADAR themselves or
+            // land again.
+            bool justLanded = status.HasPosition && !_wasHasPosition;
+            _wasHasPosition = status.HasPosition;
+            if (justLanded) _manualMode = null;
+
+            InfoPanelMode mode = _manualMode ?? autoMode;
+            if (mode != _lastMode)
+            {
+                Log.Write($"RefreshAll: mode {_lastMode} -> {mode} (autoMode={autoMode} HasPosition={status.HasPosition} watcherNull={_watcher == null})");
+                _lastMode = mode;
+                ApplyInfoPanelMode(mode);
+            }
+            if (mode != InfoPanelMode.Radar)
+            {
+                // Refresh whichever panel is showing (cheap no-ops when nothing changed —
+                // each Update* method debounces against the last-rendered detail reference).
+                switch (mode)
+                {
+                    case InfoPanelMode.Star:        UpdateStarPanel(); break;
+                    case InfoPanelMode.Planet:      UpdateInfoPlanetPanel(); break;
+                    case InfoPanelMode.Destination: UpdateDestinationPanel(); break;
+                }
+                return;
+            }
+
             // Auto scale
             if (_autoScale && status.HasPosition)
             {
@@ -294,7 +343,10 @@ namespace EliteBioRadar
             var geoSites = _watcher?.KnownGeoSites ?? new List<ScannedGeoSite>();
             List<ScannedGeoSite> geoSnapForRadar;
             lock (geoSites) geoSnapForRadar = geoSites.ToList();
-            _renderer.Draw(status, organisms, _scaleMetres, _activeGenus, _radarAnimation, geoSnapForRadar);
+            _renderer.Draw(status, organisms, _scaleMetres, _activeGenus, _radarAnimation, geoSnapForRadar,
+                _watcher?.ShipAnchor, _watcher?.SrvAnchor,
+                _watcher?.ShipDepartureCrossed ?? false,
+                _watcher?.ShipDepartureThresholdMetres ?? 1975);
 
             UpdatePotentialPayout();
             UpdateEarningsDisplay();
@@ -330,6 +382,635 @@ namespace EliteBioRadar
 
             UpdatePips(status, organisms);
         }
+
+        // ---------------------------------------------------------------
+        //  Info panel: STAR / PLANET / DESTINATION / RADAR mode
+        // ---------------------------------------------------------------
+        private static readonly SolidColorBrush InfoLeaderBrush = new(Color.FromRgb(0x1a, 0x44, 0x44));
+        private static readonly SolidColorBrush InfoValueBrush  = new(Color.FromRgb(0x00, 0xe5, 0xff));
+        // Star/planet callout value text defaults to bright white; headings default to the
+        // same teal as the star/planet designation label at the bottom of the panel.
+        private static readonly SolidColorBrush InfoBrightValueBrush = new(Color.FromRgb(0xf2, 0xfc, 0xfc));
+        private static readonly SolidColorBrush InfoOrangeBrush = new(Color.FromRgb(0xff, 0xaa, 0x00));
+        private static readonly SolidColorBrush InfoDimBrush    = new(Color.FromRgb(0x44, 0x66, 0x66));
+
+        private InfoPanelMode ComputeMode(EliteStatus status)
+        {
+            // FSD spooling up for a real hyperspace jump wins outright — even from an
+            // atmospheric planet's surface. Odyssey allows charging the FSD directly from
+            // within a landable atmosphere without launching first, so Latitude/Longitude
+            // being present (HasPosition true) can't be trusted alone to mean "show the radar"
+            // while a jump is actively charging; check this before the HasPosition/Radar gate.
+            if (_watcher != null && _watcher.IsChargingJump) return InfoPanelMode.Destination;
+
+            if (status.HasPosition) return InfoPanelMode.Radar;
+            if (_watcher == null) return InfoPanelMode.Star;
+
+            // Any star — primary or a secondary/tertiary in a multi-star system — can also be
+            // the in-system nav target (e.g. targeted from the system map). That's a target
+            // just like a planet, it just belongs to STAR mode rather than PLANET mode.
+            bool targetIsStar = _watcher.TargetedStarDetail != null;
+
+            bool hasPlanetTarget   = _watcher.TargetedPlanetDetail != null && !string.IsNullOrEmpty(_watcher.TargetedBody);
+            bool hasInSystemTarget = targetIsStar || hasPlanetTarget;
+            // A route queued before this arrival (the common auto-route case: the next hop's
+            // FSDTarget fires mid-flight, before the FSDJump that confirms arrival) shouldn't
+            // keep forcing DESTINATION mode once you've landed and are looking around — only a
+            // destination target that's as new as the arrival itself (freshly (re)targeted, or
+            // a fresh FSD charge bumping FsdTargetedAt again) counts for automatic mode here.
+            // The route data itself is untouched; this only gates the auto-switch.
+            bool hasDestTarget = _watcher.CurrentDestination != null &&
+                !string.IsNullOrEmpty(_watcher.CurrentDestination.NextSystem) &&
+                _watcher.FsdTargetedAt >= _watcher.SystemArrivedAt;
+
+            if (hasInSystemTarget && hasDestTarget)
+                return _watcher.PlanetTargetedAt >= _watcher.FsdTargetedAt
+                    ? (targetIsStar ? InfoPanelMode.Star : InfoPanelMode.Planet)
+                    : InfoPanelMode.Destination;
+            if (hasInSystemTarget) return targetIsStar ? InfoPanelMode.Star : InfoPanelMode.Planet;
+            if (hasDestTarget)     return InfoPanelMode.Destination;
+            return InfoPanelMode.Star;
+        }
+
+        private void ApplyInfoPanelMode(InfoPanelMode mode)
+        {
+            radarCanvas.Visibility        = mode == InfoPanelMode.Radar       ? Visibility.Visible : Visibility.Collapsed;
+            starPanelViewbox.Visibility   = mode == InfoPanelMode.Star        ? Visibility.Visible : Visibility.Collapsed;
+            planetPanelViewbox.Visibility = mode == InfoPanelMode.Planet      ? Visibility.Visible : Visibility.Collapsed;
+            destinationPanel.Visibility   = mode == InfoPanelMode.Destination ? Visibility.Visible : Visibility.Collapsed;
+
+            // Hide the right BIO SURVEY sidebar in every non-Radar mode without touching the
+            // persisted _showSidebar setting — it restores exactly as configured the moment
+            // RADAR mode returns. The left BIO SITES panel is deliberately NOT touched here —
+            // it stays mounted in every mode per _showBioSites, controlled only by its own
+            // settings checkbox.
+            UpdateSidebarVisibility();
+
+            switch (mode)
+            {
+                case InfoPanelMode.Star:        UpdateStarPanel(force: true); break;
+                case InfoPanelMode.Planet:      UpdateInfoPlanetPanel(force: true); break;
+                case InfoPanelMode.Destination: UpdateDestinationPanel(force: true); break;
+            }
+
+            UpdateModeTabHighlight(mode);
+        }
+
+        private void UpdateModeTabHighlight(InfoPanelMode mode)
+        {
+            void Style(Button b, bool selected)
+            {
+                b.Background = selected ? new SolidColorBrush(Color.FromRgb(0x0d, 0x1a, 0x1a)) : new SolidColorBrush(Color.FromRgb(0x08, 0x0d, 0x0d));
+                b.Foreground = selected ? InfoValueBrush : new SolidColorBrush(Color.FromRgb(0x33, 0x55, 0x55));
+            }
+            Style(tabRadar,       mode == InfoPanelMode.Radar);
+            Style(tabStar,        mode == InfoPanelMode.Star);
+            Style(tabPlanet,      mode == InfoPanelMode.Planet);
+            Style(tabDestination, mode == InfoPanelMode.Destination);
+        }
+
+        private void ModeTab_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.Tag is not string tagStr) return;
+            if (!Enum.TryParse<InfoPanelMode>(tagStr, out var clicked)) return;
+
+            _manualMode = clicked;
+            _lastMode = clicked;
+            ApplyInfoPanelMode(clicked);
+        }
+
+        private void UpdateStarPanel(bool force = false)
+        {
+            // Prefer whichever star is actually targeted (a secondary/tertiary star in a
+            // multi-star system) over the primary — falls back to the primary when nothing
+            // is targeted, or when the primary itself is the target.
+            var detail = _watcher?.TargetedStarDetail ?? _watcher?.CurrentStarDetail;
+            if (!force && ReferenceEquals(detail, _lastRenderedStar)) return;
+            _lastRenderedStar = detail;
+
+            starPanelCanvas.Children.Clear();
+            starPanelCanvas.Children.Add(MakeGridBackground(620, 580));
+
+            if (detail == null)
+            {
+                starPanelCanvas.Children.Add(MakeCenterLabel("AWAITING STAR SCAN…", 310, 280, InfoDimBrush, 13));
+                return;
+            }
+
+            string iconCode = MapStarTypeToIconCode(detail.StarType);
+            starPanelCanvas.Children.Add(MakeImg($"StarIcons/png/star_{iconCode}.png", 217, 197, 186));
+
+            AddCallout(starPanelCanvas, new (double, double)[] { (246, 213), (208, 180), (150, 180) }, 180, false,
+                "CLASS", $"{detail.StarType} ({StarClassNames.GetDisplayName(detail.StarType)})", InfoOrangeBrush);
+            AddCallout(starPanelCanvas, new (double, double)[] { (210, 290), (150, 290) }, 290, false,
+                "SOLAR MASS", detail.StellarMass > 0 ? $"{detail.StellarMass:F2}" : "—");
+            AddCallout(starPanelCanvas, new (double, double)[] { (246, 367), (208, 400), (150, 400) }, 400, false,
+                "AGE", detail.AgeMY > 0 ? $"{detail.AgeMY:N0} My" : "—");
+
+            AddCallout(starPanelCanvas, new (double, double)[] { (375, 213), (412, 180), (470, 180) }, 180, true,
+                "SURFACE TEMP", detail.SurfaceTemperature > 0 ? $"{detail.SurfaceTemperature:N0} K" : "—");
+            AddCallout(starPanelCanvas, new (double, double)[] { (410, 290), (470, 290) }, 290, true,
+                "RADIUS (SOL)", detail.Radius > 0 ? $"{detail.Radius / 6.957e8:F2}" : "—");
+            // Stars never have Saturn-style rings in-game — a star's "Rings" entry is always
+            // an asteroid belt (its Name contains "Belt", e.g. "Sol A Belt"), not a true ring,
+            // so exclude those here rather than mislabelling a belt as "the star has rings".
+            var trueStarRing = detail.Rings.FirstOrDefault(r => !r.Name.Contains("Belt", StringComparison.OrdinalIgnoreCase));
+            AddCallout(starPanelCanvas, new (double, double)[] { (375, 367), (412, 400), (470, 400) }, 400, true,
+                "RINGS", trueStarRing != null ? FormatRingClass(trueStarRing.RingClass) : "None");
+
+            bool isPrimary = _watcher != null && ReferenceEquals(detail, _watcher.CurrentStarDetail);
+            starPanelCanvas.Children.Add(MakeCenterLabel(detail.BodyName.ToUpperInvariant(), 310, 500, InfoValueBrush, 17));
+            starPanelCanvas.Children.Add(MakeCenterLabel(isPrimary ? "primary star" : "targeted star", 310, 522, InfoDimBrush, 13));
+        }
+
+        private void UpdateInfoPlanetPanel(bool force = false)
+        {
+            // While landed there's typically no in-system nav-panel target at all, so fall
+            // back to whatever body the player is actually standing on.
+            var detail = _watcher?.TargetedPlanetDetail ?? _watcher?.CurrentBodyDetail;
+            if (!force && ReferenceEquals(detail, _lastRenderedPlanet)) return;
+            _lastRenderedPlanet = detail;
+
+            planetPanelCanvas.Children.Clear();
+            planetPanelCanvas.Children.Add(MakeGridBackground(620, 580));
+
+            if (detail == null)
+            {
+                planetPanelCanvas.Children.Add(MakeCenterLabel("NO PLANET TARGETED", 310, 280, InfoDimBrush, 13));
+                return;
+            }
+
+            if (detail.IsBelt)
+            {
+                // Asteroid belt clusters get a Scan event but no StarType/PlanetClass — none of
+                // the physical planet stats below apply, so just show one of the belt art
+                // variants (picked deterministically per body so it doesn't change on refresh)
+                // and the body name.
+                int variant = _watcher?.GetBeltVariant(detail.BodyName) ?? 1;
+                planetPanelCanvas.Children.Add(MakeImg($"AsteroidIcons/png/belt_{variant}.png", 217, 197, 186));
+                planetPanelCanvas.Children.Add(MakeCenterLabel("ASTEROID BELT", 310, 500, InfoValueBrush, 17));
+                planetPanelCanvas.Children.Add(MakeCenterLabel(
+                    EliteWatcherService.GetShortBodyName(detail.BodyName, _watcher?.StarSystem ?? "").ToUpperInvariant(),
+                    310, 522, InfoDimBrush, 13));
+                return;
+            }
+
+            // Icon stack: ring back -> base -> ring front -> atmosphere -> terraformable -> bio/geo badge
+            string? ringCode = detail.Rings.Count > 0 ? MapRingClass(detail.Rings[0].RingClass) : null;
+            if (ringCode != null)
+                planetPanelCanvas.Children.Add(MakeImg($"PlanetIcons/png/ring_{ringCode}_back.png", 217, 197, 186));
+
+            string? planetCode = MapPlanetClassToIconCode(detail.PlanetClass);
+            if (planetCode != null)
+                planetPanelCanvas.Children.Add(MakeImg($"PlanetIcons/png/{planetCode}.png", 217, 197, 186));
+
+            if (ringCode != null)
+                planetPanelCanvas.Children.Add(MakeImg($"PlanetIcons/png/ring_{ringCode}_front.png", 217, 197, 186));
+
+            if (!string.IsNullOrEmpty(detail.AtmosphereType) &&
+                !string.Equals(detail.AtmosphereType, "None", StringComparison.OrdinalIgnoreCase))
+                planetPanelCanvas.Children.Add(MakeImg("PlanetIcons/png/overlay_atmosphere.png", 217, 197, 186));
+
+            if (string.Equals(detail.TerraformState, "Terraformable", StringComparison.OrdinalIgnoreCase))
+                planetPanelCanvas.Children.Add(MakeImg("PlanetIcons/png/overlay_terraformable.png", 217, 197, 186));
+
+            bool hasBio = detail.BioSignalCount > 0, hasGeo = detail.GeoSignalCount > 0;
+            if (hasBio && hasGeo)
+                planetPanelCanvas.Children.Add(MakeImg("PlanetIcons/png/overlay_badge_combo.png", 217, 197, 186));
+            else if (hasBio)
+                planetPanelCanvas.Children.Add(MakeImg("PlanetIcons/png/overlay_badge_bio.png", 217, 197, 186));
+            else if (hasGeo)
+                planetPanelCanvas.Children.Add(MakeImg("PlanetIcons/png/overlay_badge_geo.png", 217, 197, 186));
+
+            bool isGasGiantFamily = planetCode != null &&
+                (planetCode.StartsWith("GG", StringComparison.Ordinal) || planetCode == "WTG");
+            AddCallout(planetPanelCanvas, new (double, double)[] { (246, 213), (208, 180), (150, 180) }, 180, false,
+                "PLANET CLASS", isGasGiantFamily ? FormatGasGiantClass(detail.PlanetClass, planetCode) : detail.PlanetClass);
+            AddCallout(planetPanelCanvas, new (double, double)[] { (210, 290), (150, 290) }, 290, false,
+                "SURFACE TEMP", detail.SurfaceTemperature > 0 ? $"{detail.SurfaceTemperature:N0} K" : "—");
+            AddCallout(planetPanelCanvas, new (double, double)[] { (246, 367), (208, 400), (150, 400) }, 400, false,
+                "GEO SIGNALS", hasGeo ? $"{detail.GeoSignalCount} found" : "None", keyBrush: InfoOrangeBrush);
+
+            AddCallout(planetPanelCanvas, new (double, double)[] { (375, 213), (412, 180), (470, 180) }, 180, true,
+                "GRAVITY", detail.SurfaceGravity > 0 ? $"{detail.SurfaceGravity:F2} G" : "—");
+            AddCallout(planetPanelCanvas, new (double, double)[] { (410, 290), (470, 290) }, 290, true,
+                "ATMOSPHERE", FormatAtmosphere(detail.AtmosphereType));
+            AddCallout(planetPanelCanvas, new (double, double)[] { (375, 367), (412, 400), (470, 400) }, 400, true,
+                "BIO SIGNALS", hasBio ? $"{detail.BioSignalCount} found" : "None", keyBrush: InfoValueBrush);
+
+            // DSS mapping reveals no new physical fields over a Detailed scan (confirmed against
+            // real journal data — the re-fired Scan event is identical) except one real reward:
+            // Ice/Rock/Metal composition. Worth surfacing once mapped, so it gets its own callout
+            // in the empty space above the planet instead of just a "MAPPED" label with no payoff.
+            // Centered above the planet (not left/right like the other callouts), so it's built
+            // by hand here rather than through AddCallout's left/right-only text alignment.
+            double compTotal = detail.IceComposition + detail.RockComposition + detail.MetalComposition;
+            if (detail.IsMapped && compTotal > 0)
+            {
+                var compPoly = new Polyline { Stroke = InfoLeaderBrush, StrokeThickness = 1.6 };
+                foreach (var p in new (double x, double y)[] { (300, 200), (180, 66), (250, 66) })
+                    compPoly.Points.Add(new Point(p.x, p.y));
+                planetPanelCanvas.Children.Add(compPoly);
+
+                planetPanelCanvas.Children.Add(MakeCenterLabel("COMPOSITION", 310, 56, InfoValueBrush, 13.5));
+                planetPanelCanvas.Children.Add(MakeCenterLabel($"ICE {detail.IceComposition * 100:F0}%", 310, 76, InfoBrightValueBrush, 13));
+                planetPanelCanvas.Children.Add(MakeCenterLabel($"ROCK {detail.RockComposition * 100:F0}%", 310, 94, InfoBrightValueBrush, 13));
+                planetPanelCanvas.Children.Add(MakeCenterLabel($"METAL {detail.MetalComposition * 100:F0}%", 310, 112, InfoBrightValueBrush, 13));
+            }
+
+            // For gas-giant-family planets the bottom label shows the broad type ("Gas Giant" /
+            // "Water Giant") instead of the short body designation — the top toolbar already
+            // shows the full body name, so this spot is more useful as a plain-language type.
+            var bottomLabel = isGasGiantFamily
+                ? FormatGasGiantType(planetCode)
+                : EliteWatcherService.GetShortBodyName(detail.BodyName, _watcher?.StarSystem ?? "");
+            planetPanelCanvas.Children.Add(MakeCenterLabel(bottomLabel.ToUpperInvariant(), 310, 500, InfoValueBrush, 17));
+            if (detail.Landable)
+                planetPanelCanvas.Children.Add(MakeCenterLabel("LANDABLE", 310, 522, InfoValueBrush, 13));
+            var scanTag = detail.IsMapped ? "MAPPED" : string.IsNullOrEmpty(detail.ScanType) ? "UNKNOWN" : detail.ScanType.ToUpperInvariant();
+            planetPanelCanvas.Children.Add(MakeCenterLabel($"SCAN: {scanTag}", 310, 543, InfoOrangeBrush, 12));
+        }
+
+        private void UpdateDestinationPanel(bool force = false)
+        {
+            var dest = _watcher?.CurrentDestination;
+            destSummaryStack.Children.Clear();
+            destHopStack.Children.Clear();
+
+            if (dest == null || string.IsNullOrEmpty(dest.NextSystem))
+            {
+                destSummaryStack.Children.Add(new TextBlock
+                {
+                    Text = "NO ROUTE ACTIVE", Foreground = InfoDimBrush,
+                    FontFamily = new FontFamily("Consolas"), FontSize = 13
+                });
+                return;
+            }
+
+            int hopIndex = dest.TotalRouteJumps > 0 ? Math.Max(1, dest.TotalRouteJumps - dest.RemainingJumpsInRoute) : 0;
+
+            var headerRow = new DockPanel();
+            if (hopIndex > 0 && dest.TotalRouteJumps > 0)
+            {
+                var hopTb = new TextBlock
+                {
+                    Text = $"HOP {hopIndex} / {dest.TotalRouteJumps}", Foreground = InfoDimBrush,
+                    FontFamily = new FontFamily("Consolas"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center
+                };
+                DockPanel.SetDock(hopTb, Dock.Right);
+                headerRow.Children.Add(hopTb);
+            }
+            var titlePanel = new StackPanel { Orientation = Orientation.Horizontal };
+            titlePanel.Children.Add(new TextBlock
+            {
+                Text = dest.NextSystem, Foreground = InfoValueBrush,
+                FontFamily = new FontFamily("Consolas"), FontSize = 20, FontWeight = FontWeights.Bold
+            });
+            if (!string.IsNullOrEmpty(dest.StarClass))
+            {
+                titlePanel.Children.Add(new Border
+                {
+                    BorderBrush = InfoLeaderBrush, BorderThickness = new Thickness(1),
+                    Padding = new Thickness(6, 1, 6, 1), Margin = new Thickness(10, 0, 0, 0),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Child = new TextBlock
+                    {
+                        Text = $"{dest.StarClass}-CLASS", Foreground = InfoOrangeBrush,
+                        FontFamily = new FontFamily("Consolas"), FontSize = 11
+                    }
+                });
+            }
+            headerRow.Children.Add(titlePanel);
+            destSummaryStack.Children.Add(headerRow);
+
+            var statsGrid = new UniformGrid { Columns = 3, Margin = new Thickness(0, 12, 0, 4) };
+            void AddStat(string label, string value, Brush? brush = null)
+            {
+                var row = new DockPanel { Margin = new Thickness(0, 0, 14, 10) };
+                var bar = new Border { Background = InfoLeaderBrush, Width = 3, Margin = new Thickness(0, 1, 8, 1) };
+                DockPanel.SetDock(bar, Dock.Left);
+                row.Children.Add(bar);
+                var sp = new StackPanel();
+                sp.Children.Add(new TextBlock { Text = label, Foreground = InfoDimBrush, FontFamily = new FontFamily("Consolas"), FontSize = 9.5 });
+                sp.Children.Add(new TextBlock { Text = value, Foreground = brush ?? InfoValueBrush, FontFamily = new FontFamily("Consolas"), FontSize = 17, Margin = new Thickness(0, 3, 0, 0) });
+                row.Children.Add(sp);
+                statsGrid.Children.Add(row);
+            }
+            var nextHop = dest.Hops.FirstOrDefault(h => string.Equals(h.StarSystem, dest.NextSystem, StringComparison.OrdinalIgnoreCase));
+            double jumpRange = dest.CurrentJumpRange > 0 ? dest.CurrentJumpRange : dest.MaxJumpRange;
+            AddStat("JUMP RANGE", jumpRange > 0 ? $"{jumpRange:F1} ly" : "—");
+            AddStat("NEXT JUMP DIST", nextHop != null && nextHop.DistanceFromPrevLy > 0 ? $"{nextHop.DistanceFromPrevLy:F1} ly" : "—");
+            AddStat("FUEL LEVEL", $"{dest.FuelMain:F1} / {dest.FuelCapacityMain:F1} t");
+            AddStat("REMAINING DIST", dest.RemainingDistanceLy > 0 ? $"{dest.RemainingDistanceLy:F1} ly" : "—");
+            AddStat("TOTAL ROUTE", dest.TotalRouteLy > 0 ? $"{dest.TotalRouteLy:F1} ly" : "—");
+            AddStat("JUMPS LEFT", dest.RemainingJumpsInRoute > 0 ? dest.RemainingJumpsInRoute.ToString() : "—", InfoOrangeBrush);
+            destSummaryStack.Children.Add(statsGrid);
+
+            if (dest.TotalRouteJumps > 0)
+            {
+                double pct = Math.Clamp(100.0 * hopIndex / dest.TotalRouteJumps, 0, 100);
+                var progressRow = new DockPanel { Margin = new Thickness(0, 4, 0, 4) };
+                var pctTb = new TextBlock
+                {
+                    Text = $"{pct:F0}%", Foreground = InfoValueBrush,
+                    FontFamily = new FontFamily("Consolas"), FontSize = 10.5
+                };
+                DockPanel.SetDock(pctTb, Dock.Right);
+                progressRow.Children.Add(pctTb);
+                progressRow.Children.Add(new TextBlock
+                {
+                    Text = "ROUTE PROGRESS", Foreground = InfoDimBrush,
+                    FontFamily = new FontFamily("Consolas"), FontSize = 10.5
+                });
+                destSummaryStack.Children.Add(progressRow);
+
+                var barHost = new Grid { Height = 8, Margin = new Thickness(0, 4, 0, 12) };
+                barHost.Children.Add(new Border
+                {
+                    Background = new SolidColorBrush(Color.FromRgb(0x0d, 0x1a, 0x1a)),
+                    CornerRadius = new CornerRadius(4)
+                });
+                var barOverlay = new Grid();
+                barOverlay.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(pct, 0.01), GridUnitType.Star) });
+                barOverlay.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(100 - pct, 0.01), GridUnitType.Star) });
+                var barFill = new Border { Background = InfoValueBrush, CornerRadius = new CornerRadius(4) };
+                Grid.SetColumn(barFill, 0);
+                barOverlay.Children.Add(barFill);
+                barHost.Children.Add(barOverlay);
+                destSummaryStack.Children.Add(barHost);
+            }
+
+            // Full route including already-passed hops (from the persisted route cache) so the
+            // list stays complete and scrollable across the whole journey — falls back to the
+            // remaining-only view if the cache hasn't populated yet (e.g. very first tick).
+            var fullRoute = dest.FullRouteHops.Count > 0 ? dest.FullRouteHops : dest.Hops;
+            // 0-based index of "where we are right now" — everything before this is history.
+            int hereIndex = hopIndex > 0 ? hopIndex - 1 : -1;
+
+            Border? currentRow = null;
+            for (int i = 0; i < fullRoute.Count; i++)
+            {
+                var hop = fullRoute[i];
+                bool isNext = string.Equals(hop.StarSystem, dest.NextSystem, StringComparison.OrdinalIgnoreCase);
+                bool isPastOrHere = hereIndex >= 0 && i <= hereIndex;
+
+                var row = new Border
+                {
+                    Background = isNext ? new SolidColorBrush(Color.FromRgb(0x0d, 0x22, 0x22)) : new SolidColorBrush(Color.FromRgb(0x0d, 0x1a, 0x1a)),
+                    BorderBrush = isNext ? InfoValueBrush : InfoLeaderBrush,
+                    BorderThickness = new Thickness(1),
+                    Padding = new Thickness(8, 7, 8, 7),
+                    Margin = new Thickness(0, 0, 0, 6),
+                    Opacity = isPastOrHere && !isNext ? 0.45 : 1.0,
+                };
+                var rowPanel = new DockPanel();
+                var idxTb = new TextBlock { Text = (i + 1).ToString(), Foreground = isNext ? InfoValueBrush : InfoDimBrush, Width = 26, FontFamily = new FontFamily("Consolas"), FontSize = 13 };
+                DockPanel.SetDock(idxTb, Dock.Left);
+                var distTb = new TextBlock { Text = hop.DistanceFromPrevLy > 0 ? $"{hop.DistanceFromPrevLy:F1} ly" : "—", Foreground = InfoDimBrush, FontFamily = new FontFamily("Consolas"), FontSize = 11.5, Width = 68, TextAlignment = TextAlignment.Right };
+                DockPanel.SetDock(distTb, Dock.Right);
+                var clsTb = new TextBlock { Text = hop.StarClass, Foreground = InfoOrangeBrush, FontFamily = new FontFamily("Consolas"), FontSize = 12, Width = 34, TextAlignment = TextAlignment.Right };
+                DockPanel.SetDock(clsTb, Dock.Right);
+                var sysTb = new TextBlock { Text = hop.StarSystem, Foreground = isNext ? InfoValueBrush : new SolidColorBrush(Color.FromRgb(0x88, 0xbb, 0xbb)), FontFamily = new FontFamily("Consolas"), FontSize = 13 };
+
+                rowPanel.Children.Add(idxTb);
+                rowPanel.Children.Add(distTb);
+                rowPanel.Children.Add(clsTb);
+                if (IsScoopableStar(hop.StarClass))
+                {
+                    // Drawn instead of an emoji glyph — color emoji ignore Foreground entirely,
+                    // rendering as a barely-visible dark pump icon against this dark background.
+                    var scoopIcon = new System.Windows.Shapes.Path
+                    {
+                        Data = Geometry.Parse("M5,0 C5,0 0,6.4 0,9 A5,5 0 1,0 10,9 C10,6.4 5,0 5,0 Z"),
+                        Fill = InfoValueBrush,
+                        Width = 10, Height = 12, Stretch = Stretch.Uniform,
+                        VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0)
+                    };
+                    DockPanel.SetDock(scoopIcon, Dock.Right);
+                    rowPanel.Children.Add(scoopIcon);
+                }
+                rowPanel.Children.Add(sysTb);
+                row.Child = rowPanel;
+                destHopStack.Children.Add(row);
+                if (isNext) currentRow = row;
+            }
+
+            // Scroll to the next-jump row when the tab is freshly shown, or when progress has
+            // actually advanced to a new hop — not on every routine refresh tick, which would
+            // otherwise fight a manual scroll while sitting on the tab looking at older hops.
+            bool advanced = !string.Equals(dest.NextSystem, _lastScrolledNextSystem, StringComparison.OrdinalIgnoreCase);
+            if ((force || advanced) && currentRow != null)
+            {
+                _lastScrolledNextSystem = dest.NextSystem;
+                currentRow.BringIntoView();
+            }
+        }
+
+        // Scoopable = main-sequence classes (KGB FOAM) plus Wolf-Rayet stars; white dwarfs,
+        // neutron stars, and black holes are not. hop.StarClass from NavRoute.json is a
+        // short code like "K"/"WC", matching this set directly.
+        private static readonly HashSet<string> ScoopableStarClasses = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "O", "B", "A", "F", "G", "K", "M", "W", "WN", "WNC", "WC", "WO"
+        };
+        private static bool IsScoopableStar(string starClass) =>
+            !string.IsNullOrEmpty(starClass) && ScoopableStarClasses.Contains(starClass);
+
+        // ---- Info panel drawing helpers ----
+
+        // Faint tiled grid, matching the mockup's background — a RadialGradientBrush
+        // OpacityMask fades it out toward the panel edges instead of a hard tile boundary.
+        private static Rectangle MakeGridBackground(double width, double height)
+        {
+            var tile = new DrawingBrush
+            {
+                TileMode = TileMode.Tile,
+                Viewport = new Rect(0, 0, 40, 40),
+                ViewportUnits = BrushMappingMode.Absolute,
+                Drawing = new GeometryDrawing
+                {
+                    Pen = new Pen(new SolidColorBrush(Color.FromRgb(0x1a, 0x44, 0x44)), 1),
+                    Geometry = new GeometryGroup
+                    {
+                        Children =
+                        {
+                            new LineGeometry(new Point(0, 0), new Point(40, 0)),
+                            new LineGeometry(new Point(0, 0), new Point(0, 40)),
+                        }
+                    }
+                }
+            };
+            tile.Freeze();
+
+            return new Rectangle
+            {
+                Width = width, Height = height,
+                Fill = tile,
+                IsHitTestVisible = false,
+                OpacityMask = new RadialGradientBrush
+                {
+                    GradientStops =
+                    {
+                        new GradientStop(Color.FromArgb(0x50, 0, 0, 0), 0.0),
+                        new GradientStop(Color.FromArgb(0x00, 0, 0, 0), 1.0),
+                    },
+                    RadiusX = 0.7, RadiusY = 0.7,
+                }
+            };
+        }
+
+        private static Image MakeImg(string relativePath, double x, double y, double size)
+        {
+            var img = new Image
+            {
+                Width = size,
+                Height = size,
+                Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(IconBaseUri + relativePath, UriKind.Absolute))
+            };
+            Canvas.SetLeft(img, x);
+            Canvas.SetTop(img, y);
+            return img;
+        }
+
+        private static TextBlock MakeCenterLabel(string text, double centerX, double y, Brush brush, double fontSize)
+        {
+            var tb = new TextBlock { Text = text, Foreground = brush, FontFamily = new FontFamily("Consolas"), FontSize = fontSize };
+            tb.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            Canvas.SetLeft(tb, centerX - tb.DesiredSize.Width / 2);
+            Canvas.SetTop(tb, y);
+            return tb;
+        }
+
+        // Draws an angled-then-flat leader line (2 or 3 points) plus a key/value callout at
+        // its terminal point — mirrors the approved SVG mockup's layout exactly.
+        private static void AddCallout(Canvas canvas, (double x, double y)[] leaderPoints, double rowY,
+            bool rightSide, string key, string value, Brush? valueBrush = null, Brush? keyBrush = null)
+        {
+            var poly = new Polyline { Stroke = InfoLeaderBrush, StrokeThickness = 1.6 };
+            foreach (var p in leaderPoints) poly.Points.Add(new Point(p.x, p.y));
+            canvas.Children.Add(poly);
+
+            const double calloutWidth = 140; // clearance from the leader's terminal point to the canvas edge
+
+            double textX = leaderPoints[^1].x;
+            var keyTb = new TextBlock
+            {
+                Text = key, Foreground = keyBrush ?? InfoValueBrush, FontFamily = new FontFamily("Consolas"),
+                FontSize = 13.5, FontWeight = FontWeights.Bold
+            };
+            keyTb.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            double keyX = rightSide ? textX : textX - keyTb.DesiredSize.Width;
+            Canvas.SetLeft(keyTb, keyX); Canvas.SetTop(keyTb, rowY - 10);
+            canvas.Children.Add(keyTb);
+
+            // Real game strings vary wildly in length ("Sudarsky class I gas giant",
+            // "Gas giant with water based life") — wrap within a fixed-width box instead of
+            // letting the text grow past the canvas edge into whatever sits behind the panel.
+            var valTb = new TextBlock
+            {
+                Text = value, Foreground = valueBrush ?? InfoBrightValueBrush,
+                FontFamily = new FontFamily("Consolas"), FontSize = 15,
+                Width = calloutWidth, TextWrapping = TextWrapping.Wrap,
+                TextAlignment = rightSide ? TextAlignment.Left : TextAlignment.Right,
+            };
+            double valX = rightSide ? textX : textX - calloutWidth;
+            Canvas.SetLeft(valTb, valX); Canvas.SetTop(valTb, rowY + 12);
+            canvas.Children.Add(valTb);
+        }
+
+        private static string MapStarTypeToIconCode(string starType)
+        {
+            if (string.IsNullOrEmpty(starType)) return "G";
+            switch (starType)
+            {
+                case "O": case "B": case "A": case "F": case "G": case "K": case "M":
+                case "W": case "WC": case "WN": case "WNC": case "WO":
+                    return starType;
+                case "L": return "BrownDwarf_L";
+                case "T": return "BrownDwarf_T";
+                case "Y": return "BrownDwarf_Y";
+                case "N": return "NeutronStar";
+                case "H": case "SupermassiveBlackHole": return "BlackHole";
+                default:
+                    return starType.StartsWith("D", StringComparison.OrdinalIgnoreCase) ? "WhiteDwarf" : "G";
+            }
+        }
+
+        private static string? MapPlanetClassToIconCode(string planetClass)
+        {
+            if (string.IsNullOrEmpty(planetClass)) return null;
+            var p = planetClass.ToLowerInvariant();
+            if (p.Contains("high metal content")) return "HMC";
+            if (p.Contains("metal rich")) return "MRB";
+            if (p.Contains("rocky ice")) return "RIB";
+            if (p.Contains("rocky")) return "RBD";
+            if (p.Contains("icy")) return "ICY";
+            if (p.Contains("earthlike")) return "ELW";
+            if (p.Contains("ammonia world")) return "AMW";
+            if (p.Contains("water world")) return "WTR";
+            if (p.Contains("water giant")) return "WTG";
+            if (p.Contains("gas giant with water")) return "GGW";
+            if (p.Contains("gas giant with ammonia")) return "GGA";
+            if (p.Contains("helium")) return "GGH";
+            if (p.Contains("class i gas giant")) return "GG1";
+            if (p.Contains("class ii gas giant")) return "GG2";
+            if (p.Contains("class iii gas giant")) return "GG3";
+            if (p.Contains("class iv gas giant")) return "GG4";
+            if (p.Contains("class v gas giant")) return "GG5";
+            return null;
+        }
+
+        // Exact in-game spelling, including the "Metalic" typo which matches the asset filenames
+        private static string? MapRingClass(string raw) => raw switch
+        {
+            "eRingClass_Icy"       => "Icy",
+            "eRingClass_MetalRich" => "MetalRich",
+            "eRingClass_Metalic"   => "Metalic",
+            "eRingClass_Rocky"     => "Rocky",
+            _ => null
+        };
+
+        private static string FormatRingClass(string raw) => MapRingClass(raw) switch
+        {
+            "Icy" => "Icy",
+            "MetalRich" => "Metal Rich",
+            "Metalic" => "Metallic",
+            "Rocky" => "Rocky",
+            _ => "Unknown"
+        };
+
+        private static string FormatAtmosphere(string raw)
+        {
+            if (string.IsNullOrEmpty(raw) || raw.Equals("None", StringComparison.OrdinalIgnoreCase)) return "None";
+            var sb = new System.Text.StringBuilder();
+            foreach (var c in raw)
+            {
+                if (char.IsUpper(c) && sb.Length > 0) sb.Append(' ');
+                sb.Append(c);
+            }
+            return sb.ToString();
+        }
+
+        // "Sudarsky class I gas giant" -> "Class I". The water/ammonia-life, helium-rich and
+        // water giant variants don't carry a Sudarsky number, so they show their distinguishing
+        // trait here instead — the bottom label (FormatGasGiantType) covers the broad category.
+        private static string FormatGasGiantClass(string planetClass, string? iconCode)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(planetClass, @"class\s+(I{1,3}|IV|V)\b",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (m.Success) return $"Class {m.Groups[1].Value.ToUpperInvariant()}";
+            return iconCode switch
+            {
+                "GGW" => "Water-Based Life",
+                "GGA" => "Ammonia-Based Life",
+                "GGH" => "Helium-Rich",
+                "WTG" => "Water Giant",
+                _ => "Gas Giant"
+            };
+        }
+
+        private static string FormatGasGiantType(string? iconCode) =>
+            iconCode == "WTG" ? "Water Giant" : "Gas Giant";
 
         private void UpdatePips(EliteStatus status, List<ScannedOrganism> organisms)
         {
@@ -801,6 +1482,8 @@ namespace EliteBioRadar
 
             if (_watcher == null) return;
 
+            txtSystemName.Text = string.IsNullOrEmpty(_watcher.StarSystem) ? "—" : _watcher.StarSystem;
+
             // Show current body if on planet, otherwise show targeted body
             if (!string.IsNullOrEmpty(_watcher.CurrentBody))
             {
@@ -847,6 +1530,21 @@ namespace EliteBioRadar
         {
             var about = new AboutWindow { Owner = this };
             about.ShowDialog();
+        }
+
+        private ScanLogWindow? _scanLogWindow;
+
+        private void BtnScanLog_Click(object sender, RoutedEventArgs e)
+        {
+            if (_scanLogWindow != null)
+            {
+                _scanLogWindow.Activate();
+                return;
+            }
+
+            _scanLogWindow = new ScanLogWindow { Owner = this };
+            _scanLogWindow.Closed += (_, _) => _scanLogWindow = null;
+            _scanLogWindow.Show();
         }
 
         private void BtnSettingsClose_Click(object sender, RoutedEventArgs e)
@@ -1018,16 +1716,14 @@ namespace EliteBioRadar
             UpdateEarningsDisplay();
         }
 
-        private void BtnPlanetPanel_Click(object sender, RoutedEventArgs e)
+        private void ChkBioSites_Changed(object sender, RoutedEventArgs e)
         {
-            _planetPanelOpen = !_planetPanelOpen;
-            ApplyPlanetPanelState();
-            if (chkKeepPlanetOpen?.IsChecked == true) SaveSettings();
-        }
-
-        private void ChkKeepPlanetOpen_Changed(object sender, RoutedEventArgs e)
-        {
+            _showBioSites = chkBioSites.IsChecked == true;
+            planetCol.Width = _showBioSites ? new GridLength(150) : new GridLength(0);
+            planetPanel.Visibility = _showBioSites ? Visibility.Visible : Visibility.Collapsed;
+            if (_settingsInitializing) return;
             SaveSettings();
+            if (_showBioSites) UpdatePlanetPanel();
         }
 
         private void ChkRadarAnimation_Changed(object sender, RoutedEventArgs e)
@@ -1045,57 +1741,9 @@ namespace EliteBioRadar
             UpdateSidebar();
         }
 
-        private void ChkPlanetOverlay_Changed(object sender, RoutedEventArgs e)
-        {
-            _planetOverlay = chkPlanetOverlay.IsChecked == true;
-            if (_planetPanelOpen) ApplyPlanetPanelState();
-            SaveSettings();
-        }
-
-        private void ApplyPlanetPanelState()
-        {
-            if (_planetPanelOpen)
-            {
-                planetPanel.Visibility = Visibility.Visible;
-                if (_planetOverlay)
-                {
-                    planetCol.Width = new GridLength(0);
-                    planetPanel.SetValue(Grid.ColumnProperty, 1);
-                    planetPanel.HorizontalAlignment = HorizontalAlignment.Left;
-                    planetPanel.Width = 150;
-                    Panel.SetZIndex(planetPanel, 10);
-                    // Button sits just to the right of the overlay panel
-                    btnPlanetPanel.Margin = new Thickness(154, 4, 0, 0);
-                }
-                else
-                {
-                    planetPanel.ClearValue(FrameworkElement.WidthProperty);
-                    planetPanel.HorizontalAlignment = HorizontalAlignment.Stretch;
-                    planetPanel.SetValue(Grid.ColumnProperty, 0);
-                    Panel.SetZIndex(planetPanel, 0);
-                    planetCol.Width = new GridLength(150);
-                    // Button sits at left edge of radar column (panel is in its own column)
-                    btnPlanetPanel.Margin = new Thickness(4, 4, 0, 0);
-                }
-                UpdatePlanetPanel();
-            }
-            else
-            {
-                planetPanel.Visibility = Visibility.Collapsed;
-                planetCol.Width = new GridLength(0);
-                btnPlanetPanel.Margin = new Thickness(4, 4, 0, 0);
-            }
-
-            // Toggle button icon: planet when closed, X when open
-            planetBtnIcon.Data = System.Windows.Media.Geometry.Parse(
-                _planetPanelOpen
-                    ? "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12Z"
-                    : "M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4C14.21,4 16.21,4.86 17.71,6.29C16.32,6.28 14.44,6.93 13.07,8.35C11.69,9.77 11.09,11.66 11.12,13.05C9.7,14.42 8.04,14.31 6.62,13.77C5.57,13.37 4.67,12.67 4.18,12.03C5.17,7.54 8.62,4 12,4M20,12C20,12.23 19.99,12.46 19.97,12.68C19.44,12.42 18.75,12.29 17.95,12.38C17.14,12.47 16.45,12.81 15.97,13.28C15.27,13.95 14.97,14.86 15.08,15.76C15.19,16.71 15.72,17.55 16.43,18.07C15.16,19.27 13.67,20 12,20C9.79,20 7.79,19.14 6.29,17.71L6.53,17.65C7.96,17.3 9.53,16.56 10.63,15.15C11.62,15.3 12.73,15.06 13.73,14.36C14.7,13.69 15.32,12.7 15.49,11.65C16.28,10.36 17.59,9.71 18.87,9.77C19.58,10.46 20,11.18 20,12Z");
-        }
-
         private void UpdatePlanetPanel()
         {
-            if (!_planetPanelOpen || _watcher == null) return;
+            if (!_showBioSites || _watcher == null) return;
 
             Dispatcher.InvokeAsync(() =>
             {
@@ -1285,8 +1933,7 @@ namespace EliteBioRadar
                 ShowSidebar          = _showSidebar,
                 AutoScale            = _autoScale,
                 DefaultScale         = _defaultScale,
-                PlanetOverlay        = _planetOverlay,
-                KeepPlanetPanelOpen  = chkKeepPlanetOpen?.IsChecked == true && _planetPanelOpen,
+                KeepPlanetPanelOpen  = _showBioSites,
                 RadarAnimation       = _radarAnimation,
                 ShowGeologicalSites  = _showGeo,
                 WindowLeft           = this.Left,
@@ -1298,11 +1945,23 @@ namespace EliteBioRadar
 
         private void ChkSidebar_Changed(object sender, RoutedEventArgs e)
         {
-            _showSidebar        = chkSidebar.IsChecked == true;
-            sidebarCol.Width    = _showSidebar ? new GridLength(180) : new GridLength(0);
-            sidebarPanel.Visibility = _showSidebar ? Visibility.Visible : Visibility.Collapsed;
+            _showSidebar = chkSidebar.IsChecked == true;
+            UpdateSidebarVisibility();
             if (_showSidebar) UpdateSidebar();
             SaveSettings();
+        }
+
+        // Single source of truth for the right BIO SURVEY sidebar's visibility — it should
+        // only ever show when both the setting is on AND we're in RADAR mode. Previously this
+        // same show/hide logic was duplicated across MainWindow_Loaded, ApplyInfoPanelMode, and
+        // ChkSidebar_Changed; if ChkSidebar_Changed fired (e.g. from setting chkSidebar.IsChecked
+        // during startup) after ApplyInfoPanelMode had already run, its unconditional "show it"
+        // logic would win and nothing would correct it again since the mode wasn't changing.
+        private void UpdateSidebarVisibility()
+        {
+            bool show = _showSidebar && _lastMode == InfoPanelMode.Radar;
+            sidebarPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            sidebarCol.Width        = show ? new GridLength(180) : new GridLength(0);
         }
 
         private void ChkAutoScale_Changed(object sender, RoutedEventArgs e)

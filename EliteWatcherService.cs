@@ -19,8 +19,73 @@ namespace EliteBioRadar
         public event EventHandler<OrganismScannedEventArgs>? OrganismScanned;
         public event EventHandler<BodyChangedEventArgs>?     BodyChanged;
 
+        // Info panel (STAR/PLANET/DESTINATION) — live-session-only state, not persisted to ScanCache
+        public event EventHandler? StarScanUpdated;
+        public event EventHandler? PlanetTargetUpdated;
+        public event EventHandler? DestinationUpdated;
+        public BodyScanDetail?  CurrentStarDetail    { get; private set; }
+        // Looked up from _bodyScanDetails by current TargetedBody, so a planet targeted
+        // AFTER it was already scanned this session still shows its detail immediately.
+        // Excludes stars: the primary star itself can also be the nav-panel target (e.g.
+        // targeting it from the system map), and that should keep showing STAR mode/detail,
+        // not be mistaken for a planet target.
+        public BodyScanDetail?  TargetedPlanetDetail =>
+            !string.IsNullOrEmpty(TargetedBody) && _bodyScanDetails.TryGetValue(TargetedBody, out var d) && !d.IsStar ? d : null;
+        // Same lookup, but for the opposite case: the targeted body IS a star. In a multi-star
+        // system this can be a secondary/tertiary star (CurrentStarDetail only ever tracks the
+        // primary), so without this a targeted B/C star matched neither TargetedPlanetDetail
+        // (excluded, it's a star) nor CurrentStarDetail (wrong body name) and fell through to
+        // whatever destination happened to exist instead of showing STAR mode.
+        public BodyScanDetail?  TargetedStarDetail =>
+            !string.IsNullOrEmpty(TargetedBody) && _bodyScanDetails.TryGetValue(TargetedBody, out var d) && d.IsStar ? d : null;
+        // The body actually under the player's feet (Status.json BodyName) rather than whatever
+        // is nav-panel targeted — while landed there's usually no in-system target at all, so
+        // without this the PLANET tab had nothing to show for the one body most worth showing.
+        public BodyScanDetail?  CurrentBodyDetail =>
+            !string.IsNullOrEmpty(CurrentBody) && _bodyScanDetails.TryGetValue(CurrentBody, out var cd) && !cd.IsStar ? cd : null;
+        public DestinationInfo? CurrentDestination    { get; private set; }
+        public DateTime         PlanetTargetedAt      { get; private set; }
+        public DateTime         FsdTargetedAt         { get; private set; }
+        // Bumped on every real system change. A destination route that was only queued BEFORE
+        // this arrival (the common auto-route case: the next hop's FSDTarget fires mid-flight,
+        // before the FSDJump that confirms arrival) shouldn't keep forcing DESTINATION mode
+        // once you've landed and are looking around the new system — that's what MainWindow.
+        // ComputeMode uses this for. The route data itself (CurrentDestination) is untouched;
+        // this only affects which mode auto-shows.
+        public DateTime         SystemArrivedAt       { get; private set; }
+        // True from the moment the FSD starts charging for an actual hyperspace jump (the
+        // "StartJump" event) until arrival — forces DESTINATION mode outright, overriding
+        // whatever in-system target happens to be more "recent" by timestamp. Supercruise
+        // (boosted or not) never sets this.
+        public bool             IsChargingJump        { get; private set; }
+
+        // Assigns (and remembers) a random belt art variant (1-5) for this body name, so the
+        // same belt keeps the same look for as long as it's targeted this session.
+        public int GetBeltVariant(string bodyName)
+        {
+            lock (_beltVariants)
+            {
+                if (!_beltVariants.TryGetValue(bodyName, out var variant))
+                {
+                    variant = _beltVariantRandom.Next(1, 6);
+                    _beltVariants[bodyName] = variant;
+                }
+                return variant;
+            }
+        }
+
         public EliteStatus CurrentStatus { get; private set; } = new();
         public string CurrentBody    { get; private set; } = "";
+
+        // Ship Departure Range — remembered surface points for the ship and a parked SRV,
+        // plus whether the player has strayed past the departure threshold this excursion.
+        // See ScanCache.SaveShipAnchor/SaveSrvAnchor for persistence.
+        public AnchorPoint? ShipAnchor              { get; private set; }
+        public AnchorPoint? SrvAnchor               { get; private set; }
+        public bool         ShipDepartureCrossed    { get; private set; }
+        public double       ShipDepartureThresholdMetres { get; set; } = 1975;
+        public const double ShipDepartureRevealMarginMetres = 300;
+        private EliteStatus? _prevStatus;
         // Body whose data is currently loaded into the in-memory display lists
         // (ScannedOrganisms, KnownGenera, CompletedGenera, KnownGeoSites, BiologyCount,
         // GeologyCount, WasFootfalled). Diverges from CurrentBody during a preview
@@ -32,8 +97,10 @@ namespace EliteBioRadar
         public string StarSystem        { get; private set; } = "";
         public string CachedBodyName    { get; private set; } = "";
         public bool   WasFootfalled     { get; private set; } = false;
-        private bool  _pendingFirstFootfall     = false;
-        private string _pendingFirstFootfallBody = "";
+        // Tracks bodies confirmed (via a Scan event) to have WasFootfalled=false and not yet
+        // disembarked-on. Per-body so scanning one body (e.g. a moon on approach) can never
+        // clobber the pending state of another body actually being visited.
+        private readonly HashSet<string> _pendingFirstFootfallBodies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private string _backfillSystem  = "";  // correct system derived during backfill
         private bool  _bodySetByStatus  = false;
 
@@ -78,14 +145,16 @@ namespace EliteBioRadar
             CurrentBody               = "";
             _bodySetByStatus          = false;
             WasFootfalled             = false;
-            _pendingFirstFootfall     = false;
-            _pendingFirstFootfallBody = "";
+            _pendingFirstFootfallBodies.Clear();
             lock (ScannedOrganisms) ScannedOrganisms.Clear();
             lock (KnownGenera)      KnownGenera.Clear();
             lock (CompletedGenera)  CompletedGenera.Clear();
             lock (KnownGeoSites)    KnownGeoSites.Clear();
             BiologyCount = 0;
             GeologyCount = 0;
+            ShipAnchor = null;
+            SrvAnchor  = null;
+            ShipDepartureCrossed = false;
             _stashedOrganisms = null;
             _stashedGenera    = null;
             _stashedForBody   = "";
@@ -179,6 +248,17 @@ namespace EliteBioRadar
 
         private readonly Dictionary<string, int> _bodyBioSignals =
             new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // Physical scan detail (star or planet) for every body scanned this session, keyed
+        // by full body name — backs CurrentStarDetail/TargetedPlanetDetail. Live-session-only,
+        // not persisted (see plan: this data is intentionally not written to ScanCache).
+        private readonly Dictionary<string, BodyScanDetail> _bodyScanDetails =
+            new Dictionary<string, BodyScanDetail>(StringComparer.OrdinalIgnoreCase);
+        // Random asteroid-belt art variant (1-5), assigned once per body the first time it's
+        // looked up and kept for as long as that belt stays targeted — cleared alongside
+        // _bodyScanDetails on a real system change so a new belt gets a fresh roll.
+        private readonly Dictionary<string, int> _beltVariants =
+            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Random _beltVariantRandom = new();
         // Genus names known from detailed planet scan (SAASignalsFound Genuses array)
         public List<string>          KnownGenera     { get; } = new();
         public List<ScannedOrganism> ScannedOrganisms { get; } = new();
@@ -189,10 +269,16 @@ namespace EliteBioRadar
 
         private readonly string _journalDir;
         private readonly string _statusFile;
+        private readonly string _navRouteFile;
         private string _currentJournalFile = "";
         private long   _journalPosition;
         private DateTime _lastStatusModified = DateTime.MinValue;
+        private DateTime _lastNavRouteModified = DateTime.MinValue;
         private readonly CancellationTokenSource _cts = new();
+
+        // The route's full history/total, persisted via RouteCache so it survives an app or
+        // game restart mid-route — see EnsureRouteState. Loaded lazily on first use.
+        private RouteCacheData? _routeCache;
 
         // Watches for new Journal.*.log files being created by the game.
         // When a new file appears, triggers ForceRefresh after a short delay
@@ -203,6 +289,7 @@ namespace EliteBioRadar
         {
             _journalDir = journalDir;
             _statusFile = Path.Combine(journalDir, "Status.json");
+            _navRouteFile = Path.Combine(journalDir, "NavRoute.json");
         }
 
         // ---------------------------------------------------------------
@@ -341,10 +428,75 @@ namespace EliteBioRadar
                             }
                         }
                     }
+                    if (File.Exists(_navRouteFile))
+                    {
+                        var navModified = File.GetLastWriteTimeUtc(_navRouteFile);
+                        if (navModified != _lastNavRouteModified)
+                        {
+                            _lastNavRouteModified = navModified;
+                            LoadNavRoute();
+                        }
+                    }
                 }
                 catch { }
                 Thread.Sleep(30);
             }
+        }
+
+        // ---------------------------------------------------------------
+        // Derives ShipAnchor/SrvAnchor/ShipDepartureCrossed purely from Status.json flag
+        // transitions — no journal parsing needed. Runs on every poll tick.
+        private void UpdateShipDepartureTracking(EliteStatus status)
+        {
+            var prev = _prevStatus;
+            var bodyForAnchor = !string.IsNullOrEmpty(status.BodyName) ? status.BodyName : CurrentBody;
+
+            bool abroadGroundedShip = status.Landed && !status.InSRV && !status.OnFoot && !status.InFighter;
+            bool wasAbroadGroundedShip = prev != null && prev.Landed && !prev.InSRV && !prev.OnFoot && !prev.InFighter;
+
+            if (prev == null || abroadGroundedShip != wasAbroadGroundedShip)
+                Log.Write($"ShipDeparture: abroadGroundedShip={abroadGroundedShip} Landed={status.Landed} InSRV={status.InSRV} OnFoot={status.OnFoot} InFighter={status.InFighter} HasPosition={status.HasPosition} body='{bodyForAnchor}' lat={status.Latitude} lon={status.Longitude}");
+
+            if (abroadGroundedShip && status.HasPosition && !string.IsNullOrEmpty(bodyForAnchor))
+            {
+                // Continuously refresh while aboard the grounded ship — handles touchdown,
+                // resuming mid-session, and re-boarding all for free. Freezes the instant
+                // the player leaves (this branch stops running), holding the last position.
+                if (ShipAnchor == null)
+                    Log.Write($"ShipDeparture: ShipAnchor first set for '{bodyForAnchor}' at {status.Latitude},{status.Longitude}");
+                ShipAnchor = new AnchorPoint { Latitude = status.Latitude, Longitude = status.Longitude };
+                ScanCache.SaveShipAnchor(bodyForAnchor, status.Latitude, status.Longitude);
+                ShipDepartureCrossed = false;
+            }
+
+            if (prev != null && !string.IsNullOrEmpty(bodyForAnchor))
+            {
+                if (prev.InSRV && status.OnFoot)
+                {
+                    // Just climbed out of the SRV — it's parked where we're standing.
+                    Log.Write($"ShipDeparture: SrvAnchor set for '{bodyForAnchor}' at {status.Latitude},{status.Longitude}");
+                    SrvAnchor = new AnchorPoint { Latitude = status.Latitude, Longitude = status.Longitude };
+                    ScanCache.SaveSrvAnchor(bodyForAnchor, status.Latitude, status.Longitude);
+                }
+                else if (prev.OnFoot && status.InSRV)
+                {
+                    // Climbed back into the SRV we were tracking.
+                    Log.Write($"ShipDeparture: SrvAnchor cleared for '{bodyForAnchor}' (re-embarked)");
+                    SrvAnchor = null;
+                    ScanCache.ClearSrvAnchor(bodyForAnchor);
+                }
+            }
+
+            if (!ShipDepartureCrossed && ShipAnchor != null &&
+                (status.InSRV || status.OnFoot || status.InFighter) && status.HasPosition)
+            {
+                double dist = DistanceMeters(status.Latitude, status.Longitude,
+                    ShipAnchor.Latitude, ShipAnchor.Longitude, status.PlanetRadius);
+                if (dist >= ShipDepartureThresholdMetres)
+                    ShipDepartureCrossed = true;
+            }
+
+            _prevStatus = status;
         }
 
         // ---------------------------------------------------------------
@@ -366,6 +518,7 @@ namespace EliteBioRadar
                 var flagsRaw  = obj.Value<long?>("Flags")  ?? 0;
                 var flags2Raw = obj.Value<long?>("Flags2") ?? 0;
 
+                var fuelObj = obj["Fuel"];
                 var status = new EliteStatus
                 {
                     Flags        = (uint)(flagsRaw  & 0xFFFFFFFF),
@@ -376,9 +529,31 @@ namespace EliteBioRadar
                     Heading      = obj.Value<double?>("Heading")      ?? 0,
                     BodyName     = obj.Value<string>("BodyName")      ?? "",
                     PlanetRadius = obj.Value<double?>("PlanetRadius") ?? 0,
+                    FuelMain      = fuelObj?.Value<double?>("FuelMain")      ?? 0,
+                    FuelReservoir = fuelObj?.Value<double?>("FuelReservoir") ?? 0,
                 };
 
                 CurrentStatus = status;
+                if (CurrentDestination != null)
+                {
+                    CurrentDestination.FuelMain      = status.FuelMain;
+                    CurrentDestination.FuelReservoir = status.FuelReservoir;
+                    CurrentDestination.CurrentJumpRange = ComputeJumpRange(CurrentDestination, status.FuelMain);
+                }
+
+                // FSD hyperdrive charging read live from Status.json (Flags2 bit 19) rather than
+                // relying solely on the journal's "StartJump" event — that journal write can lag
+                // or occasionally not land promptly, while Status.json is polled every tick and
+                // reflects the charge the moment it starts (and clears the moment it stops).
+                bool wasChargingJump = IsChargingJump;
+                IsChargingJump = status.FsdHyperdriveCharging;
+                if (IsChargingJump && !wasChargingJump)
+                {
+                    FsdTargetedAt = DateTime.UtcNow;
+                    DestinationUpdated?.Invoke(this, EventArgs.Empty);
+                }
+
+                UpdateShipDepartureTracking(status);
 
                 // Track targeted/destination body for bio count display
                 var dest = obj.Value<string>("BodyName") ?? "";
@@ -391,6 +566,11 @@ namespace EliteBioRadar
                     {
                         bool nameChanged = destName != TargetedBody;
                         TargetedBody = destName;
+                        if (nameChanged)
+                        {
+                            PlanetTargetedAt = DateTime.UtcNow;
+                            PlanetTargetUpdated?.Invoke(this, EventArgs.Empty);
+                        }
 
                         // Look up bio count — prefer SystemBioPlanets (backfilled) over _bodyBioSignals
                         int bioCount = 0;
@@ -463,6 +643,22 @@ namespace EliteBioRadar
                                 StatusUpdated?.Invoke(this, new StatusUpdatedEventArgs { Status = status });
                         }
                     }
+                    else if (!string.IsNullOrEmpty(TargetedBody))
+                    {
+                        // Destination block present but empty — target was cleared
+                        TargetedBody = "";
+                        TargetedBodyBioCount = 0;
+                        PlanetTargetedAt = DateTime.UtcNow;
+                        PlanetTargetUpdated?.Invoke(this, EventArgs.Empty);
+                    }
+                }
+                else if (!string.IsNullOrEmpty(TargetedBody))
+                {
+                    // No Destination block at all — target was cleared
+                    TargetedBody = "";
+                    TargetedBodyBioCount = 0;
+                    PlanetTargetedAt = DateTime.UtcNow;
+                    PlanetTargetUpdated?.Invoke(this, EventArgs.Empty);
                 }
 
                 if (!string.IsNullOrEmpty(status.BodyName) && status.BodyName != CurrentBody)
@@ -470,12 +666,6 @@ namespace EliteBioRadar
                     // Approaching or landed on a new body — load its cache
                     CurrentBody      = status.BodyName;
                     _bodySetByStatus = true;
-                    // Only clear pending FF if we've moved to a different body than the one being scanned
-                    if (!string.Equals(status.BodyName, _pendingFirstFootfallBody, StringComparison.OrdinalIgnoreCase))
-                    {
-                        _pendingFirstFootfall     = false;
-                        _pendingFirstFootfallBody = "";
-                    }
                     // Full cache restore for the new body. List fields are cleared and
                     // reloaded UNCONDITIONALLY so stale entries from the previous body
                     // can't leak through. For Bio/Geo counts we prefer SystemBioPlanets /
@@ -487,6 +677,9 @@ namespace EliteBioRadar
                     lock (ScannedOrganisms) { ScannedOrganisms.Clear(); ScannedOrganisms.AddRange(loaded.Organisms); }
                     lock (KnownGenera)      { KnownGenera.Clear();      KnownGenera.AddRange(loaded.KnownGenera); }
                     lock (KnownGeoSites)    { KnownGeoSites.Clear();    KnownGeoSites.AddRange(loaded.GeoSites); }
+                    ShipAnchor = loaded.ShipAnchor;
+                    SrvAnchor  = loaded.SrvAnchor;
+                    ShipDepartureCrossed = false;
                     // Populate CompletedGenera so sidebar Total Payout shows correctly
                     lock (CompletedGenera)
                     {
@@ -510,6 +703,8 @@ namespace EliteBioRadar
                     SetDisplayedBody(CurrentBody);
                     BodyChanged?.Invoke(this, new BodyChangedEventArgs
                         { BodyName = CurrentBody, BioCount = BiologyCount, GeoCount = GeologyCount });
+
+                    ReconcileFirstFootfallAsync(CurrentBody, "StatusPoll");
                 }
                 else if (string.IsNullOrEmpty(status.BodyName) && !string.IsNullOrEmpty(CurrentBody))
                 {
@@ -527,8 +722,6 @@ namespace EliteBioRadar
                         BiologyCount              = 0;
                         GeologyCount              = 0;
                         WasFootfalled             = false;
-                        _pendingFirstFootfall     = false;
-                        _pendingFirstFootfallBody = "";
                         SetDisplayedBody("");
                         BodyChanged?.Invoke(this, new BodyChangedEventArgs { BodyName = "" });
                     }
@@ -537,6 +730,475 @@ namespace EliteBioRadar
                 StatusUpdated?.Invoke(this, new StatusUpdatedEventArgs { Status = status });
             }
             catch { }
+        }
+
+        // ---------------------------------------------------------------
+        // Reads NavRoute.json (the plotted jump route) — same file-read idiom as ReadStatus().
+        // The journal's own "NavRoute" event carries no data; it's just a signal to re-read
+        // this file, so this is also called directly from the new "FSDTarget" case below.
+        private void LoadNavRoute()
+        {
+            try
+            {
+                if (!File.Exists(_navRouteFile)) return;
+
+                string json;
+                using (var fs = new FileStream(_navRouteFile, FileMode.Open, FileAccess.Read,
+                           FileShare.ReadWrite | FileShare.Delete))
+                using (var sr = new StreamReader(fs))
+                    json = sr.ReadToEnd();
+
+                if (string.IsNullOrWhiteSpace(json)) return;
+
+                var obj = JObject.Parse(json);
+                var route = obj["Route"];
+                if (route == null) return;
+
+                var hops = new List<RouteHop>();
+                foreach (var r in route)
+                {
+                    var posArr = r["StarPos"];
+                    var pos = new double[3];
+                    if (posArr != null)
+                        for (int i = 0; i < 3 && i < posArr.Count(); i++)
+                            pos[i] = posArr[i]!.Value<double>();
+
+                    hops.Add(new RouteHop
+                    {
+                        StarSystem    = r.Value<string>("StarSystem") ?? "",
+                        SystemAddress = r.Value<long?>("SystemAddress") ?? 0,
+                        StarPos       = pos,
+                        StarClass     = r.Value<string>("StarClass") ?? "",
+                    });
+                }
+
+                for (int i = 1; i < hops.Count; i++)
+                    hops[i].DistanceFromPrevLy = Distance3D(hops[i - 1].StarPos, hops[i].StarPos);
+
+                CurrentDestination ??= new DestinationInfo();
+                CurrentDestination.Hops = hops;
+                CurrentDestination.RemainingDistanceLy = hops.Sum(h => h.DistanceFromPrevLy);
+                EnsureRouteState(CurrentDestination, hops);
+                DestinationUpdated?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex) { Log.Write($"LoadNavRoute error: {ex.Message}"); }
+        }
+
+        private static double Distance3D(double[] a, double[] b) =>
+            Math.Sqrt(Math.Pow(a[0] - b[0], 2) + Math.Pow(a[1] - b[1], 2) + Math.Pow(a[2] - b[2], 2));
+
+        // NavRoute.json only ever shows "current position onward" — it shrinks every jump and
+        // never shows hops already passed. Its LAST entry (the final destination) is the one
+        // thing that stays constant for a route's entire lifetime, so it's the only reliable
+        // signal for "is this still the same route" across a jump, or across an app/game
+        // restart. currentHops here is that remaining view; _routeCache is the persisted full
+        // history, keyed by that final destination — reset the moment it changes (a new route
+        // was plotted), otherwise reused as-is so TotalRouteJumps/TotalRouteLy and hop position
+        // stay stable across restarts instead of re-anchoring to "hop 1" every launch.
+        private void EnsureRouteState(DestinationInfo dest, List<RouteHop> currentHops)
+        {
+            if (currentHops.Count == 0) return;
+
+            _routeCache ??= RouteCache.Load();
+
+            var finalHop = currentHops[^1];
+            bool sameRoute = _routeCache != null &&
+                _routeCache.FinalDestinationAddress != 0 &&
+                _routeCache.FinalDestinationAddress == finalHop.SystemAddress;
+
+            // New route (or nothing cached yet), or the cache is somehow shorter than what's
+            // currently visible (shouldn't normally happen — remaining only ever shrinks for
+            // the same route — but if it does, this snapshot is the fullest picture we have).
+            if (!sameRoute || currentHops.Count > _routeCache!.KnownHops.Count)
+            {
+                _routeCache = new RouteCacheData
+                {
+                    FinalDestinationAddress = finalHop.SystemAddress,
+                    FinalDestinationName    = finalHop.StarSystem,
+                    KnownHops               = currentHops.Select(CloneHop).ToList(),
+                    TotalRouteLy            = currentHops.Sum(h => h.DistanceFromPrevLy),
+                };
+                RouteCache.Save(_routeCache);
+            }
+
+            dest.FullRouteHops = _routeCache.KnownHops;
+            dest.TotalRouteJumps = _routeCache.KnownHops.Count;
+            dest.TotalRouteLy    = _routeCache.TotalRouteLy;
+        }
+
+        private static RouteHop CloneHop(RouteHop h) => new RouteHop
+        {
+            StarSystem = h.StarSystem, SystemAddress = h.SystemAddress,
+            StarPos = h.StarPos, StarClass = h.StarClass, DistanceFromPrevLy = h.DistanceFromPrevLy,
+        };
+
+        // Stock (un-engineered) FSD stats by internal item name, sourced from EDCD/coriolis-data's
+        // frame_shift_drive.json — covers both standard and SCO ("overcharge") drives, sizes 2-8,
+        // ratings E-A. Used as the baseline for CurrentJumpRange; engineered ships override
+        // FsdOptimalMass/FsdMaxFuelPerJump from the Loadout event's own Engineering.Modifiers,
+        // since those are exact rather than looked up.
+        private static readonly Dictionary<string, (double FuelMul, double FuelPower, double OptMass, double MaxFuel)> FsdStockStats =
+            new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "int_hyperdrive_size2_class1", (0.011, 2.00, 48,    0.6) },
+            { "int_hyperdrive_size2_class2", (0.010, 2.00, 54,    0.6) },
+            { "int_hyperdrive_size2_class3", (0.008, 2.00, 60,    0.6) },
+            { "int_hyperdrive_size2_class4", (0.010, 2.00, 75,    0.8) },
+            { "int_hyperdrive_size2_class5", (0.012, 2.00, 90,    0.9) },
+            { "int_hyperdrive_size3_class1", (0.011, 2.15, 80,    1.2) },
+            { "int_hyperdrive_size3_class2", (0.010, 2.15, 90,    1.2) },
+            { "int_hyperdrive_size3_class3", (0.008, 2.15, 100,   1.2) },
+            { "int_hyperdrive_size3_class4", (0.010, 2.15, 125,   1.5) },
+            { "int_hyperdrive_size3_class5", (0.012, 2.15, 150,   1.8) },
+            { "int_hyperdrive_size4_class1", (0.011, 2.30, 280,   2.0) },
+            { "int_hyperdrive_size4_class2", (0.010, 2.30, 315,   2.0) },
+            { "int_hyperdrive_size4_class3", (0.008, 2.30, 350,   2.0) },
+            { "int_hyperdrive_size4_class4", (0.010, 2.30, 437.5, 2.5) },
+            { "int_hyperdrive_size4_class5", (0.012, 2.30, 525,   3.0) },
+            { "int_hyperdrive_size5_class1", (0.011, 2.45, 560,   3.3) },
+            { "int_hyperdrive_size5_class2", (0.010, 2.45, 630,   3.3) },
+            { "int_hyperdrive_size5_class3", (0.008, 2.45, 700,   3.3) },
+            { "int_hyperdrive_size5_class4", (0.010, 2.45, 875,   4.1) },
+            { "int_hyperdrive_size5_class5", (0.012, 2.45, 1050,  5.0) },
+            { "int_hyperdrive_size6_class1", (0.011, 2.60, 960,   5.3) },
+            { "int_hyperdrive_size6_class2", (0.010, 2.60, 1080,  5.3) },
+            { "int_hyperdrive_size6_class3", (0.008, 2.60, 1200,  5.3) },
+            { "int_hyperdrive_size6_class4", (0.010, 2.60, 1500,  6.6) },
+            { "int_hyperdrive_size6_class5", (0.012, 2.60, 1800,  8.0) },
+            { "int_hyperdrive_size7_class1", (0.011, 2.75, 1440,  8.5) },
+            { "int_hyperdrive_size7_class2", (0.010, 2.75, 1620,  8.5) },
+            { "int_hyperdrive_size7_class3", (0.008, 2.75, 1800,  8.5) },
+            { "int_hyperdrive_size7_class4", (0.010, 2.75, 2250,  10.6) },
+            { "int_hyperdrive_size7_class5", (0.012, 2.75, 2700,  12.8) },
+            { "int_hyperdrive_overcharge_size2_class1", (0.008, 2.00, 60,   0.6) },
+            { "int_hyperdrive_overcharge_size2_class2", (0.012, 2.00, 90,   0.9) },
+            { "int_hyperdrive_overcharge_size2_class3", (0.012, 2.00, 90,   0.9) },
+            { "int_hyperdrive_overcharge_size2_class4", (0.012, 2.00, 90,   0.9) },
+            { "int_hyperdrive_overcharge_size2_class5", (0.013, 2.00, 100,  1.0) },
+            { "int_hyperdrive_overcharge_size3_class1", (0.008, 2.15, 100,  1.2) },
+            { "int_hyperdrive_overcharge_size3_class2", (0.012, 2.15, 150,  1.8) },
+            { "int_hyperdrive_overcharge_size3_class3", (0.012, 2.15, 150,  1.8) },
+            { "int_hyperdrive_overcharge_size3_class4", (0.012, 2.15, 150,  1.8) },
+            { "int_hyperdrive_overcharge_size3_class5", (0.013, 2.15, 167,  1.9) },
+            { "int_hyperdrive_overcharge_size4_class1", (0.008, 2.30, 350,  2.0) },
+            { "int_hyperdrive_overcharge_size4_class2", (0.012, 2.30, 525,  3.0) },
+            { "int_hyperdrive_overcharge_size4_class3", (0.012, 2.30, 525,  3.0) },
+            { "int_hyperdrive_overcharge_size4_class4", (0.012, 2.30, 525,  3.0) },
+            { "int_hyperdrive_overcharge_size4_class5", (0.013, 2.30, 585,  3.2) },
+            { "int_hyperdrive_overcharge_size5_class1", (0.008, 2.45, 700,  3.3) },
+            { "int_hyperdrive_overcharge_size5_class2", (0.012, 2.45, 1050, 5.0) },
+            { "int_hyperdrive_overcharge_size5_class3", (0.012, 2.45, 1050, 5.0) },
+            { "int_hyperdrive_overcharge_size5_class4", (0.012, 2.45, 1050, 5.0) },
+            { "int_hyperdrive_overcharge_size5_class5", (0.013, 2.45, 1175, 5.2) },
+            { "int_hyperdrive_overcharge_size6_class1", (0.008, 2.60, 1200, 5.3) },
+            { "int_hyperdrive_overcharge_size6_class2", (0.012, 2.60, 1800, 8.0) },
+            { "int_hyperdrive_overcharge_size6_class3", (0.012, 2.60, 1800, 8.0) },
+            { "int_hyperdrive_overcharge_size6_class4", (0.012, 2.60, 1800, 8.0) },
+            { "int_hyperdrive_overcharge_size6_class5", (0.013, 2.60, 2000, 8.3) },
+            { "int_hyperdrive_overcharge_size7_class1", (0.008, 2.75, 1800, 8.5) },
+            { "int_hyperdrive_overcharge_size7_class2", (0.012, 2.75, 2700, 12.8) },
+            { "int_hyperdrive_overcharge_size7_class3", (0.012, 2.75, 2700, 12.8) },
+            { "int_hyperdrive_overcharge_size7_class4", (0.012, 2.75, 2700, 12.8) },
+            { "int_hyperdrive_overcharge_size7_class5", (0.013, 2.75, 3000, 13.1) },
+            { "int_hyperdrive_overcharge_size8_class1", (0.008, 2.90, 2800, 13.6) },
+            { "int_hyperdrive_overcharge_size8_class2", (0.012, 2.90, 4200, 20.4) },
+            { "int_hyperdrive_overcharge_size8_class3", (0.012, 2.90, 4200, 20.4) },
+            { "int_hyperdrive_overcharge_size8_class4", (0.012, 2.90, 4200, 20.4) },
+            { "int_hyperdrive_overcharge_size8_class5", (0.013, 2.90, 4670, 20.7) },
+        };
+
+        // Guardian FSD Booster: flat ly bonus added on top of the calculated jump range, by size.
+        private static readonly Dictionary<int, double> GuardianBoosterBonusBySize = new()
+        {
+            { 1, 4.0 }, { 2, 6.0 }, { 3, 7.75 }, { 4, 9.25 }, { 5, 10.5 },
+        };
+
+        // Reads the FrameShiftDrive module (and any Guardian FSD Booster) out of a Loadout
+        // event's Modules array, so CurrentJumpRange can be recalculated from live fuel/mass
+        // instead of relying on the stale MaxJumpRange snapshot from whenever Loadout last fired.
+        private static void ParseFsdStats(JObject obj, DestinationInfo dest)
+        {
+            var modules = obj["Modules"];
+            if (modules == null) return;
+
+            foreach (var m in modules)
+            {
+                var slot = m.Value<string>("Slot") ?? "";
+                var item = m.Value<string>("Item") ?? "";
+
+                if (slot == "FrameShiftDrive")
+                {
+                    if (FsdStockStats.TryGetValue(item, out var stock))
+                    {
+                        dest.FsdFuelMul        = stock.FuelMul;
+                        dest.FsdFuelPower      = stock.FuelPower;
+                        dest.FsdOptimalMass    = stock.OptMass;
+                        dest.FsdMaxFuelPerJump = stock.MaxFuel;
+                    }
+
+                    var modifiers = m["Engineering"]?["Modifiers"];
+                    if (modifiers != null)
+                    {
+                        foreach (var mod in modifiers)
+                        {
+                            var label = mod.Value<string>("Label") ?? "";
+                            var value = mod.Value<double?>("Value");
+                            if (value == null) continue;
+                            if (label == "FSDOptimalMass") dest.FsdOptimalMass = value.Value;
+                            else if (label == "MaxFuelPerJump") dest.FsdMaxFuelPerJump = value.Value;
+                        }
+                    }
+                }
+                else if (item.StartsWith("int_guardianfsdbooster_size", StringComparison.OrdinalIgnoreCase))
+                {
+                    var sizeChar = item.Length > "int_guardianfsdbooster_size".Length
+                        ? item["int_guardianfsdbooster_size".Length]
+                        : '\0';
+                    if (char.IsDigit(sizeChar) && GuardianBoosterBonusBySize.TryGetValue(sizeChar - '0', out var bonus))
+                        dest.GuardianBoosterBonusLy = bonus;
+                }
+            }
+        }
+
+        // Rough current jump range: the real Coriolis-verified FSD formula (optimal mass, fuel
+        // used this jump capped at the drive's per-jump max, current total mass) plus any
+        // Guardian FSD Booster's flat bonus. Cargo tonnage isn't tracked by this app, so mass
+        // is UnladenMass + current main tank fuel only — close enough for a "roughly" estimate,
+        // but will run a bit high for a ship carrying cargo.
+        private static double ComputeJumpRange(DestinationInfo dest, double currentFuelMain)
+        {
+            if (dest.FsdOptimalMass <= 0 || dest.FsdMaxFuelPerJump <= 0 || dest.FsdFuelMul <= 0) return 0;
+            double totalMass = dest.UnladenMass + currentFuelMain;
+            if (totalMass <= 0) return 0;
+            double fuelUsed = Math.Min(currentFuelMain, dest.FsdMaxFuelPerJump);
+            double range = dest.FsdOptimalMass * Math.Pow(fuelUsed / dest.FsdFuelMul, 1.0 / dest.FsdFuelPower) / totalMass;
+            return range + dest.GuardianBoosterBonusLy;
+        }
+
+        // Shared star/planet field extraction for a "Scan" event — used both by the live
+        // dispatcher (ProcessJournalLine) and by BackfillInfoPanelState's historical replay.
+        private static BodyScanDetail ParseBodyScanDetail(JObject obj, string bodyName, bool isStar)
+        {
+            var detail = new BodyScanDetail
+            {
+                BodyName           = bodyName,
+                IsStar             = isStar,
+                IsBelt             = bodyName.Contains("Belt Cluster", StringComparison.OrdinalIgnoreCase),
+                ScanType           = obj.Value<string>("ScanType") ?? "",
+                SurfaceTemperature = obj.Value<double?>("SurfaceTemperature") ?? 0,
+            };
+
+            if (isStar)
+            {
+                detail.StarType          = obj.Value<string>("StarType") ?? "";
+                detail.Subclass          = obj.Value<int?>("Subclass") ?? 0;
+                detail.StellarMass       = obj.Value<double?>("StellarMass") ?? 0;
+                detail.Radius            = obj.Value<double?>("Radius") ?? 0;
+                detail.AbsoluteMagnitude = obj.Value<double?>("AbsoluteMagnitude") ?? 0;
+                detail.AgeMY             = obj.Value<double?>("Age_MY") ?? 0;
+                detail.Luminosity        = obj.Value<string>("Luminosity") ?? "";
+                detail.RotationPeriod    = obj.Value<double?>("RotationPeriod") ?? 0;
+            }
+            else
+            {
+                detail.PlanetClass    = obj.Value<string>("PlanetClass") ?? "";
+                detail.AtmosphereType = obj.Value<string>("AtmosphereType") ?? "None";
+                detail.Volcanism      = obj.Value<string>("Volcanism") ?? "";
+                detail.SurfaceGravity  = obj.Value<double?>("SurfaceGravity") ?? 0;
+                detail.SurfacePressure = obj.Value<double?>("SurfacePressure") ?? 0;
+                detail.TidalLock      = obj.Value<bool?>("TidalLock") ?? false;
+                detail.TerraformState = obj.Value<string>("TerraformState") ?? "";
+                detail.Landable       = obj.Value<bool?>("Landable") ?? false;
+                var comp = obj["Composition"];
+                if (comp != null)
+                {
+                    detail.IceComposition   = comp.Value<double?>("Ice")   ?? 0;
+                    detail.RockComposition  = comp.Value<double?>("Rock")  ?? 0;
+                    detail.MetalComposition = comp.Value<double?>("Metal") ?? 0;
+                }
+            }
+
+            var ringsArr = obj["Rings"];
+            if (ringsArr != null)
+                foreach (var r in ringsArr)
+                    detail.Rings.Add(new RingInfo
+                    {
+                        Name      = r.Value<string>("Name") ?? "",
+                        RingClass = r.Value<string>("RingClass") ?? "",
+                    });
+
+            return detail;
+        }
+
+        // Historical catch-up for the info panel (STAR/PLANET/DESTINATION), mirroring
+        // BackfillSystemPlanets' pattern: JournalLoop deliberately seeks past history in the
+        // current file without replaying it live (see the "never replay historical lines as
+        // live events" comment in JournalLoop), so this data needs its own dedicated replay
+        // — the live "Scan"/"FSDTarget"/"Loadout" cases in ProcessJournalLine only fire for
+        // NEW lines written after the app is already running.
+        // Scoped to the latest journal file only (current session) — resets its accumulated
+        // state on each FSDJump/CarrierJump within the file so a jump partway through a long
+        // session correctly drops the previous system's star/planet/route data.
+        private void BackfillInfoPanelState()
+        {
+            try
+            {
+                string trackSystem = "";
+                BodyScanDetail? starDetail = null;
+                var planetDetails = new Dictionary<string, BodyScanDetail>(StringComparer.OrdinalIgnoreCase);
+                DestinationInfo? dest = null;
+                DateTime fsdTargetedAt = default;
+                DateTime systemArrivedAt = default;
+                bool charging = false;
+                // Bio/geo signal counts, keyed per body — SystemBioPlanets/SystemGeoPlanets
+                // aren't populated yet at this point (BackfillSystemPlanets runs afterwards),
+                // so this replay tracks signal counts itself rather than depending on them.
+                var bioSignals = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                var geoSignals = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                var mappedBodies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                // Scan the last several files in chronological order, not just latestFile —
+                // if the game rotated to a fresh journal file (new session, same system), the
+                // star/planet scans from earlier in this system live in the PREVIOUS file.
+                // Replaying them as one continuous timeline (resetting on each FSDJump, same
+                // as live play) means the final state correctly reflects the current system
+                // even though the data that produced it came from an older file.
+                var files = Directory.GetFiles(_journalDir, "Journal.*.log")
+                    .OrderByDescending(f => f)
+                    .Take(20)
+                    .OrderBy(f => f) // oldest to newest
+                    .ToArray();
+
+                foreach (var file in files)
+                foreach (var line in SafeReadAllLines(file))
+                {
+                    var obj = TryParse(line); if (obj == null) continue;
+                    var ev = obj.Value<string>("event");
+
+                    if (ev == "FSDJump" || ev == "CarrierJump")
+                    {
+                        charging = false;
+                        var sys = obj.Value<string>("StarSystem") ?? "";
+                        if (!string.IsNullOrEmpty(sys) && !string.Equals(sys, trackSystem, StringComparison.OrdinalIgnoreCase))
+                        {
+                            trackSystem = sys;
+                            systemArrivedAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
+                            starDetail = null;
+                            planetDetails.Clear();
+                            // On an auto-plotted route the NEXT hop's FSDTarget can fire mid-
+                            // flight, before this arrival event — if dest already points past
+                            // the system we just reached, it's that next-hop target, not stale.
+                            if (dest == null || string.IsNullOrEmpty(dest.NextSystem) ||
+                                string.Equals(dest.NextSystem, sys, StringComparison.OrdinalIgnoreCase))
+                            {
+                                dest = null;
+                            }
+                            bioSignals.Clear();
+                            geoSignals.Clear();
+                        }
+                        continue;
+                    }
+
+                    if (ev == "FSSBodySignals" || ev == "SAASignalsFound")
+                    {
+                        var sigBody = obj.Value<string>("BodyName") ?? "";
+                        var signals = obj["Signals"];
+                        if (!string.IsNullOrEmpty(sigBody) && signals != null)
+                        {
+                            foreach (var sig in signals)
+                            {
+                                var t = sig.Value<string>("Type") ?? "";
+                                var c = sig.Value<int>("Count");
+                                if (t.Contains("Biological"))       bioSignals[sigBody] = c;
+                                else if (t.Contains("Geological"))  geoSignals[sigBody] = c;
+                            }
+                            // Retroactively apply to a body already scanned earlier in this replay
+                            if (planetDetails.TryGetValue(sigBody, out var already))
+                            {
+                                if (bioSignals.TryGetValue(sigBody, out var b)) already.BioSignalCount = b;
+                                if (geoSignals.TryGetValue(sigBody, out var g)) already.GeoSignalCount = g;
+                            }
+                        }
+                        continue;
+                    }
+
+                    if (ev == "SAAScanComplete")
+                    {
+                        var mb = obj.Value<string>("BodyName") ?? "";
+                        if (!string.IsNullOrEmpty(mb)) mappedBodies.Add(mb);
+                        continue;
+                    }
+
+                    if (ev == "Scan")
+                    {
+                        var bodyName = obj.Value<string>("BodyName") ?? "";
+                        if (string.IsNullOrEmpty(bodyName)) continue;
+                        bool isStar = obj["StarType"] != null;
+                        var detail = ParseBodyScanDetail(obj, bodyName, isStar);
+                        if (!isStar)
+                        {
+                            if (bioSignals.TryGetValue(bodyName, out var b)) detail.BioSignalCount = b;
+                            if (geoSignals.TryGetValue(bodyName, out var g)) detail.GeoSignalCount = g;
+                        }
+                        planetDetails[bodyName] = detail;
+
+                        bool isPrimaryStar = isStar &&
+                            (string.Equals(bodyName, trackSystem, StringComparison.OrdinalIgnoreCase) ||
+                             (obj.Value<double?>("DistanceFromArrivalLS") ?? -1) == 0);
+                        if (isPrimaryStar) starDetail = detail;
+                        continue;
+                    }
+
+                    if (ev == "StartJump" && string.Equals(obj.Value<string>("JumpType") ?? "", "Hyperspace", StringComparison.OrdinalIgnoreCase))
+                    {
+                        charging = true;
+                        fsdTargetedAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
+                        continue;
+                    }
+
+                    if (ev == "FSDTarget")
+                    {
+                        dest ??= new DestinationInfo();
+                        dest.NextSystem            = obj.Value<string>("Name") ?? "";
+                        dest.StarClass             = obj.Value<string>("StarClass") ?? "";
+                        dest.RemainingJumpsInRoute = obj.Value<int?>("RemainingJumpsInRoute") ?? 0;
+                        fsdTargetedAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
+                        continue;
+                    }
+
+                    if (ev == "Loadout")
+                    {
+                        dest ??= new DestinationInfo();
+                        dest.MaxJumpRange = obj.Value<double?>("MaxJumpRange") ?? 0;
+                        dest.UnladenMass  = obj.Value<double?>("UnladenMass") ?? 0;
+                        var fuelCap = obj["FuelCapacity"];
+                        if (fuelCap != null) dest.FuelCapacityMain = fuelCap.Value<double?>("Main") ?? 0;
+                        ParseFsdStats(obj, dest);
+                        continue;
+                    }
+                }
+
+                if (starDetail != null) CurrentStarDetail = starDetail;
+                foreach (var mb in mappedBodies)
+                    if (planetDetails.TryGetValue(mb, out var mappedPlanet)) mappedPlanet.IsMapped = true;
+                foreach (var kv in planetDetails) _bodyScanDetails[kv.Key] = kv.Value;
+                IsChargingJump = charging;
+                SystemArrivedAt = systemArrivedAt;
+                if (dest != null)
+                {
+                    CurrentDestination = dest;
+                    FsdTargetedAt = fsdTargetedAt;
+                    CurrentDestination.CurrentJumpRange = ComputeJumpRange(CurrentDestination, CurrentStatus.FuelMain);
+                }
+                // LoadNavRoute -> EnsureRouteState derives TotalRouteJumps/TotalRouteLy/
+                // FullRouteHops from the persisted route cache, restoring true hop position
+                // across the restart instead of re-anchoring to "hop 1".
+                LoadNavRoute();
+
+                Log.Write($"BackfillInfoPanelState: star={(starDetail != null ? starDetail.BodyName : "none")} " +
+                          $"planets={planetDetails.Count} dest={(dest != null ? dest.NextSystem : "none")}");
+            }
+            catch (Exception ex) { Log.Write($"BackfillInfoPanelState error: {ex.Message}"); }
         }
 
         // Called when user clicks a planet in the Biological Sites / Geological Sites panel.
@@ -1060,11 +1722,75 @@ namespace EliteBioRadar
             }
         }
         // ---------------------------------------------------------------
+        // Searches every journal file (newest first) for the Scan event that recorded
+        // this body's WasFootfalled flag. May be many sessions old — a body only needs
+        // to be DSS-scanned once, so a body visited again later may have no fresh Scan
+        // event this session at all. Returns null if no Scan record exists for the body.
+        private bool? FindWasFootfalledInJournalHistory(string bodyName, out string foundInFile)
+        {
+            foundInFile = "";
+            var allJournalFiles = Directory.GetFiles(_journalDir, "Journal.*.log")
+                .OrderByDescending(f => f)
+                .ToArray();
+
+            foreach (var file in allJournalFiles)
+            {
+                foreach (var line in SafeReadAllLines(file))
+                {
+                    var o = TryParse(line); if (o == null) continue;
+                    if (o.Value<string>("event") != "Scan") continue;
+                    var bn = o.Value<string>("BodyName") ?? "";
+                    if (!string.Equals(bn, bodyName, StringComparison.OrdinalIgnoreCase)) continue;
+                    foundInFile = System.IO.Path.GetFileName(file);
+                    return o.Value<bool?>("WasFootfalled") ?? true;
+                }
+            }
+            return null;
+        }
+
+        // Async reconciliation for bodies that reach CurrentBody via a live path other than
+        // BackfillJournal (which already does this search synchronously). Covers a body that
+        // was DSS-scanned in a past session — no live Scan event will fire this session, so
+        // without this lookup the cache's default "not footfalled" never gets corrected.
+        private void ReconcileFirstFootfallAsync(string bodyName, string source)
+        {
+            if (string.IsNullOrEmpty(bodyName) || WasFootfalled || _pendingFirstFootfallBodies.Contains(bodyName))
+                return;
+
+            Task.Run(() =>
+            {
+                try
+                {
+                    var histWf = FindWasFootfalledInJournalHistory(bodyName, out var histFile);
+                    if (histWf.HasValue && histWf.Value == false)
+                    {
+                        _pendingFirstFootfallBodies.Add(bodyName);
+                        Log.Write($"{source}: historical Scan found for '{bodyName}' in {histFile} WasFootfalled=False → pending FF");
+                        if (string.Equals(bodyName, CurrentBody, StringComparison.OrdinalIgnoreCase))
+                        {
+                            // histWf==false means nobody (including us) has footfalled this body
+                            // yet — it's PENDING, not achieved. This was previously (incorrectly)
+                            // setting WasFootfalled=true here, which is exactly backwards: it
+                            // credited First Footfall the moment a never-visited body was merely
+                            // approached, before ever actually landing on it.
+                            WasFootfalled = false;
+                            BodyChanged?.Invoke(this, new BodyChangedEventArgs
+                                { BodyName = bodyName, BioCount = BiologyCount, GeoCount = GeologyCount });
+                        }
+                    }
+                }
+                catch (Exception ex) { Log.Write($"{source} FF history lookup error: {ex.Message}"); }
+            });
+        }
+
+        // ---------------------------------------------------------------
         // Backfill: reads last 5 journal files, filters ScanOrganic by current body,
         // uses the lat/lon EMBEDDED in the journal line (written by previous sessions via
         // CodexEntry which does include position), not current ship position.
         private void BackfillJournal(string latestFile)
         {
+            BackfillInfoPanelState();
+
             try
             {
                 var files = Directory.GetFiles(_journalDir, "Journal.*.log")
@@ -1173,28 +1899,13 @@ namespace EliteBioRadar
 
                 Log.Write($"Backfill: scanning {files.Length} files for '{CurrentBody}'");
 
-                // Search ALL journal files for the Scan event for this body to get WasFootfalled
-                // It may be in a much older journal file from a previous session
-                var allJournalFiles = Directory.GetFiles(_journalDir, "Journal.*.log")
-                    .OrderByDescending(f => f)
-                    .ToArray();
-
-                foreach (var file in allJournalFiles)
+                // Search ALL journal files for the Scan event for this body to get WasFootfalled.
+                // It may be in a much older journal file from a previous session.
+                var histWf = FindWasFootfalledInJournalHistory(CurrentBody, out var histFile);
+                if (histWf.HasValue)
                 {
-                    bool found = false;
-                    foreach (var line in SafeReadAllLines(file))
-                    {
-                        var o = TryParse(line); if (o == null) continue;
-                        if (o.Value<string>("event") != "Scan") continue;
-                        var bodyName = o.Value<string>("BodyName") ?? "";
-                        if (!string.Equals(bodyName, CurrentBody, StringComparison.OrdinalIgnoreCase)) continue;
-                        var wf = o.Value<bool?>("WasFootfalled") ?? true;
-                        WasFootfalled = !wf;
-                        Log.Write($"Backfill: found Scan for '{CurrentBody}' in {System.IO.Path.GetFileName(file)} WasFootfalled={wf} → FirstFootfall={WasFootfalled}");
-                        found = true;
-                        break;
-                    }
-                    if (found) break;
+                    WasFootfalled = !histWf.Value;
+                    Log.Write($"Backfill: found Scan for '{CurrentBody}' in {histFile} WasFootfalled={histWf.Value} → FirstFootfall={WasFootfalled}");
                 }
 
                 _backfillLastIncompleteGenus = "";
@@ -1240,12 +1951,11 @@ namespace EliteBioRadar
 
                                 // Confirm first footfall if pending — covers the case where
                                 // Disembark was replayed as backfill (e.g. app started after landing)
-                                if (_pendingFirstFootfall &&
-                                    string.Equals(activeBody, CurrentBody, StringComparison.OrdinalIgnoreCase))
+                                if (!string.IsNullOrEmpty(activeBody) &&
+                                    string.Equals(activeBody, CurrentBody, StringComparison.OrdinalIgnoreCase) &&
+                                    _pendingFirstFootfallBodies.Remove(activeBody))
                                 {
-                                    WasFootfalled         = true;
-                                    _pendingFirstFootfall = false;
-                        _pendingFirstFootfallBody = "";
+                                    WasFootfalled = true;
                                     Log.Write($"Backfill Disembark: First Footfall confirmed for '{CurrentBody}'");
                                 }
                                 break;
@@ -1391,8 +2101,6 @@ namespace EliteBioRadar
                         GeologyCount              = 0;
                         CurrentBody               = "";
                         WasFootfalled             = false;
-                        _pendingFirstFootfall     = false;
-                        _pendingFirstFootfallBody = "";
                         SetDisplayedBody("");
 
                         // Check if there's a SAASignalsFound AFTER the LeaveBody
@@ -1544,11 +2252,81 @@ namespace EliteBioRadar
                          string.Equals(bodyName, CurrentBody, StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(bodyName, TargetedBody, StringComparison.OrdinalIgnoreCase)))
                     {
-                        _pendingFirstFootfall     = !wasFootfalled;
-                        _pendingFirstFootfallBody = bodyName;
-                        if (backfill && _pendingFirstFootfall)
+                        bool pendingFF = !wasFootfalled;
+                        if (pendingFF) _pendingFirstFootfallBodies.Add(bodyName);
+                        else           _pendingFirstFootfallBodies.Remove(bodyName);
+                        if (backfill && pendingFF)
                             WasFootfalled = true;
-                        Log.Write($"Scan: {bodyName} WasFootfalled={wasFootfalled} → PendingFF={_pendingFirstFootfall}");
+                        Log.Write($"Scan: {bodyName} WasFootfalled={wasFootfalled} → PendingFF={pendingFF}");
+                    }
+
+                    // Info panel (STAR/PLANET) physical detail — populated on backfill too, so a
+                    // body scanned before the app was launched already has its detail available
+                    // (only the live-update event is suppressed during backfill, further below).
+                    // Keyed per body so a planet targeted AFTER being scanned still shows correctly.
+                    if (!string.IsNullOrEmpty(bodyName))
+                    {
+                        bool isStar = obj["StarType"] != null;
+                        var detail = ParseBodyScanDetail(obj, bodyName, isStar);
+                        // Mapping re-fires an identical Scan event for the body (confirmed against
+                        // real journal data) — carry IsMapped forward so it isn't lost.
+                        if (_bodyScanDetails.TryGetValue(bodyName, out var priorDetail) && priorDetail.IsMapped)
+                            detail.IsMapped = true;
+
+                        if (!isStar)
+                        {
+                            // Bio/geo counts — reuse the same SystemBioPlanets/SystemGeoPlanets
+                            // lookup pattern already used above for TargetedBody in ReadStatus().
+                            lock (_planetLock)
+                            {
+                                var bp = SystemBioPlanets.FirstOrDefault(p =>
+                                    string.Equals(p.FullBodyName, bodyName, StringComparison.OrdinalIgnoreCase));
+                                if (bp != null) detail.BioSignalCount = bp.BioCount;
+                                var gp = SystemGeoPlanets.FirstOrDefault(p =>
+                                    string.Equals(p.FullBodyName, bodyName, StringComparison.OrdinalIgnoreCase));
+                                if (gp != null) detail.GeoSignalCount = gp.GeoCount;
+                            }
+                        }
+
+                        _bodyScanDetails[bodyName] = detail;
+
+                        // Primary star of the system: named the same as the system, or at
+                        // zero distance from arrival. Avoids a secondary star in a binary/
+                        // trinary system overwriting the primary's detail.
+                        bool isPrimaryStar = isStar &&
+                            (string.Equals(bodyName, StarSystem, StringComparison.OrdinalIgnoreCase) ||
+                             (obj.Value<double?>("DistanceFromArrivalLS") ?? -1) == 0);
+
+                        if (isPrimaryStar)
+                        {
+                            CurrentStarDetail = detail;
+                            if (!backfill) StarScanUpdated?.Invoke(this, EventArgs.Empty);
+                        }
+                        else if (!isStar && !backfill && string.Equals(bodyName, TargetedBody, StringComparison.OrdinalIgnoreCase))
+                        {
+                            PlanetTargetUpdated?.Invoke(this, EventArgs.Empty);
+                        }
+                    }
+                    break;
+                }
+
+                // DSS mapping complete — a later, distinct milestone than a Detailed scan (see
+                // MainWindow's SCAN: tag). Carries no new physical data itself (confirmed against
+                // real journal data: the Scan event re-fired right after is byte-for-byte
+                // identical to the pre-mapping one) — it just flips this body's status.
+                case "SAAScanComplete":
+                {
+                    var mappedBody = obj.Value<string>("BodyName") ?? "";
+                    if (!string.IsNullOrEmpty(mappedBody) &&
+                        _bodyScanDetails.TryGetValue(mappedBody, out var mappedDetail) && !mappedDetail.IsMapped)
+                    {
+                        // Replace with a clone (not a mutate-in-place) — the UI debounces
+                        // re-renders by reference equality against the last-rendered detail.
+                        var updated = mappedDetail.Clone();
+                        updated.IsMapped = true;
+                        _bodyScanDetails[mappedBody] = updated;
+                        if (!backfill && string.Equals(mappedBody, TargetedBody, StringComparison.OrdinalIgnoreCase))
+                            PlanetTargetUpdated?.Invoke(this, EventArgs.Empty);
                     }
                     break;
                 }
@@ -1585,12 +2363,10 @@ namespace EliteBioRadar
                             });
                         }
 
-                        // Player stepped off ship — if pending FF, now confirm it
-                        if (_pendingFirstFootfall)
+                        // Player stepped off ship — if pending FF for this specific body, confirm it
+                        if (!string.IsNullOrEmpty(disembarkBody) && _pendingFirstFootfallBodies.Remove(disembarkBody))
                         {
                             WasFootfalled             = true;
-                            _pendingFirstFootfall     = false;
-                            _pendingFirstFootfallBody = "";
                             Log.Write($"Disembark: First Footfall confirmed for '{disembarkBody}'");
                             BodyChanged?.Invoke(this, new BodyChangedEventArgs
                                 { BodyName = disembarkBody, BioCount = BiologyCount, GeoCount = GeologyCount });
@@ -2198,6 +2974,26 @@ namespace EliteBioRadar
                 case "Touchdown":
                 {
                     var body = obj.Value<string>("Body") ?? obj.Value<string>("BodyName") ?? "";
+
+                    // A real Touchdown always tells us exactly where the ship now sits — whether
+                    // the player flew it down (PlayerControlled:true) or it auto-flew to a recall
+                    // (PlayerControlled:false). Update the anchor unconditionally, independent of
+                    // the CurrentBody-change gate below, since a recall while already OnFoot/InSRV
+                    // on the same body never trips that gate but does move the ship.
+                    if (evt == "Touchdown")
+                    {
+                        var tdLat = obj.Value<double?>("Latitude");
+                        var tdLon = obj.Value<double?>("Longitude");
+                        var anchorBody = !string.IsNullOrEmpty(body) ? body : CurrentBody;
+                        if (tdLat.HasValue && tdLon.HasValue && !string.IsNullOrEmpty(anchorBody))
+                        {
+                            Log.Write($"Touchdown: ShipAnchor updated for '{anchorBody}' at {tdLat},{tdLon} (backfill={backfill})");
+                            ShipAnchor = new AnchorPoint { Latitude = tdLat.Value, Longitude = tdLon.Value };
+                            ScanCache.SaveShipAnchor(anchorBody, tdLat.Value, tdLon.Value);
+                            ShipDepartureCrossed = false;
+                        }
+                    }
+
                     if (!string.IsNullOrEmpty(body) && body != CurrentBody && !backfill)
                     {
                         // A real Touchdown/ApproachBody tells us exactly where we are —
@@ -2211,6 +3007,9 @@ namespace EliteBioRadar
                         var loaded = ScanCache.LoadForBody(CurrentBody);
                         lock (ScannedOrganisms) { ScannedOrganisms.Clear(); ScannedOrganisms.AddRange(loaded.Organisms); }
                         lock (KnownGenera)      { KnownGenera.Clear();      KnownGenera.AddRange(loaded.KnownGenera); }
+                        ShipAnchor = loaded.ShipAnchor;
+                        SrvAnchor  = loaded.SrvAnchor;
+                        ShipDepartureCrossed = false;
                         // Rebuild CompletedGenera from completed organisms so sidebar Total Payout
                         // shows correctly after returning to a body with previous completed scans
                         lock (CompletedGenera)
@@ -2241,6 +3040,8 @@ namespace EliteBioRadar
                         WasFootfalled = loaded.WasFootfalled;
                         SetDisplayedBody(CurrentBody);
                         BodyChanged?.Invoke(this, new BodyChangedEventArgs { BodyName = body, BioCount = BiologyCount, GeoCount = GeologyCount });
+
+                        ReconcileFirstFootfallAsync(CurrentBody, "Touchdown/ApproachBody");
                     }
                     break;
                 }
@@ -2316,8 +3117,6 @@ namespace EliteBioRadar
                         GeologyCount          = 0;
                         CurrentBody           = "";
                         WasFootfalled         = false;
-                        _pendingFirstFootfall = false;
-                        _pendingFirstFootfallBody = "";
                         _stashedOrganisms     = null;
                         _stashedGenera        = null;
                         _stashedForBody       = "";
@@ -2331,6 +3130,7 @@ namespace EliteBioRadar
                 {
                     if (!backfill)
                     {
+                        IsChargingJump = false;
                         // FSDJump confirms the current system — clear the location-fix flag
                         if (_awaitingLocationFix)
                         {
@@ -2341,8 +3141,31 @@ namespace EliteBioRadar
                         if (!string.Equals(newSystem, StarSystem, StringComparison.OrdinalIgnoreCase))
                         {
                             StarSystem = newSystem;
+                            SystemArrivedAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
                             lock (_planetLock) { SystemBioPlanets.Clear(); SystemGeoPlanets.Clear(); }
                             PlanetListChanged?.Invoke(this, EventArgs.Empty);
+
+                            // New system — clear the previous system's star/planet info-panel
+                            // state so it never bleeds into the new one.
+                            CurrentStarDetail  = null;
+                            _bodyScanDetails.Clear();
+                            // The destination route is a different story: on an auto-plotted
+                            // multi-jump route, the game can (and often does) fire the NEXT
+                            // hop's FSDTarget mid-flight, BEFORE this FSDJump confirms arrival
+                            // at the system it was already charging for. If CurrentDestination
+                            // already points somewhere other than the system we just arrived
+                            // in, it's that next-hop target — keep it. Only clear it when it's
+                            // actually stale (pointing at the system we just reached, or empty).
+                            if (CurrentDestination == null ||
+                                string.IsNullOrEmpty(CurrentDestination.NextSystem) ||
+                                string.Equals(CurrentDestination.NextSystem, newSystem, StringComparison.OrdinalIgnoreCase))
+                            {
+                                CurrentDestination = null;
+                            }
+                            lock (_beltVariants) _beltVariants.Clear();
+                            StarScanUpdated?.Invoke(this, EventArgs.Empty);
+                            PlanetTargetUpdated?.Invoke(this, EventArgs.Empty);
+                            DestinationUpdated?.Invoke(this, EventArgs.Empty);
                         }
                         // Clear old body cache on jump
                         if (!string.IsNullOrEmpty(CurrentBody))
@@ -2358,14 +3181,69 @@ namespace EliteBioRadar
                         GeologyCount          = 0;
                         CurrentBody           = "";
                         WasFootfalled         = false;
-                        _pendingFirstFootfall = false;
-                        _pendingFirstFootfallBody = "";
+                        _pendingFirstFootfallBodies.Clear();
                         _stashedOrganisms     = null;
                         _stashedGenera        = null;
                         _stashedForBody       = "";
                         SetDisplayedBody("");
                         BodyChanged?.Invoke(this, new BodyChangedEventArgs { BodyName = "" });
                     }
+                    break;
+                }
+
+                // Fires the moment a jump point is targeted in the system/galaxy map —
+                // this is the DESTINATION-mode trigger, distinct from TargetedBody (which
+                // is the in-system nav-panel planet target, read from Status.json above).
+                // FSD spooling up for an actual hyperspace jump is a strong signal the player's
+                // attention is moving to the next system, even if the in-system nav target
+                // (e.g. the primary star) was touched more recently — bump FsdTargetedAt so the
+                // STAR-vs-DESTINATION recency check in MainWindow.ComputeMode favors DESTINATION.
+                // JumpType is "Supercruise" for a plain (or SCO-overcharged) supercruise entry —
+                // that should NOT switch the panel, so only "Hyperspace" counts here.
+                case "StartJump":
+                {
+                    var jumpType = obj.Value<string>("JumpType") ?? "";
+                    if (string.Equals(jumpType, "Hyperspace", StringComparison.OrdinalIgnoreCase))
+                    {
+                        IsChargingJump = true;
+                        FsdTargetedAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
+                        if (!backfill) DestinationUpdated?.Invoke(this, EventArgs.Empty);
+                    }
+                    break;
+                }
+
+                case "FSDTarget":
+                {
+                    // Populated on backfill too (so a target set before app launch already
+                    // shows), using the journal line's own timestamp rather than "now" so
+                    // the PLANET-vs-DESTINATION "most recently targeted" comparison in
+                    // MainWindow.ComputeMode reflects true in-game chronology, not replay time.
+                    CurrentDestination ??= new DestinationInfo();
+                    CurrentDestination.NextSystem            = obj.Value<string>("Name") ?? "";
+                    CurrentDestination.StarClass             = obj.Value<string>("StarClass") ?? "";
+                    CurrentDestination.RemainingJumpsInRoute = obj.Value<int?>("RemainingJumpsInRoute") ?? 0;
+                    FsdTargetedAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
+                    // TotalRouteJumps/TotalRouteLy are (re)derived from the persisted route
+                    // cache inside LoadNavRoute -> EnsureRouteState, not tracked here.
+                    LoadNavRoute();
+                    if (!backfill) DestinationUpdated?.Invoke(this, EventArgs.Empty);
+                    break;
+                }
+
+                case "Loadout":
+                {
+                    // Populated on backfill too — the ship's jump range/fuel capacity from
+                    // before app launch should already be available, not just after a fresh
+                    // Loadout event (which only re-fires on ship/module changes).
+                    CurrentDestination ??= new DestinationInfo();
+                    CurrentDestination.MaxJumpRange = obj.Value<double?>("MaxJumpRange") ?? 0;
+                    CurrentDestination.UnladenMass  = obj.Value<double?>("UnladenMass") ?? 0;
+                    var fuelCap = obj["FuelCapacity"];
+                    if (fuelCap != null)
+                        CurrentDestination.FuelCapacityMain = fuelCap.Value<double?>("Main") ?? 0;
+                    ParseFsdStats(obj, CurrentDestination);
+                    CurrentDestination.CurrentJumpRange = ComputeJumpRange(CurrentDestination, CurrentStatus.FuelMain);
+                    if (!backfill) DestinationUpdated?.Invoke(this, EventArgs.Empty);
                     break;
                 }
             }

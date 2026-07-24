@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Planet Icon Set — Preview</title>
+<style>
+  body{background:#0a0f0f;color:#88bbbb;font-family:Consolas,monospace;padding:30px;}
+  h1{color:#00e5ff;font-size:16px;letter-spacing:.05em;font-weight:normal;margin-bottom:4px;}
+  h2{color:#ffaa00;font-size:13px;letter-spacing:.05em;font-weight:normal;margin:34px 0 12px;}
+  p.sub{color:#446666;font-size:11.5px;margin:0 0 16px;max-width:700px;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:16px;max-width:1200px;}
+  .cell{background:#0d1a1a;border:1px solid #1a4444;padding:8px;text-align:center;}
+  .cell img{width:100%;height:100px;object-fit:contain;}
+  .cell div{margin-top:6px;font-size:10.5px;color:#00e5ff;letter-spacing:.03em;}
+  .stack{position:relative;width:100%;height:100px;}
+  .stack img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;}
+</style>
+</head>
+<body>
+  <h1>ELITE BIO RADAR — PLANET ICON SET</h1>
+  <p class="sub">Base class icons composite with independent modifier overlays (rings / atmosphere / terraformable) at the same 300×300 canvas, so any base + any modifier combination lines up correctly.</p>
+
+  <h2>LAYERING EXAMPLES (base + modifiers stacked live)</h2>
+  <div class="grid">
+    <div class="cell">
+      <div class="stack">
+        <img src="ring_MetalRich_back.svg"><img src="MRB.svg"><img src="ring_MetalRich_front.svg">
+      </div>
+      <div>MRB + RING (METAL RICH)</div>
+    </div>
+    <div class="cell">
+      <div class="stack">
+        <img src="ring_Icy_back.svg"><img src="GG3.svg"><img src="ring_Icy_front.svg">
+      </div>
+      <div>GG3 + RING (ICY)</div>
+    </div>
+    <div class="cell">
+      <div class="stack">
+        <img src="HMC.svg"><img src="overlay_terraformable.svg">
+      </div>
+      <div>HMC + TERRAFORMABLE</div>
+    </div>
+    <div class="cell">
+      <div class="stack">
+        <img src="WTR.svg"><img src="overlay_atmosphere.svg">
+      </div>
+      <div>WTR + ATMOSPHERE</div>
+    </div>
+    <div class="cell">
+      <div class="stack">
+        <img src="ring_Rocky_back.svg"><img src="RIB.svg"><img src="ring_Rocky_front.svg"><img src="overlay_terraformable.svg">
+      </div>
+      <div>RIB + RING + TERRAFORM</div>
+    </div>
+    <div class="cell">
+      <div class="stack">
+        <img src="HMC.svg"><img src="overlay_badge_bio.svg"><img src="overlay_terraformable.svg">
+      </div>
+      <div>HMC + BIO + TERRAFORM</div>
+    </div>
+    <div class="cell">
+      <div class="stack">
+        <img src="ICY.svg"><img src="overlay_badge_geo.svg">
+      </div>
+      <div>ICY + GEO</div>
+    </div>
+    <div class="cell">
+      <div class="stack">
+        <img src="HMC.svg"><img src="overlay_badge_combo.svg"><img src="overlay_terraformable.svg">
+      </div>
+      <div>HMC + BIO/GEO COMBO + TERRAFORM</div>
+    </div>
+  </div>
+
+  <h2>BASE CLASSES — TERRESTRIAL</h2>
+  <div class="grid">
+    <div class="cell"><img src="ICY.svg"><div>ICY — Icy body</div></div>
+    <div class="cell"><img src="HMC.svg"><div>HMC — High metal content</div></div>
+    <div class="cell"><img src="RBD.svg"><div>RBD — Rocky body</div></div>
+    <div class="cell"><img src="RIB.svg"><div>RIB — Rocky ice body</div></div>
+    <div class="cell"><img src="MRB.svg"><div>MRB — Metal rich</div></div>
+    <div class="cell"><img src="WTR.svg"><div>WTR — Water world</div></div>
+    <div class="cell"><img src="AMW.svg"><div>AMW — Ammonia world</div></div>
+    <div class="cell"><img src="ELW.svg"><div>ELW — Earthlike body</div></div>
+  </div>
+
+  <h2>BASE CLASSES — GIANTS</h2>
+  <div class="grid">
+    <div class="cell"><img src="GG1.svg"><div>GG1 — Sudarsky I</div></div>
+    <div class="cell"><img src="GG2.svg"><div>GG2 — Sudarsky II</div></div>
+    <div class="cell"><img src="GG3.svg"><div>GG3 — Sudarsky III</div></div>
+    <div class="cell"><img src="GG4.svg"><div>GG4 — Sudarsky IV</div></div>
+    <div class="cell"><img src="GG5.svg"><div>GG5 — Sudarsky V</div></div>
+    <div class="cell"><img src="GGH.svg"><div>GGH — Helium rich</div></div>
+    <div class="cell"><img src="GGA.svg"><div>GGA — Ammonia-based life</div></div>
+    <div class="cell"><img src="GGW.svg"><div>GGW — Water-based life</div></div>
+    <div class="cell"><img src="WTG.svg"><div>WTG — Water giant</div></div>
+  </div>
+
+  <h2>MODIFIER OVERLAYS</h2>
+  <p class="sub">Each ring class is a <b style="color:#00e5ff">back</b> + <b style="color:#00e5ff">front</b> pair — back renders behind the planet base image, front renders on top of it, so the ring correctly disappears behind the sphere on the far side. Shown here composited with a neutral grey test sphere.</p>
+  <div class="grid">
+    <div class="cell">
+      <div class="stack"><img src="ring_Icy_back.svg"><img src="RBD.svg"><img src="ring_Icy_front.svg"></div>
+      <div>ring: Icy</div>
+    </div>
+    <div class="cell">
+      <div class="stack"><img src="ring_MetalRich_back.svg"><img src="RBD.svg"><img src="ring_MetalRich_front.svg"></div>
+      <div>ring: Metal Rich</div>
+    </div>
+    <div class="cell">
+      <div class="stack"><img src="ring_Metalic_back.svg"><img src="RBD.svg"><img src="ring_Metalic_front.svg"></div>
+      <div>ring: Metalic</div>
+    </div>
+    <div class="cell">
+      <div class="stack"><img src="ring_Rocky_back.svg"><img src="RBD.svg"><img src="ring_Rocky_front.svg"></div>
+      <div>ring: Rocky</div>
+    </div>
+    <div class="cell"><img src="overlay_terraformable.svg"><div>terraformable badge</div></div>
+    <div class="cell">
+      <div class="stack"><img src="RBD.svg"><img src="overlay_atmosphere.svg"></div>
+      <div>atmosphere halo</div>
+    </div>
+    <div class="cell"><img src="overlay_badge_bio.svg"><div>biological badge</div></div>
+    <div class="cell"><img src="overlay_badge_geo.svg"><div>geological badge</div></div>
+    <div class="cell"><img src="overlay_badge_combo.svg"><div>bio + geo combo badge</div></div>
+  </div>
+  <p class="sub" style="margin-top:8px;">Biological (cyan) and geological (orange) badges sit bottom-left, opposite the terraformable badge at bottom-right. When a body has both signal types, use the combo badge instead of stacking both individually.</p>
+  <p class="sub" style="margin-top:16px;">No separate asset for <b style="color:#00e5ff">Landable</b> — shown as a plain text callout ("LANDABLE") in the info panel rather than a sphere icon, since <code>Landable</code> is an independent boolean in the data, not tied to atmosphere thickness.</p>
+</body>
+</html>

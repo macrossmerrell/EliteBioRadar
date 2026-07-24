@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <defs>
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1a3a66" stop-opacity=".4"/>
+      <stop offset="55%" stop-color="#122c52" stop-opacity=".2"/>
+      <stop offset="100%" stop-color="#0a1730" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="core" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="40%" stop-color="#eaf4ff"/>
+      <stop offset="100%" stop-color="#8fc4ff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="jetUp" x1="150" y1="150" x2="150" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#f0f6ff"/>
+      <stop offset="30%" stop-color="#a9caff"/>
+      <stop offset="75%" stop-color="#4f79e0"/>
+      <stop offset="100%" stop-color="#33509f" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="jetDown" x1="150" y1="150" x2="150" y2="300" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#f0f6ff"/>
+      <stop offset="30%" stop-color="#a9caff"/>
+      <stop offset="75%" stop-color="#4f79e0"/>
+      <stop offset="100%" stop-color="#33509f" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="flareH" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#dcebff" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#f5faff" stop-opacity=".9"/>
+      <stop offset="100%" stop-color="#dcebff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="flareV" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#dcebff" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#f5faff" stop-opacity=".9"/>
+      <stop offset="100%" stop-color="#dcebff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="ribbonBlur" x="-50%" y="-20%" width="200%" height="140%">
+      <feGaussianBlur stdDeviation="2.2"/>
+    </filter>
+    <filter id="glow" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <circle cx="150" cy="150" r="120" fill="url(#halo)"/>
+
+  <g transform="rotate(35 150 150)" fill="none" stroke-linecap="round" filter="url(#ribbonBlur)">
+    <path d="M150,150 C172,115 122,85 150,50 C165,30 135,15 150,2" stroke="url(#jetUp)" stroke-width="5"/>
+    <path d="M150,150 C128,115 178,85 150,50 C135,30 165,15 150,2" stroke="url(#jetUp)" stroke-width="3.5" opacity=".85"/>
+    <path d="M150,150 C172,185 122,215 150,250 C165,270 135,285 150,298" stroke="url(#jetDown)" stroke-width="5"/>
+    <path d="M150,150 C128,185 178,215 150,250 C135,270 165,285 150,298" stroke="url(#jetDown)" stroke-width="3.5" opacity=".85"/>
+  </g>
+
+  <ellipse cx="150" cy="150" rx="95" ry="2" fill="url(#flareH)"/>
+  <ellipse cx="150" cy="150" rx="2" ry="46" fill="url(#flareV)"/>
+
+  <circle cx="150" cy="150" r="10" fill="url(#core)" filter="url(#glow)"/>
+</svg>

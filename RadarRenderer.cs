@@ -19,6 +19,9 @@ namespace EliteBioRadar
         private static readonly Color ColScan2     = Color.FromRgb(0x00, 0xff, 0x44);
         private static readonly Color ColScanFull  = Color.FromRgb(0xff, 0xaa, 0x00);
         private static readonly Color ColGeo       = Color.FromRgb(0xff, 0xaa, 0x00); // matches GEO SURVEY sidebar text
+        private static readonly Color ColDeparture = Color.FromRgb(0xff, 0x33, 0x33);
+        private static readonly Color ColDepartureDone = Color.FromArgb(0x28, 0x55, 0x88, 0xaa); // matches completed-scan grey
+        private static readonly Color ColSrvAnchor = Color.FromRgb(0xcc, 0x66, 0xff);
 
         // Pulse animation — one full sweep inner→outer every 1.25 seconds
         private readonly Stopwatch _pulse = Stopwatch.StartNew();
@@ -31,7 +34,9 @@ namespace EliteBioRadar
         // ---------------------------------------------------------------
         public void Draw(EliteStatus status, List<ScannedOrganism> organisms,
                          double scaleMetres, string? activeGenus = null, bool radarAnimation = true,
-                         List<ScannedGeoSite>? geoSites = null)
+                         List<ScannedGeoSite>? geoSites = null,
+                         AnchorPoint? shipAnchor = null, AnchorPoint? srvAnchor = null,
+                         bool shipDepartureCrossed = false, double shipDepartureThresholdMetres = 1975)
         {
             _canvas.Children.Clear();
 
@@ -129,6 +134,22 @@ namespace EliteBioRadar
                     foreach (var site in geoSites)
                         DrawGeoSite(site, status, cx, cy, r, pixelsPerMetre);
                 }
+            }
+
+            // Ship Departure Range ring + vehicle anchor dots — only relevant while away
+            // from the ship (SRV / on foot / fighter)
+            bool awayFromShip = status.InSRV || status.OnFoot || status.InFighter;
+            if (awayFromShip && status.HasPosition)
+            {
+                if (shipAnchor != null)
+                {
+                    DrawShipDepartureRing(shipAnchor, status, cx, cy, r, pixelsPerMetre,
+                        shipDepartureCrossed, shipDepartureThresholdMetres);
+                    if (!shipDepartureCrossed)
+                        DrawAnchorDot(shipAnchor, status, cx, cy, r, pixelsPerMetre, ColShip, "SHIP");
+                }
+                if (srvAnchor != null)
+                    DrawAnchorDot(srvAnchor, status, cx, cy, r, pixelsPerMetre, ColSrvAnchor, "SRV");
             }
 
             // Heading arrow — 1/10 of radius (1/3 of previous 0.3)
@@ -265,6 +286,93 @@ namespace EliteBioRadar
             string distStr = dist < 1000 ? $"{dist:F0}m" : $"{dist / 1000:F2}km";
             DrawText(sx + 10, sy - 14, label, 9, ColGeo);
             DrawText(sx + 10, sy - 2, distStr, 8, Color.FromArgb(0xaa, ColGeo.R, ColGeo.G, ColGeo.B));
+        }
+
+        // ---------------------------------------------------------------
+        // Small filled dot pointing back at a remembered surface point (ship or SRV),
+        // clamped to the radar edge when off-screen — same pattern as organisms/geo sites.
+        private void DrawAnchorDot(AnchorPoint anchor, EliteStatus status,
+                                   double cx, double cy, double r, double pixelsPerMetre,
+                                   Color col, string label)
+        {
+            double dist    = EliteWatcherService.DistanceMeters(
+                status.Latitude, status.Longitude, anchor.Latitude, anchor.Longitude, status.PlanetRadius);
+            double bearing = EliteWatcherService.BearingDeg(
+                status.Latitude, status.Longitude, anchor.Latitude, anchor.Longitude);
+
+            double angleRad = (bearing - 90) * Math.PI / 180.0;
+            double px = dist * pixelsPerMetre * Math.Cos(angleRad);
+            double py = dist * pixelsPerMetre * Math.Sin(angleRad);
+
+            bool offscreen = (px * px + py * py) > r * r;
+            if (offscreen)
+            {
+                double norm = Math.Sqrt(px * px + py * py);
+                px = px / norm * (r - 8);
+                py = py / norm * (r - 8);
+            }
+
+            double sx = cx + px;
+            double sy = cy + py;
+
+            DrawDisc(sx, sy, offscreen ? 4 : 6, Color.FromArgb(0xdd, col.R, col.G, col.B), Colors.Transparent);
+
+            if (!offscreen)
+            {
+                string distStr = dist < 1000 ? $"{dist:F0}m" : $"{dist / 1000:F2}km";
+                DrawText(sx + 8, sy - 16, label,   9, col, bold: true);
+                DrawText(sx + 8, sy - 5,  distStr, 8, Color.FromArgb(0xcc, col.R, col.G, col.B));
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // Ship Departure Range boundary — a fixed-radius ring around the ship's
+        // touchdown point. Hidden until the player is within the reveal margin of
+        // the threshold; turns grey and stays once actually crossed.
+        private void DrawShipDepartureRing(AnchorPoint shipAnchor, EliteStatus status,
+                                           double cx, double cy, double r, double pixelsPerMetre,
+                                           bool crossed, double thresholdMetres)
+        {
+            double dist = EliteWatcherService.DistanceMeters(
+                status.Latitude, status.Longitude, shipAnchor.Latitude, shipAnchor.Longitude, status.PlanetRadius);
+
+            if (!crossed && dist < thresholdMetres - EliteWatcherService.ShipDepartureRevealMarginMetres)
+                return;
+
+            double bearing  = EliteWatcherService.BearingDeg(
+                status.Latitude, status.Longitude, shipAnchor.Latitude, shipAnchor.Longitude);
+            double angleRad = (bearing - 90) * Math.PI / 180.0;
+            double ax = cx + dist * pixelsPerMetre * Math.Cos(angleRad);
+            double ay = cy + dist * pixelsPerMetre * Math.Sin(angleRad);
+
+            double ringRadius = thresholdMetres * pixelsPerMetre;
+            var ringCol = crossed ? ColDepartureDone : ColDeparture;
+
+            double ringLeft = ax - ringRadius;
+            double ringTop  = ay - ringRadius;
+            var ring = new Ellipse
+            {
+                Width  = ringRadius * 2,
+                Height = ringRadius * 2,
+                Stroke = new SolidColorBrush(Color.FromArgb(crossed ? ringCol.A : (byte)0xaa, ringCol.R, ringCol.G, ringCol.B)),
+                StrokeThickness = 1.5,
+                StrokeDashArray = new DoubleCollection { 6, 4 },
+                Fill   = null,
+                // Clip to the round radar disc (in the ellipse's own local coordinate space,
+                // which is offset from canvas space by (ringLeft, ringTop)) — otherwise the
+                // ring would show inside the square canvas corners outside the round disc.
+                Clip   = new EllipseGeometry(new Point(cx - ringLeft, cy - ringTop), r, r),
+            };
+            Canvas.SetLeft(ring, ringLeft);
+            Canvas.SetTop(ring,  ringTop);
+            _canvas.Children.Add(ring);
+
+            // Label at the point on the ring nearest the player (along the anchor→player bearing)
+            double labelX = ax - ringRadius * Math.Cos(angleRad);
+            double labelY = ay - ringRadius * Math.Sin(angleRad);
+            if (labelX >= -50 && labelX <= cx * 2 + 50 && labelY >= -20 && labelY <= cy * 2 + 20)
+                DrawText(labelX - 55, labelY - 8, "SHIP DEPARTURE RANGE", 10,
+                    Color.FromArgb(0xcc, ringCol.R, ringCol.G, ringCol.B), bold: true);
         }
 
         // ---------------------------------------------------------------

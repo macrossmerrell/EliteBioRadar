@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <defs>
+    <radialGradient id="g" cx="38%" cy="34%" r="70%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="22%" stop-color="#eef0ff"/>
+      <stop offset="55%" stop-color="#c7c9ff"/>
+      <stop offset="82%" stop-color="#7d7fe0"/>
+      <stop offset="100%" stop-color="#2a2166"/>
+    </radialGradient>
+    <linearGradient id="beam" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c7c9ff" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#c7c9ff" stop-opacity=".55"/>
+    </linearGradient>
+    <linearGradient id="beam2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c7c9ff" stop-opacity=".55"/>
+      <stop offset="100%" stop-color="#c7c9ff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glow" x="-140%" y="-140%" width="380%" height="380%">
+      <feGaussianBlur stdDeviation="26" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <path d="M150 150 L138 8 L162 8 Z" fill="url(#beam)"/>
+  <path d="M150 150 L138 292 L162 292 Z" fill="url(#beam2)"/>
+  <circle cx="150" cy="150" r="34" fill="url(#g)" filter="url(#glow)"/>
+</svg>

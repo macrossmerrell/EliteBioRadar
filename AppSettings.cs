@@ -9,10 +9,11 @@ namespace EliteBioRadar
         public bool   ShowSidebar          { get; set; } = false;
         public bool   AutoScale            { get; set; } = false;
         public double DefaultScale         { get; set; } = 1000;
-        public bool   PlanetOverlay        { get; set; } = false;
+        // Name kept for settings-file compatibility; now just means "show BIO Sites sidebar".
         public bool   KeepPlanetPanelOpen  { get; set; } = false;
         public bool   RadarAnimation       { get; set; } = true;
         public bool   ShowGeologicalSites  { get; set; } = false;
+        public double ShipDepartureRangeMetres { get; set; } = 1975;
 
         // Window position and size — null means "use OS default"
         public double? WindowLeft   { get; set; } = null;
