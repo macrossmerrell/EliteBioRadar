@@ -15,7 +15,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyCopyrightAttribute("Copyright © 2026 macrossmerrell")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("3.2.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("3.2.0+e6a68f403e648b42e44c283b7357baebfe9a29af")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("3.2.0+c63732e6675c92357fd4979794651b30b8db433c")]
 [assembly: System.Reflection.AssemblyProductAttribute("Elite Bio Radar")]
 [assembly: System.Reflection.AssemblyTitleAttribute("EliteBioRadar")]
 [assembly: System.Reflection.AssemblyVersionAttribute("3.2.0.0")]
