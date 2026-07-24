@@ -5,11 +5,17 @@ obj/
 # Published app (users download this separately, not committed to repo)
 bin/Release/net8.0-windows/BioRadar-App/
 
+# Local packaging output (dotnet publish -o dist/...)
+dist/
+
 # User data files (generated at runtime, personal to each user)
 EliteBioRadar.cache.json
 EliteBioRadar.settings.json
 EliteBioRadar.earnings.json
+EliteBioRadar.regions.json
+EliteBioRadar.route.json
 EliteBioRadar.log
+EliteBioRadar_*.log
 
 # Visual Studio / Rider
 .vs/
