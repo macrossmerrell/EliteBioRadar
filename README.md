@@ -59,6 +59,18 @@ lifetime totals, first-discovery breakdowns, and a date-range filter to narrow i
 
 ---
 
+### What's New in Version 3.3.0
+
+**Destination Tab Accuracy & Polish**
+
+Small but important fixes to the route tracking introduced in 3.2.0.
+
+- Fixed route progress freezing partway through a long auto-plotted route — the hop counter and progress bar are now tied to your actual current system instead of an assumption about how often `NavRoute.json` gets rewritten, so "HOP x/y" and the progress bar keep advancing correctly all the way to the destination.
+- Fixed the hop list occasionally dimming the wrong row as "already passed" when it disagreed with the jump counter.
+- The hop list now scrolls so the hop you just came from stays visible just above the next-jump row (plus whatever upcoming hops fit below), instead of parking the next hop right at the edge of the list.
+
+---
+
 ### What's New in Version 3.2.0
 
 **Star / Planet / Destination Info Panel**
