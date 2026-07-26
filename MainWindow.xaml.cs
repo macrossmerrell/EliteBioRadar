@@ -800,11 +800,19 @@ namespace EliteBioRadar
             // Scroll to the next-jump row when the tab is freshly shown, or when progress has
             // actually advanced to a new hop — not on every routine refresh tick, which would
             // otherwise fight a manual scroll while sitting on the tab looking at older hops.
+            // BringIntoView() only scrolls the minimum distance needed, which tends to leave the
+            // next-hop row sitting right at the bottom edge of the viewport — technically
+            // "visible" but with no context around it. Instead, position it a row's-height below
+            // the top of the viewport so the just-passed hop stays visible above it, and a couple
+            // more upcoming hops show below (however many fit in the remaining viewport height).
             bool advanced = !string.Equals(dest.NextSystem, _lastScrolledNextSystem, StringComparison.OrdinalIgnoreCase);
             if ((force || advanced) && currentRow != null)
             {
                 _lastScrolledNextSystem = dest.NextSystem;
-                currentRow.BringIntoView();
+                destHopStack.UpdateLayout();
+                double rowTop = currentRow.TranslatePoint(new Point(0, 0), destHopStack).Y;
+                double contextRowHeight = currentRow.ActualHeight + currentRow.Margin.Bottom;
+                destHopScroll.ScrollToVerticalOffset(Math.Max(0, rowTop - contextRowHeight));
             }
         }
 

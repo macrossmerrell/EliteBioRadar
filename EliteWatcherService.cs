@@ -824,14 +824,16 @@ namespace EliteBioRadar
             dest.FullRouteHops = _routeCache.KnownHops;
             dest.TotalRouteJumps = _routeCache.KnownHops.Count;
             dest.TotalRouteLy    = _routeCache.TotalRouteLy;
-            // RemainingJumpsInRoute otherwise only gets set from the journal's FSDTarget event,
-            // which can lag several jumps behind NavRoute.json on an auto-plotted route (the
-            // route advances on every jump; a fresh FSDTarget doesn't always re-fire for each
-            // one). NavRoute.json's own hop count is read far more often (every Status poll tick)
-            // and is what FullRouteHops/hopIndex/the dimmed "already passed" rows are built from,
-            // so keep this in lockstep with that instead of the possibly-stale journal value —
-            // otherwise HOP x/y and the passed-row highlighting visibly disagree with the list.
-            dest.RemainingJumpsInRoute = currentHops.Count - 1;
+            // Verified against real journal/NavRoute.json data: NavRoute.json is NOT rewritten on
+            // every jump on a long auto-plotted route — it can sit unchanged for several real jumps
+            // while StarSystem (from the journal) keeps advancing. So currentHops.Count is not a
+            // reliable "jumps remaining" signal on its own. Instead, locate where we actually are
+            // by matching StarSystem against this hop list — this stays correct whether the file
+            // happens to shrink per jump or stays static, and it's what keeps HOP x/y and the
+            // dimmed "already passed" rows (built from the same FullRouteHops list) in lockstep.
+            int currentIdx = currentHops.FindIndex(h => string.Equals(h.StarSystem, StarSystem, StringComparison.OrdinalIgnoreCase));
+            if (currentIdx >= 0)
+                dest.RemainingJumpsInRoute = currentHops.Count - 1 - currentIdx;
         }
 
         private static RouteHop CloneHop(RouteHop h) => new RouteHop
