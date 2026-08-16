@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <defs>
+    <radialGradient id="hg6" cx="36%" cy="32%" r="72%">
+      <stop offset="0%" stop-color="#8a827c"/>
+      <stop offset="30%" stop-color="#564e48"/>
+      <stop offset="62%" stop-color="#2e2822"/>
+      <stop offset="85%" stop-color="#16120e"/>
+      <stop offset="100%" stop-color="#080605"/>
+    </radialGradient>
+    <filter id="hglow6" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="hclip6"><circle cx="150" cy="150" r="100"/></clipPath>
+  </defs>
+  <circle cx="150" cy="150" r="100" fill="url(#hg6)" filter="url(#hglow6)"/>
+  <g clip-path="url(#hclip6)">
+    <g opacity=".45">
+      <ellipse cx="118" cy="132" rx="18" ry="10" fill="#1c1712" transform="rotate(-14 118 132)"/>
+      <ellipse cx="180" cy="164" rx="16" ry="9" fill="#211a14" transform="rotate(18 180 164)"/>
+    </g>
+    <!-- volcanic glow patches -->
+    <ellipse cx="128" cy="150" rx="8" ry="5" fill="#e8703a" opacity=".65" transform="rotate(-10 128 150)"/>
+    <ellipse cx="170" cy="186" rx="6" ry="4" fill="#e8703a" opacity=".55" transform="rotate(15 170 186)"/>
+    <ellipse cx="188" cy="128" rx="5" ry="3" fill="#f2985a" opacity=".5" transform="rotate(5 188 128)"/>
+  </g>
+</svg>

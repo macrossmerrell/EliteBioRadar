@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <defs>
+    <radialGradient id="eg3" cx="36%" cy="32%" r="72%">
+      <stop offset="0%" stop-color="#bfe0ff"/>
+      <stop offset="30%" stop-color="#4f8fd9"/>
+      <stop offset="62%" stop-color="#1f5aa3"/>
+      <stop offset="85%" stop-color="#0e305c"/>
+      <stop offset="100%" stop-color="#05162c"/>
+    </radialGradient>
+    <filter id="eglow3" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="eclip3"><circle cx="150" cy="150" r="100"/></clipPath>
+  </defs>
+  <circle cx="150" cy="150" r="100" fill="url(#eg3)" filter="url(#eglow3)"/>
+  <g clip-path="url(#eclip3)">
+    <!-- arid tan continents -->
+    <g opacity=".85" fill="#c9a45c">
+      <path d="M108,110 C124,100 148,102 158,116 C166,128 156,140 138,142 C118,144 96,130 108,110 Z"/>
+      <path d="M170,150 C190,144 210,154 208,172 C206,188 184,196 168,186 C154,178 154,158 170,150 Z"/>
+    </g>
+    <g opacity=".55" fill="#9c7c3e">
+      <path d="M118,122 C128,118 140,120 142,128 C144,136 132,140 122,136 C114,132 112,126 118,122 Z"/>
+    </g>
+    <g fill="#ffffff" opacity=".4">
+      <path d="M70,140 C92,130 116,134 130,146 C112,154 84,154 70,140 Z"/>
+      <path d="M180,116 C202,108 222,116 224,130 C206,136 186,130 180,116 Z"/>
+    </g>
+    <ellipse cx="140" cy="60" rx="52" ry="26" fill="#f4fbff" opacity=".7"/>
+    <ellipse cx="150" cy="236" rx="36" ry="18" fill="#f4fbff" opacity=".55"/>
+  </g>
+</svg>

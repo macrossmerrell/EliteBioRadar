@@ -69,6 +69,17 @@ Small but important fixes to the route tracking introduced in 3.2.0.
 - Fixed the hop list occasionally dimming the wrong row as "already passed" when it disagreed with the jump counter.
 - The hop list now scrolls so the hop you just came from stays visible just above the next-jump row (plus whatever upcoming hops fit below), instead of parking the next hop right at the edge of the list.
 
+**STAR & PLANET Tab Reliability**
+
+Frontier only fires the automatic arrival scan for a body the *first* time you ever discover it — revisiting an already-scanned system produces no fresh scan event at all, which the app previously didn't account for.
+
+- Fixed the STAR tab getting stuck on "AWAITING STAR SCAN…" after jumping into a system you'd already scanned earlier in the session — it now falls back to what it already knows about that star instead of waiting forever for an event that isn't coming.
+- Fixed the same gap for planets: re-targeting an already-scanned planet in a revisited system now shows its detail and switches to the PLANET tab immediately, instead of showing nothing and staying put.
+
+**More Planet Art**
+
+- Every planet class now has multiple art variants, randomly assigned per body and kept stable for as long as you're looking at it — the same treatment the asteroid belts already had.
+
 ---
 
 ### What's New in Version 3.2.0

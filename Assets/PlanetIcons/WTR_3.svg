@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <defs>
+    <radialGradient id="wg3" cx="36%" cy="32%" r="72%">
+      <stop offset="0%" stop-color="#d4ffe8"/>
+      <stop offset="28%" stop-color="#4fd0a0"/>
+      <stop offset="60%" stop-color="#1a9070"/>
+      <stop offset="85%" stop-color="#0c4c40"/>
+      <stop offset="100%" stop-color="#03211c"/>
+    </radialGradient>
+    <filter id="wglow3" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="wclip3"><circle cx="150" cy="150" r="100"/></clipPath>
+  </defs>
+  <circle cx="150" cy="150" r="100" fill="url(#wg3)" filter="url(#wglow3)"/>
+  <g clip-path="url(#wclip3)">
+    <path d="M84,124 C104,116 122,120 136,128" stroke="#ffffff" stroke-width="4" fill="none" stroke-linecap="round" opacity=".3"/>
+    <path d="M160,144 C182,138 202,144 216,154" stroke="#ffffff" stroke-width="4" fill="none" stroke-linecap="round" opacity=".28"/>
+    <path d="M96,190 C116,182 136,186 150,196" stroke="#ffffff" stroke-width="4" fill="none" stroke-linecap="round" opacity=".26"/>
+  </g>
+</svg>

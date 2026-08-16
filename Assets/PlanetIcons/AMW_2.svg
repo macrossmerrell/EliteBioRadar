@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <defs>
+    <radialGradient id="ag2" cx="36%" cy="32%" r="72%">
+      <stop offset="0%" stop-color="#c8a888"/>
+      <stop offset="30%" stop-color="#8c623c"/>
+      <stop offset="60%" stop-color="#5a3c20"/>
+      <stop offset="85%" stop-color="#2e1d0e"/>
+      <stop offset="100%" stop-color="#140b05"/>
+    </radialGradient>
+    <filter id="aglow2" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="aclip2"><circle cx="150" cy="150" r="100"/></clipPath>
+  </defs>
+  <circle cx="150" cy="150" r="100" fill="url(#ag2)" filter="url(#aglow2)"/>
+  <g clip-path="url(#aclip2)">
+    <!-- opaque haze-continent patches -->
+    <path d="M110,116 C128,106 152,110 160,126 C166,140 154,152 134,152 C114,152 96,136 110,116 Z" fill="#3e2a16" opacity=".55"/>
+    <path d="M172,158 C192,150 214,160 210,178 C206,196 182,202 168,190 C156,180 156,164 172,158 Z" fill="#3e2a16" opacity=".5"/>
+    <g fill="none" stroke="#c68858" stroke-width="4" opacity=".32" stroke-linecap="round">
+      <path d="M70,150 C96,142 120,150 136,162"/>
+      <path d="M160,110 C182,104 202,112 214,124"/>
+    </g>
+  </g>
+</svg>

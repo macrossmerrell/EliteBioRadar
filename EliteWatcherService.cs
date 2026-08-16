@@ -30,19 +30,19 @@ namespace EliteBioRadar
         // targeting it from the system map), and that should keep showing STAR mode/detail,
         // not be mistaken for a planet target.
         public BodyScanDetail?  TargetedPlanetDetail =>
-            !string.IsNullOrEmpty(TargetedBody) && _bodyScanDetails.TryGetValue(TargetedBody, out var d) && !d.IsStar ? d : null;
+            GetBodyDetail(TargetedBody) is { IsStar: false } d ? d : null;
         // Same lookup, but for the opposite case: the targeted body IS a star. In a multi-star
         // system this can be a secondary/tertiary star (CurrentStarDetail only ever tracks the
         // primary), so without this a targeted B/C star matched neither TargetedPlanetDetail
         // (excluded, it's a star) nor CurrentStarDetail (wrong body name) and fell through to
         // whatever destination happened to exist instead of showing STAR mode.
         public BodyScanDetail?  TargetedStarDetail =>
-            !string.IsNullOrEmpty(TargetedBody) && _bodyScanDetails.TryGetValue(TargetedBody, out var d) && d.IsStar ? d : null;
+            GetBodyDetail(TargetedBody) is { IsStar: true } d ? d : null;
         // The body actually under the player's feet (Status.json BodyName) rather than whatever
         // is nav-panel targeted — while landed there's usually no in-system target at all, so
         // without this the PLANET tab had nothing to show for the one body most worth showing.
         public BodyScanDetail?  CurrentBodyDetail =>
-            !string.IsNullOrEmpty(CurrentBody) && _bodyScanDetails.TryGetValue(CurrentBody, out var cd) && !cd.IsStar ? cd : null;
+            GetBodyDetail(CurrentBody) is { IsStar: false } cd ? cd : null;
         public DestinationInfo? CurrentDestination    { get; private set; }
         public DateTime         PlanetTargetedAt      { get; private set; }
         public DateTime         FsdTargetedAt         { get; private set; }
@@ -69,6 +69,36 @@ namespace EliteBioRadar
                 {
                     variant = _beltVariantRandom.Next(1, 6);
                     _beltVariants[bodyName] = variant;
+                }
+                return variant;
+            }
+        }
+
+        // How many numbered art variants (<code>_1.png .. <code>_N.png) exist per planet icon
+        // code, on top of the original base <code>.png. Classes not listed here have no variant
+        // pool and always render their base image.
+        private static readonly Dictionary<string, int> PlanetVariantCounts = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ICY"] = 6, ["HMC"] = 6, ["RBD"] = 6, ["RIB"] = 6, ["MRB"] = 6,
+            ["WTR"] = 3, ["AMW"] = 3, ["ELW"] = 3,
+            ["GG1"] = 2, ["GG2"] = 2, ["GG3"] = 2, ["GG4"] = 2, ["GG5"] = 2,
+            ["GGA"] = 2, ["GGH"] = 2, ["GGW"] = 2, ["WTG"] = 2,
+        };
+
+        // Assigns (and remembers) a random art variant for this body's planet class, so the
+        // same body keeps the same look for as long as it's targeted this session — same idea
+        // as GetBeltVariant. Returns 0 (meaning "use the base <code>.png") for classes with no
+        // variant pool, or when picked at random alongside the numbered variants.
+        public int GetPlanetVariant(string bodyName, string planetCode)
+        {
+            if (string.IsNullOrEmpty(planetCode) || !PlanetVariantCounts.TryGetValue(planetCode, out var count))
+                return 0;
+            lock (_planetVariants)
+            {
+                if (!_planetVariants.TryGetValue(bodyName, out var variant))
+                {
+                    variant = _beltVariantRandom.Next(0, count + 1); // 0 = base image, 1..count = numbered variants
+                    _planetVariants[bodyName] = variant;
                 }
                 return variant;
             }
@@ -253,12 +283,36 @@ namespace EliteBioRadar
         // not persisted (see plan: this data is intentionally not written to ScanCache).
         private readonly Dictionary<string, BodyScanDetail> _bodyScanDetails =
             new Dictionary<string, BodyScanDetail>(StringComparer.OrdinalIgnoreCase);
+        // Scan detail for every body (star OR planet) seen this session, keyed by full body
+        // name — unlike _bodyScanDetails this is NEVER cleared on a system change. Frontier only
+        // fires the automatic arrival "Scan" event (and re-fires per-planet Scan/FSS events) the
+        // FIRST time a body is discovered; revisiting an already-discovered system produces none
+        // of that, so without this fallback CurrentStarDetail/TargetedPlanetDetail (which key off
+        // _bodyScanDetails, cleared on every FSDJump) would never get repopulated on a revisit —
+        // the STAR tab would sit on "AWAITING STAR SCAN" and targeting a known planet would show
+        // nothing and never switch to PLANET mode.
+        private readonly Dictionary<string, BodyScanDetail> _sessionBodyDetails =
+            new Dictionary<string, BodyScanDetail>(StringComparer.OrdinalIgnoreCase);
+
+        // Looks up a body's scan detail, preferring the current system's live _bodyScanDetails
+        // and falling back to the never-cleared _sessionBodyDetails for a revisited body that
+        // didn't get a fresh Scan event this time.
+        private BodyScanDetail? GetBodyDetail(string bodyName)
+        {
+            if (string.IsNullOrEmpty(bodyName)) return null;
+            if (_bodyScanDetails.TryGetValue(bodyName, out var d)) return d;
+            return _sessionBodyDetails.TryGetValue(bodyName, out var sd) ? sd : null;
+        }
         // Random asteroid-belt art variant (1-5), assigned once per body the first time it's
         // looked up and kept for as long as that belt stays targeted — cleared alongside
         // _bodyScanDetails on a real system change so a new belt gets a fresh roll.
         private readonly Dictionary<string, int> _beltVariants =
             new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         private static readonly Random _beltVariantRandom = new();
+        // Random planet art variant, assigned once per body the first time its icon is looked
+        // up and kept for as long as that body stays targeted — same lifecycle as _beltVariants.
+        private readonly Dictionary<string, int> _planetVariants =
+            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         // Genus names known from detailed planet scan (SAASignalsFound Genuses array)
         public List<string>          KnownGenera     { get; } = new();
         public List<ScannedOrganism> ScannedOrganisms { get; } = new();
@@ -824,16 +878,29 @@ namespace EliteBioRadar
             dest.FullRouteHops = _routeCache.KnownHops;
             dest.TotalRouteJumps = _routeCache.KnownHops.Count;
             dest.TotalRouteLy    = _routeCache.TotalRouteLy;
-            // Verified against real journal/NavRoute.json data: NavRoute.json is NOT rewritten on
-            // every jump on a long auto-plotted route — it can sit unchanged for several real jumps
-            // while StarSystem (from the journal) keeps advancing. So currentHops.Count is not a
-            // reliable "jumps remaining" signal on its own. Instead, locate where we actually are
-            // by matching StarSystem against this hop list — this stays correct whether the file
-            // happens to shrink per jump or stays static, and it's what keeps HOP x/y and the
-            // dimmed "already passed" rows (built from the same FullRouteHops list) in lockstep.
-            int currentIdx = currentHops.FindIndex(h => string.Equals(h.StarSystem, StarSystem, StringComparison.OrdinalIgnoreCase));
-            if (currentIdx >= 0)
-                dest.RemainingJumpsInRoute = currentHops.Count - 1 - currentIdx;
+            // Anchor off dest.NextSystem (set directly from the FSDTarget journal event, so it's
+            // never stale) against the stable, never-shrinking FullRouteHops cache — this is the
+            // exact same list the hop-list UI draws and highlights "next" from, so RemainingJumpsInRoute
+            // (which drives both HOP x/y and the "already passed" dimming) stays in lockstep with it
+            // by construction. Previously this matched StarSystem against currentHops (the raw
+            // NavRoute.json "remaining" list) instead, which is NOT rewritten on every jump on a long
+            // auto-plotted route — it can sit unchanged for several real jumps while StarSystem keeps
+            // advancing — and falling back to the FSDTarget event's own RemainingJumpsInRoute field in
+            // that case produced a counter one hop behind the list (e.g. "HOP 16/28" while the list
+            // showed system 17 as current and 18 as next).
+            int nextIdx = !string.IsNullOrEmpty(dest.NextSystem)
+                ? dest.FullRouteHops.FindIndex(h => string.Equals(h.StarSystem, dest.NextSystem, StringComparison.OrdinalIgnoreCase))
+                : -1;
+            if (nextIdx > 0)
+            {
+                dest.RemainingJumpsInRoute = dest.TotalRouteJumps - nextIdx;
+            }
+            else
+            {
+                int currentIdx = currentHops.FindIndex(h => string.Equals(h.StarSystem, StarSystem, StringComparison.OrdinalIgnoreCase));
+                if (currentIdx >= 0)
+                    dest.RemainingJumpsInRoute = currentHops.Count - 1 - currentIdx;
+            }
         }
 
         private static RouteHop CloneHop(RouteHop h) => new RouteHop
@@ -1056,6 +1123,13 @@ namespace EliteBioRadar
                 string trackSystem = "";
                 BodyScanDetail? starDetail = null;
                 var planetDetails = new Dictionary<string, BodyScanDetail>(StringComparer.OrdinalIgnoreCase);
+                // Every Scan (star OR planet) seen anywhere in this replay window, keyed by body
+                // name — unlike starDetail/planetDetails (reset on every FSDJump) this persists
+                // across the whole replay, so a revisited body (no fresh Scan event fires for an
+                // already-discovered one) can still restore its detail instead of leaving it null.
+                // Merged into the live _sessionBodyDetails cache at the end so GetBodyDetail's
+                // fallback works immediately at startup too, not just for bodies re-scanned live.
+                var allBodyDetailsSeen = new Dictionary<string, BodyScanDetail>(StringComparer.OrdinalIgnoreCase);
                 DestinationInfo? dest = null;
                 DateTime fsdTargetedAt = default;
                 DateTime systemArrivedAt = default;
@@ -1093,7 +1167,13 @@ namespace EliteBioRadar
                         {
                             trackSystem = sys;
                             systemArrivedAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
-                            starDetail = null;
+                            // Try to restore the arrival star's detail from anywhere earlier in
+                            // this replay before falling back to null — see allBodyDetailsSeen.
+                            var arrivalBody = obj.Value<string>("Body") ?? "";
+                            starDetail = string.Equals(obj.Value<string>("BodyType") ?? "", "Star", StringComparison.OrdinalIgnoreCase) &&
+                                !string.IsNullOrEmpty(arrivalBody) &&
+                                allBodyDetailsSeen.TryGetValue(arrivalBody, out var cachedArrivalStar)
+                                    ? cachedArrivalStar : null;
                             planetDetails.Clear();
                             // On an auto-plotted route the NEXT hop's FSDTarget can fire mid-
                             // flight, before this arrival event — if dest already points past
@@ -1151,6 +1231,7 @@ namespace EliteBioRadar
                             if (geoSignals.TryGetValue(bodyName, out var g)) detail.GeoSignalCount = g;
                         }
                         planetDetails[bodyName] = detail;
+                        allBodyDetailsSeen[bodyName] = detail;
 
                         bool isPrimaryStar = isStar &&
                             (string.Equals(bodyName, trackSystem, StringComparison.OrdinalIgnoreCase) ||
@@ -1192,6 +1273,10 @@ namespace EliteBioRadar
                 foreach (var mb in mappedBodies)
                     if (planetDetails.TryGetValue(mb, out var mappedPlanet)) mappedPlanet.IsMapped = true;
                 foreach (var kv in planetDetails) _bodyScanDetails[kv.Key] = kv.Value;
+                // Seed the persistent session cache from everything scanned across the whole
+                // replay window (not just the current system) so a revisited, not-freshly-scanned
+                // body's detail is available via GetBodyDetail immediately at startup.
+                foreach (var kv in allBodyDetailsSeen) _sessionBodyDetails[kv.Key] = kv.Value;
                 IsChargingJump = charging;
                 SystemArrivedAt = systemArrivedAt;
                 if (dest != null)
@@ -2299,6 +2384,7 @@ namespace EliteBioRadar
                         }
 
                         _bodyScanDetails[bodyName] = detail;
+                        _sessionBodyDetails[bodyName] = detail;
 
                         // Primary star of the system: named the same as the system, or at
                         // zero distance from arrival. Avoids a secondary star in a binary/
@@ -3015,8 +3101,28 @@ namespace EliteBioRadar
                         }
                         CurrentBody = body;
                         var loaded = ScanCache.LoadForBody(CurrentBody);
-                        lock (ScannedOrganisms) { ScannedOrganisms.Clear(); ScannedOrganisms.AddRange(loaded.Organisms); }
-                        lock (KnownGenera)      { KnownGenera.Clear();      KnownGenera.AddRange(loaded.KnownGenera); }
+
+                        // Returning to the exact body we last left — restore the stashed
+                        // in-memory state (which still has any incomplete scan progress)
+                        // instead of the cache, which never carries incomplete scans.
+                        bool restoredFromStash = string.Equals(body, _stashedForBody, StringComparison.OrdinalIgnoreCase);
+                        List<ScannedOrganism> organismsForDisplay;
+                        if (restoredFromStash)
+                        {
+                            organismsForDisplay = _stashedOrganisms!;
+                            lock (ScannedOrganisms) { ScannedOrganisms.Clear(); ScannedOrganisms.AddRange(organismsForDisplay); }
+                            lock (KnownGenera)      { KnownGenera.Clear();      KnownGenera.AddRange(_stashedGenera!); }
+                            Log.Write($"Touchdown/ApproachBody: restored {organismsForDisplay.Count} stashed organisms for '{body}'");
+                            _stashedOrganisms = null;
+                            _stashedGenera    = null;
+                            _stashedForBody   = "";
+                        }
+                        else
+                        {
+                            organismsForDisplay = loaded.Organisms;
+                            lock (ScannedOrganisms) { ScannedOrganisms.Clear(); ScannedOrganisms.AddRange(organismsForDisplay); }
+                            lock (KnownGenera)      { KnownGenera.Clear();      KnownGenera.AddRange(loaded.KnownGenera); }
+                        }
                         ShipAnchor = loaded.ShipAnchor;
                         SrvAnchor  = loaded.SrvAnchor;
                         ShipDepartureCrossed = false;
@@ -3025,7 +3131,7 @@ namespace EliteBioRadar
                         lock (CompletedGenera)
                         {
                             CompletedGenera.Clear();
-                            foreach (var o in loaded.Organisms.Where(o => o.IsComplete)
+                            foreach (var o in organismsForDisplay.Where(o => o.IsComplete)
                                                  .GroupBy(o => o.Genus, StringComparer.OrdinalIgnoreCase)
                                                  .Select(g => g.First()))
                                 CompletedGenera.Add(o);
@@ -3117,8 +3223,19 @@ namespace EliteBioRadar
                 {
                     if (!backfill)
                     {
-                        // Left the planet — clear display but keep cache in case we return
-                        Log.Write($"LeaveBody: clearing display for '{CurrentBody}', cache preserved");
+                        // Left the planet — clear display but keep cache in case we return.
+                        // ScanCache never persists incomplete (not-yet-Analysed) organism scans,
+                        // so stash the live in-memory state first (same pattern as PreviewPlanet's
+                        // stash/restore) — otherwise an in-progress scan on the genus being worked
+                        // when the player launched is silently lost the moment they touch back down
+                        // on the same body, since the cache-only reload below has no record of it.
+                        Log.Write($"LeaveBody: clearing display for '{CurrentBody}', cache preserved, stashing in-progress scans");
+                        if (!string.IsNullOrEmpty(CurrentBody))
+                        {
+                            lock (ScannedOrganisms) _stashedOrganisms = ScannedOrganisms.ToList();
+                            lock (KnownGenera)      _stashedGenera    = KnownGenera.ToList();
+                            _stashedForBody = CurrentBody;
+                        }
                         lock (ScannedOrganisms) ScannedOrganisms.Clear();
                         lock (KnownGenera)      KnownGenera.Clear();
                         lock (CompletedGenera)  CompletedGenera.Clear();
@@ -3127,9 +3244,6 @@ namespace EliteBioRadar
                         GeologyCount          = 0;
                         CurrentBody           = "";
                         WasFootfalled         = false;
-                        _stashedOrganisms     = null;
-                        _stashedGenera        = null;
-                        _stashedForBody       = "";
                         SetDisplayedBody("");
                         BodyChanged?.Invoke(this, new BodyChangedEventArgs { BodyName = "" });
                     }
@@ -3159,6 +3273,21 @@ namespace EliteBioRadar
                             // state so it never bleeds into the new one.
                             CurrentStarDetail  = null;
                             _bodyScanDetails.Clear();
+                            // FSDJump itself names the arrival star ("Body"/"BodyType":"Star") —
+                            // if we've already scanned it earlier this session (e.g. revisiting a
+                            // system), Frontier won't re-fire the automatic arrival Scan event, so
+                            // this is the only way CurrentStarDetail gets repopulated at all.
+                            var arrivalBody = obj.Value<string>("Body") ?? "";
+                            if (string.Equals(obj.Value<string>("BodyType") ?? "", "Star", StringComparison.OrdinalIgnoreCase) &&
+                                !string.IsNullOrEmpty(arrivalBody) &&
+                                _sessionBodyDetails.TryGetValue(arrivalBody, out var cachedStarDetail))
+                            {
+                                CurrentStarDetail = cachedStarDetail;
+                                Log.Write($"FSDJump: restored cached star detail for revisited '{arrivalBody}'");
+                            }
+                            // Targeting an already-known planet in a revisited system also needs
+                            // its detail immediately (TargetedPlanetDetail/TargetedStarDetail now
+                            // fall back to _sessionBodyDetails via GetBodyDetail — see field doc).
                             // The destination route is a different story: on an auto-plotted
                             // multi-jump route, the game can (and often does) fire the NEXT
                             // hop's FSDTarget mid-flight, BEFORE this FSDJump confirms arrival
@@ -3173,6 +3302,7 @@ namespace EliteBioRadar
                                 CurrentDestination = null;
                             }
                             lock (_beltVariants) _beltVariants.Clear();
+                            lock (_planetVariants) _planetVariants.Clear();
                             StarScanUpdated?.Invoke(this, EventArgs.Empty);
                             PlanetTargetUpdated?.Invoke(this, EventArgs.Empty);
                             DestinationUpdated?.Invoke(this, EventArgs.Empty);

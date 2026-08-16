@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <defs>
+    <radialGradient id="ig6" cx="36%" cy="32%" r="72%">
+      <stop offset="0%" stop-color="#e2ece8"/>
+      <stop offset="30%" stop-color="#b0c4bc"/>
+      <stop offset="62%" stop-color="#748c82"/>
+      <stop offset="85%" stop-color="#3e4c46"/>
+      <stop offset="100%" stop-color="#1a2220"/>
+    </radialGradient>
+    <filter id="iglow6" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="iclip6"><circle cx="150" cy="150" r="100"/></clipPath>
+  </defs>
+  <circle cx="150" cy="150" r="100" fill="url(#ig6)" filter="url(#iglow6)"/>
+  <g clip-path="url(#iclip6)">
+    <g opacity=".35">
+      <ellipse cx="126" cy="140" rx="14" ry="8" fill="#4c5e56" transform="rotate(-12 126 140)"/>
+      <ellipse cx="176" cy="164" rx="12" ry="7" fill="#7c948a" transform="rotate(16 176 164)"/>
+    </g>
+    <ellipse cx="140" cy="62" rx="54" ry="28" fill="#eef6f2" opacity=".65"/>
+    <ellipse cx="150" cy="236" rx="38" ry="20" fill="#eef6f2" opacity=".5"/>
+  </g>
+</svg>

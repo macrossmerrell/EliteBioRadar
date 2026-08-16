@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <defs>
+    <radialGradient id="wg2" cx="36%" cy="32%" r="72%">
+      <stop offset="0%" stop-color="#cffaf0"/>
+      <stop offset="28%" stop-color="#5cc8b8"/>
+      <stop offset="60%" stop-color="#1f8c86"/>
+      <stop offset="85%" stop-color="#0e4a4c"/>
+      <stop offset="100%" stop-color="#042124"/>
+    </radialGradient>
+    <filter id="wglow2" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="wclip2"><circle cx="150" cy="150" r="100"/></clipPath>
+  </defs>
+  <circle cx="150" cy="150" r="100" fill="url(#wg2)" filter="url(#wglow2)"/>
+  <g clip-path="url(#wclip2)">
+    <!-- cyclone / storm swirl -->
+    <path d="M170,150 C170,132 156,120 140,122 C122,124 112,140 120,154 C126,166 142,170 152,162 C160,156 160,146 152,142"
+          stroke="#ffffff" stroke-width="6" fill="none" stroke-linecap="round" opacity=".55"/>
+    <path d="M70,110 C96,102 120,110 132,124" stroke="#ffffff" stroke-width="5" fill="none" stroke-linecap="round" opacity=".3"/>
+    <path d="M176,196 C200,202 220,192 228,178" stroke="#ffffff" stroke-width="5" fill="none" stroke-linecap="round" opacity=".3"/>
+  </g>
+</svg>

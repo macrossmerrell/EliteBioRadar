@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <defs>
+    <radialGradient id="shade" cx="36%" cy="32%" r="75%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity=".35"/>
+      <stop offset="55%" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity=".55"/>
+    </radialGradient>
+    <clipPath id="clip"><circle cx="150" cy="150" r="105"/></clipPath>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="crackBlur" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="2.2"/>
+    </filter>
+  </defs>
+  <g filter="url(#glow)">
+    <g clip-path="url(#clip)">
+      <rect x="45" y="45" width="210" height="210" fill="#2a0a2c"/>
+      <rect x="45" y="80" width="210" height="14" fill="#441244" opacity=".8"/>
+      <rect x="45" y="140" width="210" height="18" fill="#38103a" opacity=".8"/>
+      <rect x="45" y="196" width="210" height="12" fill="#441244" opacity=".7"/>
+      <g filter="url(#crackBlur)" stroke="#ff5ac9" stroke-width="3" fill="none" opacity=".8">
+        <path d="M70,120 C110,132 130,110 168,124 C196,134 214,120 236,128"/>
+        <path d="M64,178 C104,168 132,192 172,178 C200,168 222,182 238,172"/>
+      </g>
+      <ellipse cx="150" cy="150" rx="16" ry="8" fill="#ff8ae0" opacity=".3" filter="url(#crackBlur)"/>
+      <circle cx="150" cy="150" r="105" fill="url(#shade)"/>
+    </g>
+  </g>
+</svg>

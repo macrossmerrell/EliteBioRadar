@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <defs>
+    <radialGradient id="hg5" cx="36%" cy="32%" r="72%">
+      <stop offset="0%" stop-color="#c8dcb0"/>
+      <stop offset="30%" stop-color="#93b06a"/>
+      <stop offset="62%" stop-color="#5c7638"/>
+      <stop offset="85%" stop-color="#2e3c1c"/>
+      <stop offset="100%" stop-color="#131a0c"/>
+    </radialGradient>
+    <filter id="hglow5" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="hclip5"><circle cx="150" cy="150" r="100"/></clipPath>
+  </defs>
+  <circle cx="150" cy="150" r="100" fill="url(#hg5)" filter="url(#hglow5)"/>
+  <g clip-path="url(#hclip5)">
+    <g opacity=".4">
+      <ellipse cx="104" cy="120" rx="10" ry="6" fill="#3e4e26" transform="rotate(-10 104 120)"/>
+      <ellipse cx="126" cy="108" rx="7" ry="4" fill="#6e8848" transform="rotate(8 126 108)"/>
+      <ellipse cx="150" cy="126" rx="12" ry="7" fill="#324018" transform="rotate(16 150 126)"/>
+      <ellipse cx="180" cy="112" rx="8" ry="5" fill="#3e4e26" transform="rotate(-20 180 112)"/>
+      <ellipse cx="196" cy="146" rx="11" ry="6" fill="#6e8848" transform="rotate(12 196 146)"/>
+      <ellipse cx="188" cy="180" rx="9" ry="5" fill="#324018" transform="rotate(-6 188 180)"/>
+      <ellipse cx="158" cy="196" rx="13" ry="7" fill="#3e4e26" transform="rotate(20 158 196)"/>
+      <ellipse cx="126" cy="188" rx="8" ry="5" fill="#6e8848" transform="rotate(-14 126 188)"/>
+      <ellipse cx="108" cy="160" rx="10" ry="6" fill="#324018" transform="rotate(9 108 160)"/>
+      <ellipse cx="140" cy="164" rx="7" ry="4" fill="#6e8848" transform="rotate(-22 140 164)"/>
+    </g>
+  </g>
+</svg>

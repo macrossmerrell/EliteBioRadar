@@ -10,7 +10,7 @@ dist/
 
 # Local icon-preview scratch files (rasterization/dev preview only, not app assets)
 Assets/StarIcons/preview.html
-Assets/PlanetIcons/preview.html
+Assets/PlanetIcons/preview*.html
 
 # User data files (generated at runtime, personal to each user)
 EliteBioRadar.cache.json

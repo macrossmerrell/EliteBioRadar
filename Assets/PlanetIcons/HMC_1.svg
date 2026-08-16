@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <defs>
+    <radialGradient id="hg1" cx="36%" cy="32%" r="72%">
+      <stop offset="0%" stop-color="#f0a888"/>
+      <stop offset="30%" stop-color="#c9603c"/>
+      <stop offset="62%" stop-color="#8a3820"/>
+      <stop offset="85%" stop-color="#4a1c10"/>
+      <stop offset="100%" stop-color="#1c0b06"/>
+    </radialGradient>
+    <filter id="hglow1" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="hclip1"><circle cx="150" cy="150" r="100"/></clipPath>
+  </defs>
+  <circle cx="150" cy="150" r="100" fill="url(#hg1)" filter="url(#hglow1)"/>
+  <g clip-path="url(#hclip1)">
+    <g opacity=".4">
+      <ellipse cx="112" cy="128" rx="18" ry="11" fill="#742c14" transform="rotate(-15 112 128)"/>
+      <ellipse cx="188" cy="158" rx="15" ry="8" fill="#a8502a" transform="rotate(20 188 158)"/>
+      <ellipse cx="140" cy="196" rx="12" ry="7" fill="#5c2410" transform="rotate(8 140 196)"/>
+    </g>
+    <!-- polar ice cap -->
+    <ellipse cx="140" cy="66" rx="66" ry="36" fill="#eaf3f8" opacity=".78"/>
+    <ellipse cx="150" cy="80" rx="48" ry="24" fill="#eaf3f8" opacity=".5"/>
+  </g>
+</svg>

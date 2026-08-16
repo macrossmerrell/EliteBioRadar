@@ -562,7 +562,13 @@ namespace EliteBioRadar
 
             string? planetCode = MapPlanetClassToIconCode(detail.PlanetClass);
             if (planetCode != null)
-                planetPanelCanvas.Children.Add(MakeImg($"PlanetIcons/png/{planetCode}.png", 217, 197, 186));
+            {
+                // Random-but-stable art variant per body, same idea as the asteroid belt art —
+                // picked once per body and kept for as long as it's targeted this session.
+                int variant = _watcher?.GetPlanetVariant(detail.BodyName, planetCode) ?? 0;
+                string variantSuffix = variant > 0 ? $"_{variant}" : "";
+                planetPanelCanvas.Children.Add(MakeImg($"PlanetIcons/png/{planetCode}{variantSuffix}.png", 217, 197, 186));
+            }
 
             if (ringCode != null)
                 planetPanelCanvas.Children.Add(MakeImg($"PlanetIcons/png/ring_{ringCode}_front.png", 217, 197, 186));

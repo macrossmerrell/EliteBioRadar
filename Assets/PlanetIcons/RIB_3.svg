@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <defs>
+    <radialGradient id="ig3" cx="36%" cy="32%" r="72%">
+      <stop offset="0%" stop-color="#dcf0e6"/>
+      <stop offset="30%" stop-color="#a8ccb8"/>
+      <stop offset="62%" stop-color="#6c9682"/>
+      <stop offset="85%" stop-color="#3a544a"/>
+      <stop offset="100%" stop-color="#182420"/>
+    </radialGradient>
+    <filter id="iglow3" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <circle cx="150" cy="150" r="100" fill="url(#ig3)" filter="url(#iglow3)"/>
+  <ellipse cx="122" cy="140" rx="30" ry="18" fill="#4a7a5c" opacity=".38" transform="rotate(-10 122 140)"/>
+  <ellipse cx="184" cy="172" rx="22" ry="13" fill="#4a7a5c" opacity=".3" transform="rotate(14 184 172)"/>
+  <g opacity=".3" fill="#365044">
+    <ellipse cx="150" cy="104" rx="10" ry="6" transform="rotate(6 150 104)"/>
+  </g>
+</svg>

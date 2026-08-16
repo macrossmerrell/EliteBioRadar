@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <defs>
+    <radialGradient id="eg2" cx="36%" cy="32%" r="72%">
+      <stop offset="0%" stop-color="#bfe8ff"/>
+      <stop offset="30%" stop-color="#4fa3d9"/>
+      <stop offset="62%" stop-color="#1f6ca3"/>
+      <stop offset="85%" stop-color="#0e3d5c"/>
+      <stop offset="100%" stop-color="#051d2c"/>
+    </radialGradient>
+    <filter id="eglow2" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="eclip2"><circle cx="150" cy="150" r="100"/></clipPath>
+  </defs>
+  <circle cx="150" cy="150" r="100" fill="url(#eg2)" filter="url(#eglow2)"/>
+  <g clip-path="url(#eclip2)">
+    <!-- larger continents -->
+    <g opacity=".85" fill="#5a9e4a">
+      <path d="M84,108 C112,90 156,92 178,112 C196,128 190,152 164,160 C136,168 100,160 86,140 C76,126 74,116 84,108 Z"/>
+      <path d="M156,168 C186,158 218,168 220,192 C222,212 194,224 170,214 C150,206 146,180 156,168 Z"/>
+    </g>
+    <g opacity=".5" fill="#3f7a38">
+      <path d="M100,120 C118,110 142,114 150,126 C156,136 146,148 128,148 C112,148 92,138 100,120 Z"/>
+      <path d="M172,182 C186,176 202,182 202,196 C202,208 186,214 176,206 C168,200 166,188 172,182 Z"/>
+    </g>
+    <g fill="#ffffff" opacity=".38">
+      <path d="M64,164 C88,154 112,160 122,172 C102,180 76,178 64,164 Z"/>
+      <path d="M196,120 C216,112 234,120 234,132 C218,138 200,132 196,120 Z"/>
+    </g>
+  </g>
+</svg>

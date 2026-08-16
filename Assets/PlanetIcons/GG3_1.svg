@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <defs>
+    <radialGradient id="shade" cx="36%" cy="32%" r="75%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity=".5"/>
+      <stop offset="55%" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity=".4"/>
+    </radialGradient>
+    <clipPath id="clip"><circle cx="150" cy="150" r="105"/></clipPath>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="stormBlur" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="2.2"/>
+    </filter>
+  </defs>
+  <g filter="url(#glow)">
+    <g clip-path="url(#clip)">
+      <rect x="45" y="45" width="210" height="210" fill="#e8b878"/>
+      <rect x="45" y="66" width="210" height="16" fill="#d49848" opacity=".85"/>
+      <rect x="45" y="94" width="210" height="22" fill="#a85e24" opacity=".8"/>
+      <rect x="45" y="124" width="210" height="12" fill="#dcb87a" opacity=".6"/>
+      <rect x="45" y="146" width="210" height="28" fill="#8c4416" opacity=".85"/>
+      <rect x="45" y="182" width="210" height="14" fill="#c48846" opacity=".7"/>
+      <rect x="45" y="206" width="210" height="20" fill="#6e3410" opacity=".8"/>
+      <rect x="45" y="234" width="210" height="10" fill="#d4a862" opacity=".6"/>
+      <!-- enlarged storm spot -->
+      <ellipse cx="180" cy="158" rx="38" ry="16" fill="#6c2a0e" opacity=".6" filter="url(#stormBlur)" transform="rotate(-6 180 158)"/>
+      <circle cx="150" cy="150" r="105" fill="url(#shade)"/>
+    </g>
+  </g>
+</svg>
