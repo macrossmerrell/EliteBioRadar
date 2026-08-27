@@ -38,7 +38,15 @@ namespace EliteBioRadar
         private bool _wasHasPosition;
         private BodyScanDetail? _lastRenderedStar;
         private BodyScanDetail? _lastRenderedPlanet;
-        private string _lastScrolledNextSystem = "";
+        // Tracks the route position (0-based index into the hop list, see hereIndex in
+        // UpdateDestinationPanel) the hop list was last auto-scrolled for — NOT dest.NextSystem's
+        // name. On an auto-plotted route the next hop's FSDTarget (which is what sets NextSystem)
+        // can fire mid-flight, before the FSDJump confirming arrival — tracking by name meant that
+        // race could silently "consume" the scroll trigger (NextSystem already changed once before
+        // arrival) so the real arrival never scrolled anything. hereIndex only moves when the
+        // player's actual position changes, so it stays correct regardless of that race. -2 is a
+        // sentinel distinct from any real hereIndex (which starts at -1 before any hop is reached).
+        private int _lastScrolledHereIndex = -2;
         private const string IconBaseUri = "pack://application:,,,/Assets/";
 
         // Pip colours
@@ -756,6 +764,10 @@ namespace EliteBioRadar
             int hereIndex = hopIndex > 0 ? hopIndex - 1 : -1;
 
             Border? currentRow = null;
+            // Fallback scroll target for when no row matches NextSystem at all (e.g. NextSystem
+            // was retargeted to a system outside the cached route) — the actual current-position
+            // row, so the view still moves to reflect where we are instead of doing nothing.
+            Border? hereRow = null;
             for (int i = 0; i < fullRoute.Count; i++)
             {
                 var hop = fullRoute[i];
@@ -801,6 +813,7 @@ namespace EliteBioRadar
                 row.Child = rowPanel;
                 destHopStack.Children.Add(row);
                 if (isNext) currentRow = row;
+                if (i == hereIndex) hereRow = row;
             }
 
             // Scroll to the next-jump row when the tab is freshly shown, or when progress has
@@ -811,13 +824,18 @@ namespace EliteBioRadar
             // "visible" but with no context around it. Instead, position it a row's-height below
             // the top of the viewport so the just-passed hop stays visible above it, and a couple
             // more upcoming hops show below (however many fit in the remaining viewport height).
-            bool advanced = !string.Equals(dest.NextSystem, _lastScrolledNextSystem, StringComparison.OrdinalIgnoreCase);
-            if ((force || advanced) && currentRow != null)
+            //
+            // "Advanced" is judged by hereIndex (route position), not dest.NextSystem's name — see
+            // _lastScrolledHereIndex's doc comment for why the name races ahead unreliably. Falls
+            // back to hereRow when nothing matches NextSystem at all (e.g. retargeted off-route).
+            var scrollTarget = currentRow ?? hereRow;
+            bool advanced = hereIndex != _lastScrolledHereIndex;
+            if ((force || advanced) && scrollTarget != null)
             {
-                _lastScrolledNextSystem = dest.NextSystem;
+                _lastScrolledHereIndex = hereIndex;
                 destHopStack.UpdateLayout();
-                double rowTop = currentRow.TranslatePoint(new Point(0, 0), destHopStack).Y;
-                double contextRowHeight = currentRow.ActualHeight + currentRow.Margin.Bottom;
+                double rowTop = scrollTarget.TranslatePoint(new Point(0, 0), destHopStack).Y;
+                double contextRowHeight = scrollTarget.ActualHeight + scrollTarget.Margin.Bottom;
                 destHopScroll.ScrollToVerticalOffset(Math.Max(0, rowTop - contextRowHeight));
             }
         }
