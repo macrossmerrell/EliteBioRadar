@@ -310,14 +310,14 @@ If you abandon a scan mid-sequence and switch to a different organism, the incom
 
 ## Building from Source
 
-Requires **.NET 8.0 SDK** (Windows only). See [BUILDING.md](BUILDING.md) for full instructions.
+Requires **.NET 10.0 SDK** (Windows only). See [BUILDING.md](BUILDING.md) for full instructions.
 
 ```
 dotnet restore
 dotnet publish -c Release
 ```
 
-Output: `bin\Release\net8.0-windows\BioRadar-App\`
+Output: `bin\Release\net10.0-windows\BioRadar-App\`
 
 ---
 

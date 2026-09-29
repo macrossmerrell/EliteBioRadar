@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (Windows)
+- [.NET 10.0 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (Windows)
 - Windows 10 or later
 
 No Visual Studio required — all commands run from a terminal in the project folder.
@@ -21,7 +21,7 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 - `dotnet build -c Release` — compiles and checks for errors
 - `dotnet publish ...` — packages everything into a single self-contained exe
 
-Output goes to `bin\Release\net8.0-windows\BioRadar-App\`
+Output goes to `bin\Release\net10.0-windows\BioRadar-App\`
 
 The following files are created alongside the exe on first run and persist between publishes as long as you do not delete the `BioRadar-App\` folder:
 - `EliteBioRadar.cache.json` — scan location history per planet
@@ -32,7 +32,7 @@ The following files are created alongside the exe on first run and persist betwe
 
 ## Quick Run (development/testing only)
 
-Builds and launches without publishing. Cache and settings will be created in `bin\Debug\net8.0-windows\` instead of `BioRadar-App\`.
+Builds and launches without publishing. Cache and settings will be created in `bin\Debug\net10.0-windows\` instead of `BioRadar-App\`.
 
 ```
 dotnet run
