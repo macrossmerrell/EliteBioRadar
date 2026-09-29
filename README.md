@@ -1,10 +1,10 @@
 # Elite Bio Radar
 
-A standalone portable Windows application for Elite Dangerous Odyssey. 
+A standalone portable Windows companion app for Elite Dangerous Odyssey.
 
-This app was originally designed to show a real-time radar of bio-organism scan locations on planetary surfaces, eventually helping to track biological and geological sites across an entire star system, tracks payout values, and help you navigate between biology sites more efficiently - now it's so much more!
+Think of it as a cross between SRV Survey and EDDiscovery, but built to live on a second screen or monitor as a set of in-ship instruments and monitoring screens, instead of a separate tool or overlay.
 
-The app is designed to run on a second monitor or touchscreen alongside the game. 
+The app is designed to run on a second monitor or touchscreen alongside the game.
 
 **VR ready** — can be pinned in Meta Quest, Virtual Desktop, or any VR environment that supports pinning Windows applications into your playspace.
 
@@ -16,176 +16,59 @@ Latest Release can be found here: https://github.com/macrossmerrell/EliteBioRada
 
 ![image](https://github.com/macrossmerrell/EliteBioRadar/blob/669e4cc2e8c27867c3fa8925104955077e02f87f/screenshots/elitebioradar.gif)
 
-Elite Bio Radar isn't just a bio-scan radar anymore — it's a companion app, meant to immerse you into a new level of game information in a meaningful way that is directly impacted by choices and events occurring in game. You can stay up to date on a variety of information whether you are standing on a planet, cruising around the system, or jumping to the next system. Below is your tour:
+There are multiple windows you can use: the **main window**, which follows whatever you're doing (flying, landing, sitting in a system, mid-jump), and three pop-out windows you open on demand — **System Scan**, a dashboard of everything you've found in the current system, **Scan Log**, a lifetime survey of everything you've ever found, anywhere, and **Star Finder**, a lookup tool for the nearest star of a chosen type (neutron star, black hole, white dwarf, and more) relative to your current system.
 
+### Main window — six modes, one tab bar
 
-### 🛰️ RADAR
-Your planetary flight and boots on the ground interface. It has that classic radar look and feel, the way a real survey instrument should be — with colony-exclusion range rings around every organism you scan (so you know exactly how far you need to travel before that Bacterium counts as
-a *new* sample, not a repeat). Those scan outlines that tell their own story in color: blue for first contact, green for second, and orange for the final location while the genetic sampler sends that data home.  All scan zones turn grey the moment the submission is complete, still letting you know where you were. The radar even has the option to mark the locations of initial geological site scans as well.
+The tab bar switches automatically between six modes based on what you're actually doing. Click a tab to override it manually — it stays put until something real changes (a new target, a jump, landing).
 
-The radar can be set to auto-scale, keeping every active site in frame, and it even tells / shows you when you approach the ship departure boundary.
+- **🛰️ RADAR** — your boots-on-the-ground and low-altitude instrument. Colony-exclusion range rings around organisms you've scanned, scan dots that change color through the Log → Sample → Sample → Analyse sequence, geological site markers, and a dashed ship-departure-range ring so you know how far you can wander before losing the ability to call your ship back.
+- **☀️ STAR** — class, solar mass, age, temperature, radius, rings, habitable zone.
+- **🪐 PLANET** — a rendered scene instead of a flat icon: terrain worlds get procedural craters, fissures, material-tinted surface, rings when present, and an atmosphere glow that scales with actual surface pressure. Class, gravity, atmosphere, bio/geo/mining signal counts, scan-state tag, DSS composition once mapped. A "D" badge marks a body someone else discovered first; an "M" badge marks one someone else already mapped — both read from your own journal history, so they never credit another commander for something you did yourself. An optional **Gravity Warning** flags a landable body's gravity in a caution colour once it meets or exceeds a threshold you set.
+- **⛛ DEORBIT / ⤒ LAUNCH** — takes over while you're descending or launching: a glide-path scene using the same rendered planet as the Planet tab, with a ship that follows your telemetry-derived altitude and vertical speed instead of a fixed-duration animation. Holds on a neutral state until it actually knows which direction you're going.
+- **📡 FSS SCANNER** — takes over while the FSS scanner is open: an orbital overview with the star at center and every resolved planet placed on a distance-ranked ring, zooming into a planet's own moons once you resolve one.
+- **🧭 DESTINATION** — live jump range from your ship's actual stats and current fuel, the full plotted route, a hop counter and progress bar, and route progress that survives a restart.
 
+A left-side **Biological & Geological Sites** panel and a right-side **Bio Survey** sidebar stay available throughout, with per-organism payout figures, wiki links, and a First Footfall indicator.
 
-### ☀️ STAR
-When you first arrive in system, this tab becomes your new home, providing you information on the vitals of a star including its class, solar mass, age, temperature, radius, rings. The star tab also gives you the that same information for any other star selected in game.  You can revisit this tab whether sitting in a system or traveling through supercruise. 
+### 🛰️ System Scan window
 
-### 🪐 PLANET
-Target a world and the planet tab takes over: class, gravity, atmosphere, bio and geo signal counts, and a scan-state tag that levels up as you do the work — `AUTOSCAN` → `DETAILED` → `MAPPED`. And mapping isn't just a checkbox here: once the DSS probes come back, a **Composition** readout appears 
-above the planet, telling you what makes up that body. 
+Everything scanned in the current system, opened from the top bar. Every body gets a card: a real render, class, bio/geo/mining signal badges with hover tooltips, a habitable-zone chip, a "high value" chip, and material chips you can hover for a full breakdown.
 
-### 🧭 DESTINATION
-This is the one that actually does the math your ship's cockpit won't show you plainly: a **live-calculated jump range**, worked out from your FSD's real stats, current fuel, and current mass — not some stale number left over from the last time you docked. Below that, the entire plotted route, not just what's left of it — a scrollable timeline of everywhere you're headed, with a jump-counter (`HOP 6 / 33`) and a progress bar tracking the whole expedition, auto-scrolling to exactly where you are. Quit the app mid-route, come back tomorrow, and it still knows you're on hop 6 — the route is cached to disk, not just remembered for as long as the window stays open.
+- **Colored outlines** on the cards mark terraformable, water world, earthlike, and ammonia-world bodies, and habitable-zone placement, at a glance.
+- **Current value updates live** as you scan and map bodies — the figure on each card is the body's actual current worth, not a one-time estimate frozen at first scan.
+- **Discovery and mapping notifications** — the "D" and "M" badges flag a body already discovered or mapped by another commander, worked out from your own journal history so it only fires when it genuinely wasn't you.
+- **Binary/trinary grouping** — bodies that actually orbit each other around a shared barycenter get bracketed together with a labeled line, instead of scattering across the layout. Stars themselves get the same treatment: two or three stars genuinely orbiting each other are grouped under a shared bracket, and a star that orbits another one but has no bodies of its own is folded into that star's own section as a compact card instead of getting a whole separate one.
+- **Barycenter Orbit / Parent Not Yet Scanned sections** — bodies with no clean single parent star still show up, grouped and labeled, instead of vanishing.
+- **Ring class chips** — a "rocky rings" / "icy rings" / "metallic rings" / "metal rich rings" chip on any card (planet, moon, or star) that actually carries them, including the rare dim star with a real ring of its own.
+- **Gravity Warning chip** — matches the Planet tab's own gravity warning threshold, shown on any landable body that meets or exceeds it.
+- **FSD injection material notification** — a chip that tells you whether the system's scanned bodies carry every raw material for a Basic, Standard, or Premium FSD synthesis recipe. Color-coded per tier (orange/blue/green) and shows only the best one you qualify for.
+- **Material inventory aware** — reads your actual raw-material stock from the journal, and can hide chips for anything you're already capped out on ("Hide Full Mats"), so what's shown is what you'd actually benefit from picking up.
+- **Trip value tracking** — a running total since your last reset, survivable across restarts, with an **Import Trip Data** option to backfill it from journal history without double-counting.
+- **Mining signal targeting** — selecting a Planetary Mining Location Signal in the nav panel resolves to its real parent planet and shows a dedicated illustration, instead of the radar jumping to the primary star.
+- Toggle between "Notable Only" and every scanned body, hide asteroid belts, and click the EDSM status chip to jump straight to EDSM settings.
 
-**And it all switches itself.** Target a star, target a planet, start charging the FSD (read straight off `Status.json`, so it's instant — even mid-charge from inside a landable atmosphere), or touch down somewhere — the tab bar follows your lead without being asked. Prefer to drive it yourself? Click any tab and it'll stay exactly where you put it until something changes.
+### 🗂️ Scan Log — Galactic Survey
 
-**Biological & Geological Sites tracking** — a left-side panel listing every planet in the system with biological signals (and, optionally, geological ones too), backfilled from journal history so previous sessions' scans still show up. A right-side Bio Survey sidebar breaks down the current/targeted planet's organisms one by one, with clickable wiki links, live payout figures, and a First Footfall indicator that goes gold the instant you disembark on an unvisited world.
+Everything you've ever scanned, across every session — Biology, Geology, Stellar, Worlds, Phenomena, and Journals tabs, grouped by real in-game galactic region, with lifetime totals, first-discovery breakdowns, and a date-range filter. **Scan All** rebuilds the whole library from your journal history in well under a minute.
 
-**Scan Log — Galactic Survey** — a separate window (opened from the top bar) covering everything you've ever scanned, not just the current body, giving you a rich history of your travles. Biology, geology, stars, worlds, and rare phenomena, all organized by real in-game galactic region, with 
-lifetime totals, first-discovery breakdowns, and a date-range filter to narrow it down to a specific trip.
+### EDSM Integration
 
-**Earnings & payout tracking** — every completed bio scan's credit value is recorded (with the 5× First Footfall multiplier applied automatically), persisted across sessions, and rebuildable at any time from your full journal history.
+Live journal-event upload to EDSM as you play (opt-in, off by default), with your ship name/type attributed correctly. A background sync catches up recent history automatically; **Sync Journals to EDSM** runs it on demand.
 
-**Ship Departure Range warning** — a dashed ring on the radar centred on your ship's touchdown point, with a ship-anchor and a separate SRV-anchor dot, so you always know how far you can wander on foot or in an SRV before losing the ability to call your ship back.
+### Screenshot Conversion
 
-**Session persistence throughout** — scan locations, First Footfall status, earnings, and route progress all survive an app restart (and most of them survive a game restart too), so nothing resets just because you closed the window.
+Opt-in: watches for new Elite Dangerous screenshots and converts them from its own huge, uncompressed `.bmp` to `.png`, deleting the original once the `.png` is confirmed saved — with a brief toast notification when one finishes, and a manual button to convert an existing backlog all at once.
 
-**Second-monitor and VR ready** — designed to sit alongside the game on a second monitor or touchscreen, and works pinned into any VR environment that supports overlaying Windows applications (Meta Quest, Virtual Desktop, SteamVR, Windows Mixed Reality).
+### Star Finder
 
-### The interface at a glance
-- **Top bar**: current system, current/targeted body, BIO counter, radar scale, POTENTIAL payout, Scan Log access, ⟳ Refresh (to use if data ever stops refreshing in game), and ⚙ Settings.
-- **Bottom bar**: Lat/Long, heading, altitude, nearest scan distance, scan-progress pips, and earned total.
-- **Biological & Geological Sites** (left) and **Bio Survey** (right) side-panels toggle independently in settings.
-  - Biological and Geological Sites (left) stay mounted across all four tabs — keeping system points of interest at your fingertips.
+A pop-out window, opened from the top bar, for finding the nearest star of a chosen type — neutron star, black hole, white dwarf, Wolf-Rayet, supergiant classes, and more — relative to your current system. Results show system name, distance, and region, with a one-click **Copy** per result (and a **Copy All**) so you can paste the system name straight into the in-game galaxy map to plot your own route. The app has no way to plot or push a route into Elite Dangerous itself, so this is a lookup-and-copy tool rather than automation.
 
----
+### Session persistence
 
-### What's New in Version 3.3.0
+Scan locations, First Footfall status, earnings, route progress, trip value, and window positions all survive an app restart, and most survive a game restart too. Writes are atomic, so a hard kill mid-write can't corrupt your data.
 
-**Destination Tab Accuracy & Polish**
-
-Small but important fixes to the route tracking introduced in 3.2.0.
-
-- Fixed route progress freezing partway through a long auto-plotted route — the hop counter and progress bar are now tied to your actual current system instead of an assumption about how often `NavRoute.json` gets rewritten, so "HOP x/y" and the progress bar keep advancing correctly all the way to the destination.
-- Fixed the hop list occasionally dimming the wrong row as "already passed" when it disagreed with the jump counter.
-- The hop list now scrolls so the hop you just came from stays visible just above the next-jump row (plus whatever upcoming hops fit below), instead of parking the next hop right at the edge of the list.
-
-**STAR & PLANET Tab Reliability**
-
-Frontier only fires the automatic arrival scan for a body the *first* time you ever discover it — revisiting an already-scanned system produces no fresh scan event at all, which the app previously didn't account for.
-
-- Fixed the STAR tab getting stuck on "AWAITING STAR SCAN…" after jumping into a system you'd already scanned earlier in the session — it now falls back to what it already knows about that star instead of waiting forever for an event that isn't coming.
-- Fixed the same gap for planets: re-targeting an already-scanned planet in a revisited system now shows its detail and switches to the PLANET tab immediately, instead of showing nothing and staying put.
-
-**More Planet Art**
-
-- Every planet class now has multiple art variants, randomly assigned per body and kept stable for as long as you're looking at it — the same treatment the asteroid belts already had.
-
----
-
-### What's New in Version 3.2.0
-
-**Star / Planet / Destination Info Panel**
-
-A three-tab replacement for the radar whenever you don't actually have a radar to show — in supercruise, sitting in a system, or cruising between jumps. See the full breakdown under [Star / Planet / Destination Info Panel](#star--planet--destination-info-panel).
-
-- **Full-width RADAR / STAR / PLANET / DESTINATION tab bar** — automatically switches between all four based on live game state (what's targeted, whether the FSD is charging, whether you've just arrived in a system), or click a tab manually to override it.
-- **STAR tab** — class, solar mass, age, surface temperature, radius, and rings for the primary star or whichever star you've targeted (including a secondary/tertiary star in a multi-star system).
-- **PLANET tab** — planet class, gravity, atmosphere, surface temp, bio/geo signal counts, and a **Composition** readout (Ice/Rock/Metal %) that appears once you've DSS-mapped the body — the one genuinely new piece of information mapping reveals over a Detailed scan. Also shows the targeted planet, or the one you're currently standing on if nothing's targeted.
-- **Asteroid belt handling** — targeting a belt cluster shows dedicated belt artwork (one of five variants, randomly assigned per belt and kept stable for as long as you're looking at it).
-- **DESTINATION tab** — jump range **calculated live** from your FSD's actual stats, current fuel, and ship mass (not just the stale figure from the last Loadout event), fuel level, next-jump distance, remaining/total route distance, a jump counter (e.g. "HOP 6/33"), and a route
-  progress bar.
-- **Full route history list** — shows the entire plotted route, not just what's left, with already-passed hops dimmed and the list auto-scrolling to your current position whenever the tab is opened or you advance to a new hop. Scrollable upward to review where you've been.
-- **Route progress persists across restarts** — the route is cached to disk and matched back up by its final destination, so relaunching the app (or the game) mid-route restores your true hop count and total distance instead of resetting to "hop 1."
-- **FSD-charge detection reads Status.json directly** (not just the journal), so the switch to destination tab happens the instant the FSD starts charging for a real hyperspace jump — even from within a landable atmosphere — and never triggers for a plain (or SCO-boosted) supercruise charge.
-- Landing on a planet always takes you back to RADAR the moment Lat/Long becomes available, but you can click into another tab afterward (e.g. to check planet info) and it'll stay there until you return to RADAR yourself or land again.
-
-**Bug Fixes**
-- First Footfall no longer credits prematurely — approaching a second never-visited body in the same system (after already earning First Footfall on the first one) no longer flags it as achieved before you've actually landed.
-
-### What's New in Version 3.1.0 (unreleased, included in 3.2.0)
-
-**Scan Log — Galactic Survey**
-
-A new browsable library of everything you've ever scanned — not just the current body — covering biology, geology, stars, worlds, and rare phenomena, organized by galactic region.
-
-- **Scan Log icon** — new button in the top bar, left of the settings gear, opens the Scan Log window without disturbing the live radar underneath.
-- **Six tabs**: Biology, Geology, Stellar, Worlds, Phenomena, and Journals.
-- **Galactic region grouping** — every scan is classified into its real in-game region (Inner Orion Spur, Elysian Shore, The Formidine Rift, etc.) using an offline galactic boundary map, so results are complete even for systems where nothing happened to be logged as a personal first discovery.
-- **Group By toggle** — every tab lets you flip between grouping by Region or by the tab's own type (Genus, Site Type, Star Class, Planet Type, Category).
-- **Biology tab** — lifetime organism counts by genus and species, with each species' last scanned location.
-- **Geology tab** — every geological site ever found, grouped by feature type, showing the first-discovery credit bonus earned for each individual site.
-- **Stellar tab** — every star you've scanned, grouped by class, split into First Discovery and Already Catalogued. Neutron stars and black holes get a ✦ marker.
-- **Worlds tab** — every planet you've scanned, grouped by class, with Earthlikes shown in bold. Terraformable only and Footfalled only filters, plus a First Footfall breakdown showing exactly where and when you first walked on that planet type.
-- **Phenomena tab** — Notable Stellar Phenomena finds (Anomalies, Mineral Formations, Molluscs, Plants, Seed Pods), matching the game's own Codex breakdown.
-- **Lifetime / Date Range / Since-date filter** — a persistent range picker sitting above every tab narrows the whole survey down to a specific trip instead of always showing everything ever scanned.
-- **Journals tab** — Scan All rebuilds the entire library from your full journal history in well under a minute; Clear wipes it for a fresh rebuild. Neither action touches your actual Elite Dangerous journal files.
-
-**Ship Departure Range**
-
-A warning ring on the radar for anyone who's ever walked, driven, or flown too far from their ship and lost the ability to call it back.
-
-- **Departure range ring** — a red dashed circle centred on your ship's touchdown point appears once you're within 300m of the departure boundary (default 1975m, configurable via `ShipDepartureRangeMetres` in `EliteBioRadar.settings.json`). The "SHIP DEPARTURE RANGE" label rides along the ring at the point closest to you.
-- **Crossing the line** — once you actually pass the threshold, the ring turns grey and stays that way (label included) for the rest of the excursion, even if you walk back inside it. It only resets — ready to warn you again — once you're back aboard the ship.
-- **Ship anchor dot** — a teal dot points back toward the ship's touchdown point while you're away from it on foot, in an SRV, or in a ship-launched fighter. It disappears the moment the departure ring is crossed, since at that point the ship is out of recall range anyway.
-- **SRV anchor dot** — a separate violet dot tracks a parked SRV independently of the ship. Drive out, get out on foot, and even walk back and board the ship — the SRV dot keeps pointing at where you left it until you climb back in.
-- **Ship recall aware** — if you summon the ship and it flies itself to you (`Touchdown` with `PlayerControlled:false`), the anchor and ring immediately re-centre on its new landing spot, same as if you'd flown it there yourself.
-- Both anchors persist per-body across app restarts, so the warning is live again the moment you resume a session, and works independently on every body/planet you visit.
-
-### What's New in Version 2.5.0
-
-**Bug Fixes & Improvments**
-- Abandoned scan detection — switching to a different organism mid-scan without completing the previous one now correctly clears the Bio Survey pips for the abandoned genus instead of leaving it stuck at partial completion.
-- Corrupt cache recovery — the app now automatically detects and cleans up stale incomplete-but-marked-complete cache entries left behind by earlier versions, so affected genera display correctly without manual cache deletion.
-- Cross-session abandonment logic — fixed an issue where an older session's in-progress scan could incorrectly wipe a newer session's scan progress for a different genus during journal backfill.
-- False "First Footfall" on flyby — fixed an issue where simply passing near a planet in supercruise (without landing) could incorrectly trigger First Footfall and load stale scan data for that planet.
-- Planet name truncation after journal switch — fixed a system-name detection bug that occasionally caused the currently-displayed planet's short name to be cut too short (e.g. "A" instead of "1 A") after a journal rollover.
-
-## What's New in Version 2.4.0
-
-### Geological Site Markers
-**First scanned** geological site is now marked directly on the radar display. 
-
-- When you scan a **new** geological type on a body, an X appears at that location in the same amber color used by the GEO sidebar panel. 
-- As you zoom out, the marker automatically transitions to a compact dot to keep the display clean at wider scales. 
-- Off-screen sites are clamped to the radar edge so you always know which direction to head. Markers persist across sessions via the scan cache and are restored on body revisit.
-
-### Refresh & Auto-Recovery
-
-⟳ **Refresh button** — added to the top bar next to the settings gear. Clicking it performs a full journal re-read and state rebuild without needing to restart the app. Useful when the app picks up incorrect data after Elite Dangerous rolls over to a new journal file mid-session.
-
-**Automatic log snapshot** — before any refresh runs, the app automatically saves a timestamped copy of the diagnostic log to the app folder (EliteBioRadar_YYYY-MM-DD_HH-MM-SS.log), capturing exactly what the app saw at the moment the problem occurred. No dialog, no extra steps.
-
-**Automatic journal file detection** — the app now watches for new Journal.*.log files being created by the game and triggers a refresh automatically, so most journal rollover issues resolve themselves without any manual intervention.
-
-### Total Payout Display
-
-**Total Payout** in the Bio Survey sidebar now only appears once biological scans are complete — it no longer shows prematurely while scanning is in progress.
-- The total increments organism by organism as each one is fully logged, rather than showing a speculative total.
-- Total Payout now correctly persists across app restarts — completed scans are restored from cache and reflected in the total immediately on launch.
-
-### Geological Sites
-**Show Geological Sites Info** toggle in settings — displays a dedicated Geological Sites panel listing planets with geological signals in the current system.
-- Toggling the geological sites option now instantly refreshes the Bio Survey sidebar without requiring the sidebar to be manually toggled off and on.
-- Geological sites are populated from `FSSBodySignals` and `SAASignalsFound` events, consistent with how the game reveals them (geo sites on a body only appear after that body has been DSS scanned).
-
-### Session & Journal Improvements
-- **Correct system detection on startup** — the app now scans recent journal files during startup to establish the current system before any backfill runs, preventing stale data from a previous system appearing in the sidebars
-- **Cross-system cached body rejection** — if the last cached body is from a different system than the one you're currently in, the app now correctly skips backfilling that body's scan data rather than repopulating the Bio Survey sidebar with irrelevant old information
-- **Journal rollover handling** — when Elite Dangerous creates a new journal file mid-session, the app now correctly preserves the known current system rather than reverting to an old cached body's system
-- **Planet list rebuilt cleanly on system change** — the Biological Sites and Geological Sites panels are now fully cleared and rebuilt when switching systems, preventing leftover entries from a previous system appearing alongside the current one
-- **Progressive journal search** — on startup the app searches up to 60 journal files in batches of 10 (starting from 20) when looking for scan history, rather than stopping at a hard limit of 20 files. Expansion only occurs if scan data has not yet been found, so typical sessions are unaffected
-- **FSDJump system tracking fix** — corrected an issue where `StarSystem` was read from the wrong JSON field name in journal events, causing system identification to silently fall back to body-name prefix matching and occasionally match bodies from other systems
-- **Completed Genera restored from cache on startup** — completed organisms loaded from cache at launch are now correctly registered as completed, so the Total Payout and sidebar completion state are accurate from the moment the app opens
-- **Abandoned scan detection** — when switching to a different organism mid-scan without completing the previous one (no Analyse event), the Bio Survey now correctly clears the pips for the abandoned genus. Previously, switching genera left both showing partial pips. The abandoned genus resets to zero and will rebuild correctly if re-scanned later.
-- **Corrupt cache recovery** — a previous version of the abandoned scan logic saved greyed (incomplete) organisms to the cache instead of removing them, causing them to appear fully complete on the next app launch. The app now detects and clears these corrupt entries automatically during startup backfill, so no manual cache deletion is required going forward.
-- **Cross-session abandonment logic** — the backfill now correctly handles the case where an in-progress scan from an older session exists alongside a newer session's scan of a different genus. Previously, the older session's data could incorrectly remove the newer session's scan dots on app restart.
-
-### Window Management
-- **Window position and size persistence** — the app now remembers its position and size between sessions, including which monitor it was on. Position is saved automatically as you move or resize the window
-- **Off-screen safety check** — if the saved position is no longer on a connected screen (e.g. a monitor was unplugged), the app falls back to the default centered position rather than opening off-screen
-
-### Single Instance Enforcement
-- Launching a second instance of the app now shows a friendly message and exits immediately, preventing cache corruption that could occur from two instances running simultaneously
+**Second-monitor and VR ready** — works pinned into any VR environment that supports overlaying Windows applications (Meta Quest, Virtual Desktop, SteamVR, Windows Mixed Reality).
 
 ---
 
@@ -204,42 +87,67 @@ A warning ring on the radar for anyone who's ever walked, driven, or flown too f
   - 🟠 Orange — third scan (Sample) — turns grey when Analyse completes
   - ⚫ Grey — fully logged, shown as a faint reference marker
 - **Off-screen indicators** — dots outside the current zoom range are clamped to the radar edge
-- **Geological scan markers** — discovered geological sites are shown on the radar as distinct markers separate from biological scan dots, so you can see geo site locations alongside your bio scan history
-- Automatically takes over the info panel the instant Latitude/Longitude becomes available (on foot, ship on the surface, SRV, etc.) — see below for what fills the space the rest of the time
+- **Geological scan markers** — discovered geological sites are shown on the radar as distinct markers separate from biological scan dots
+- Automatically takes over the info panel the instant Latitude/Longitude becomes available (on foot, ship on the surface, SRV, etc.)
 
-### Star / Planet / Destination Info Panel
-The RADAR tab only means something while you have Lat/Long. The rest of the time — supercruise,
-sitting in a system, cruising between jumps — three other tabs fill the same space with live
-system/body/route information instead of leaving it blank.
+### Star / Planet / Destination / Deorbit / FSS Scanner Info Panel
+The RADAR tab only means something while you have Lat/Long. The rest of the time — supercruise, sitting in a system, cruising between jumps, descending or launching, or scanning with the FSS — five other modes fill the same space instead of leaving it blank.
 
-- **Full-width tab bar** — RADAR / STAR / PLANET / DESTINATION, spanning the entire app width
+- **Full-width tab bar** — RADAR / STAR / PLANET / DESTINATION, spanning the entire app width. The RADAR and STAR tabs relabel themselves to DEORBIT/LAUNCH and FSS SCANNER while those modes are active, and clicking them always takes you back to whichever of the pair is actually current.
 - **Automatic switching**, based on live game state:
+  - **DEORBIT/LAUNCH** wins while you're descending toward or launching from a body but don't yet have (or have just lost) a real ground position
   - **RADAR** wins the instant Lat/Long is available (landing always takes priority)
-  - **DESTINATION** wins the instant the FSD starts charging for a real hyperspace jump — detected directly from `Status.json`'s flags rather than the journal, so it's immediate and reliable even from within a landable atmosphere. A plain or SCO-boosted supercruise charge never triggers it
-  - **STAR** or **PLANET** shows whichever body is currently targeted in the nav panel (including a secondary/tertiary star in a multi-star system)
+  - **FSS SCANNER** wins while the FSS scanner is open
+  - **DESTINATION** wins the instant the FSD starts charging for a real hyperspace jump — read directly from `Status.json`, so it's immediate even from within a landable atmosphere, and never triggers for a plain or SCO-boosted supercruise charge
+  - **STAR** or **PLANET** shows whichever body is currently targeted (including a secondary/tertiary star, or a nav-panel signal resolved to its real parent body)
   - Falls back to **STAR** (the primary star) when nothing else applies
-  - **Click any tab manually** to override the automatic choice — it stays there until a genuine new event (a fresh target, a fresh jump, landing) clears the override, exactly like the RADAR-while-landed behaviour: you can click into another tab to check something and it won't snap back on its own
-- **STAR tab** — class (with common name, e.g. "M (Red Dwarf)"), solar mass, age, surface temperature, radius, and rings (correctly excludes asteroid belts, which report as a "ring" on the star's own scan but aren't one)
-- **PLANET tab** — planet class (short-form for gas giants, e.g. "Water Giant" instead of the full Frontier description), gravity, atmosphere, surface temperature, bio/geo signal counts, landable flag, and a scan-state tag (`AUTOSCAN` / `DETAILED` / `MAPPED`)
-  - **Composition callout** — once the body has been DSS-mapped, a dedicated line above the planet reveals Ice/Rock/Metal percentages — the one genuinely new piece of information a DSS map gives you over a plain Detailed scan
-  - Shows whichever body is targeted, or the one you're currently standing on if nothing is targeted
-  - **Asteroid belt clusters** get one of five pieces of dedicated belt artwork (randomly assigned per belt, stays consistent for as long as you're looking at it) instead of being rendered as a broken planet
+  - **Click any tab manually** to override the automatic choice — it stays there until a genuine new event clears the override, so you can check something on another tab and it won't snap back on its own
+- **STAR tab** — class (with common name, e.g. "M (Red Dwarf)"), solar mass, age, surface temperature, radius, rings (correctly excludes asteroid belts, which report as a "ring" on the star's own scan but aren't one), and habitable zone. A dim star (a brown dwarf) that genuinely carries a real ring gets it rendered the same way a ringed gas giant does, not just named in the text
+- **PLANET tab** — a rendered scene for gas giants and every terrain-family class (High Metal Content, Icy, Rocky, Rocky Ice, Water World, Metal Rich, Earthlike, Ammonia World): procedural craters and fissures, material-tinted surface, real ring geometry when present, and an atmosphere glow scaled to actual surface pressure. Also planet class (short-form for gas giants, e.g. "Water Giant"), gravity, atmosphere, surface temperature, bio/geo/mining signal counts, landable flag, and a scan-state tag (`AUTOSCAN` / `DETAILED` / `MAPPED`)
+  - **Gravity Warning** — optional, off by default: set a G threshold in Settings and a landable body's gravity value turns a caution colour with a "HIGH GRAVITY" chip once it's met or exceeded
+  - **Composition callout** — once DSS-mapped, a line above the planet reveals Ice/Rock/Metal percentages
+  - **Discovery/mapped indicators** — shows whether the body was discovered or DSS-mapped by another commander before you
+  - Shows whichever body is targeted, or the one you're standing on if nothing is targeted
+  - **Asteroid belt clusters** get one of five pieces of dedicated belt artwork, randomly assigned per belt and kept stable
+  - **Nav-panel signals** (e.g. a Planetary Mining Location Signal) resolve to their real parent body instead of jumping to the primary star
+- **DEORBIT / LAUNCH tab** — a glide-path scene using the same rendered planet as the Planet tab, fixed gates the ship flies through, and a ship position driven by telemetry-derived altitude and vertical speed rather than a fixed timer. Holds on a neutral "resolving" state until it knows the direction and the body's scan detail has resolved, so it doesn't flash the wrong scene
+- **FSS SCANNER tab** — an orbital overview: star at centre, every resolved planet on a distance-ranked ring (more rings as the system has more planets to spread across), with a manifest list of every body and its signal counts. Resolving a moon zooms into that planet's own local moon view
 - **DESTINATION tab**:
-  - **Jump range** calculated live from your FSD's actual optimal mass/fuel-per-jump stats (engineered values read directly from the Loadout event, stock values from a reference table), current fuel, and ship mass — not just the stale figure from the last Loadout event
-  - Fuel level, next-jump distance, remaining route distance, total route distance, and a jump counter (e.g. `HOP 6 / 33`) with a progress bar
-  - **Full route history** — the entire plotted route is shown, not just what's left, with already-passed hops dimmed; scoopable star classes get a small icon
-  - Auto-scrolls to your current position when the tab is opened or you advance to a new hop — scroll up freely to review earlier systems without it fighting you
-  - **Persists across restarts** — the route is cached to disk (`EliteBioRadar.route.json`) and matched back up by its final destination, so relaunching the app or the game mid-route restores the true hop count and total distance instead of resetting to "hop 1"
+  - **Jump range** calculated live from your FSD's actual stats, current fuel, and ship mass — not the stale figure from the last Loadout event
+  - Fuel level, next-jump distance, remaining/total route distance, a jump counter (e.g. `HOP 6 / 33`), progress bar
+  - **Full route history** — the entire route, not just what's left, already-passed hops dimmed; scoopable star classes get a small icon
+  - Auto-scrolls to your current position, scroll up freely to review earlier systems
+  - **Persists across restarts** — cached to disk (`EliteBioRadar.route.json`) and matched by final destination
+
+### System Scan window
+A dashboard for the current system, opened from the top bar, with a card for every scanned body.
+
+- **Real render per card**, matching the Planet tab's own rendering
+- **Colored outlines** for terraformable, water world, earthlike, and ammonia-world bodies, plus habitable-zone placement
+- **Bio/geo/mining signal badges** with hover tooltips
+- **Material chips** — hover for a full surface-material breakdown, with materials you're already capped on optionally hidden ("Hide Full Mats")
+- **Current value updates live** as bodies get scanned and mapped
+- **Discovery and mapping notifications** — "D" and "M" badges for bodies already discovered or mapped by another commander
+- **Binary/trinary grouping** — genuinely co-orbiting bodies bracketed together with a labeled connector line, including the stars themselves; an orbiting star with no bodies of its own is folded into its parent's section as a compact card instead of getting a whole separate one
+- **Barycenter Orbit / Parent Not Yet Scanned** sections for bodies with no clean single scanned parent
+- **Ring class chips** — "rocky rings" / "icy rings" / "metallic rings" / "metal rich rings" on any card that actually carries them
+- **Gravity Warning chip** — same threshold as the Planet tab, on any landable body that meets or exceeds it
+- **FSD injection material notification** — a color-coded chip (orange/blue/green for Basic/Standard/Premium) showing whether the system carries every material for that synthesis recipe; shows only the best one you qualify for
+- **Trip value tracking** — a running credit total since the last reset, with **Import Trip Data** to backfill it from journal history without double-counting
+- **EDSM status chip** — click to jump straight to EDSM settings on the main window
+- Toggle between "Notable Only" and every scanned body, hide/show asteroid belts
 
 ### Biological & Geological Sites Panel (left toggle — "Bio Sites Sidebar")
-- Lists every planet in the current system that has biological signals
-- Populated from FSS and DSS scans, backfilled from journal history on startup — including planets scanned in previous sessions
+- Lists every planet in the current system with biological signals
+- Populated from FSS and DSS scans, backfilled from journal history — including planets scanned in previous sessions
 - Shows short body name and bio signal count — e.g. `▶ A 4 (3)`
 - Current body highlighted with a `▶` indicator
 - Planet names go grey once all biology on that body is fully logged
 - **Click any planet** to preview its bio data in the Bio Survey sidebar
-- **Geological sites section** — when **Show Geological Sites Info** is also enabled in settings, a second "GEOLOGICAL SITES" list appears below the biological one in the same panel, showing short body name, geo signal count, and number of sites already discovered — e.g. `A 4 a (3) — 1 found`. Only appears for bodies that have been DSS scanned, consistent with how the game reveals geological signals
-- Toggle via **Show Bio Sites Sidebar** in settings — stays mounted across all four RADAR/STAR/PLANET/DESTINATION tabs, not just RADAR
+- **Geological sites section** — when **Show Geological Sites Info** is enabled, a second list appears showing short body name, geo signal count, and sites already discovered — e.g. `A 4 a (3) — 1 found`
+- **Mining sites section** — a third list for bodies with mining signals
+- All three lists sort by real planet/moon designation order (including secondary-star-prefixed bodies like "B 6"), not alphabetically
+- Toggle via **Show Bio Sites Sidebar** in settings — stays mounted across all six modes, not just RADAR
 
 ### Bio Survey Sidebar (right)
 - Lists all biology types on the current planet
@@ -252,9 +160,9 @@ system/body/route information instead of leaving it blank.
   - `Payout:` or `FF Payout:` with the expected credit value
   - Pip indicators showing scan progress (blue → green → orange)
 - Completed organisms remain listed with all pips filled
-- **First Footfall indicator** at the top — `✓ First Footfall` (gold, confirms the moment you Disembark) or `○ First Footfall` (dim)
-- **Total Payout** shown at the bottom — only appears once all organisms on the planet are fully scanned, incrementing as each one completes
-- **GEO SURVEY section** — when **Show Geological Sites Info** is enabled and the current body has any, a second section lists each known geological site with a clickable name that opens the relevant Elite Dangerous Wiki page
+- **First Footfall indicator** at the top — `✓ First Footfall` (gold) or `○ First Footfall` (dim)
+- **Total Payout** shown at the bottom — only appears once all organisms on the planet are fully scanned
+- **GEO SURVEY section** — when **Show Geological Sites Info** is enabled, lists each known geological site with a clickable wiki link
 - Scrollable with a slim 6px scrollbar
 
 ### Top Bar
@@ -263,8 +171,10 @@ system/body/route information instead of leaving it blank.
 - BIO counter — completed/total (e.g. `2/3`)
 - Current zoom scale with scroll hint
 - **POTENTIAL:** — total possible payout for the current planet
+- **System Scan icon** — opens the [System Scan window](#system-scan-window)
 - **Scan Log icon** — opens the [Scan Log — Galactic Survey](#scan-log--galactic-survey) window
-- **⟳ Refresh button** — forces a full journal re-read and state rebuild without restarting the app. Useful if the app picks up incorrect data after a journal file switch. Automatically saves a timestamped log snapshot to the app folder before refreshing (see [Log Snapshots](#log-snapshots) below)
+- **Star Finder icon** — opens the [Star Finder](#star-finder) window
+- **⟳ Refresh button** — forces a full journal re-read and state rebuild without restarting the app, useful if the app picks up incorrect data after a journal file switch. Saves a timestamped log snapshot before refreshing (see [Log Snapshots](#log-snapshots))
 
 ### Bottom Bar
 - Live latitude, longitude, heading, and altitude
@@ -283,31 +193,67 @@ system/body/route information instead of leaving it blank.
 
 > **Important:** Each journal scan **replaces** the stored total — it does not add to it. Running the same scan twice will not double the amount. If you want to add a new date range on top of an existing total, use Clear first, then scan the combined range.
 
+### Trip Value Tracking
+A separate, resettable "how much has this exploration trip earned so far" total, shown on the System Scan window's Trip Scans bar — independent of the lifetime Earnings total above (which tracks bio-organism sales specifically).
+
+- Updates live as you scan and map bodies, using the same value estimate the System Scan cards show
+- **Start New Trip** resets it to zero without touching lifetime Earnings
+- **Import Trip Data** rebuilds/backfills it from journal history — all journals, or a chosen date range — merging in by body so nothing already counted gets doubled
+- Elapsed time since the trip started is shown in months/days/hours/minutes, whichever two units apply
+- Persists across restarts in its own file, unaffected by Earnings' Scan All / Clear actions
+
 ### Scan Log — Galactic Survey
-A separate browsable window (opened from the **Scan Log icon** in the top bar) covering
-everything you've ever scanned — not just the current body — organized by real in-game galactic
-region using an offline boundary map, so results are complete even for systems where nothing
-happened to get logged as a personal first discovery.
+A separate browsable window (opened from the **Scan Log icon** in the top bar) covering everything you've ever scanned — not just the current body — organized by real in-game galactic region using an offline boundary map, so results are complete even for systems where nothing happened to get logged as a personal first discovery.
 
 - **Six tabs**: Biology, Geology, Stellar, Worlds, Phenomena, and Journals
 - **Group By toggle** on every tab — flip between grouping by Region or by the tab's own type (Genus, Site Type, Star Class, Planet Type, Category)
 - **Biology tab** — lifetime organism counts by genus and species, with each species' last scanned location
 - **Geology tab** — every geological site ever found, grouped by feature type, showing the first-discovery credit bonus earned for each site
 - **Stellar tab** — every star you've scanned, grouped by class, split into First Discovery and Already Catalogued; neutron stars and black holes get a ✦ marker
-- **Worlds tab** — every planet you've scanned, grouped by class, with Earthlikes shown in bold; Terraformable-only and Footfalled-only filters, plus a First Footfall breakdown showing exactly where and when you first walked on that planet type
+- **Worlds tab** — every planet you've scanned, grouped by class, with Earthlikes shown in bold; Terraformable-only and Footfalled-only filters, plus a First Footfall breakdown
 - **Phenomena tab** — Notable Stellar Phenomena finds (Anomalies, Mineral Formations, Molluscs, Plants, Seed Pods), matching the game's own Codex breakdown
-- **Lifetime / Date Range / Since-date filter** — a persistent range picker above every tab narrows the whole survey to a specific trip instead of always showing everything ever scanned
-- **Journals tab** — **Scan All** rebuilds the entire library from your full journal history in well under a minute; **Clear** wipes it for a fresh rebuild. Neither action touches your actual Elite Dangerous journal files
+- **Lifetime / Date Range / Since-date filter** — a persistent range picker above every tab
+- **Journals tab** — **Scan All** rebuilds the entire library from your full journal history; **Clear** wipes it for a fresh rebuild. Neither touches your actual Elite Dangerous journal files
 - Opens as a separate window without disturbing the live radar/info panel underneath
+
+### EDSM Integration
+Opt-in, off by default — no data leaves your PC until you enable it in Settings.
+
+- **Live upload** — journal events are submitted to EDSM as you play, with your current ship correctly attributed
+- **Background sync** — runs quietly on every app start, catching up roughly the last 2 days of journal history
+- **Sync Journals to EDSM button** — runs the same sync on demand
+- **Commander Name / API Key** fields — found at edsm.net → Commander Settings → API
+- Reachable directly from the System Scan window's own EDSM status chip
+
+### Screenshot Conversion
+Opt-in, off by default — needs a real screenshots folder configured (the journal's own screenshot event only ever reports a relative in-game path, never where the game actually saves them on disk).
+
+- **Live conversion** — watches for a new screenshot as you play, waits for the game to finish writing it, converts `.bmp` to `.png`, then deletes the original once the `.png` is confirmed saved
+- **Toast notification** — a brief "Screenshot converted" popup on the main window when one finishes
+- **Source / destination folders** — pick where Elite saves screenshots and (optionally) a separate folder for the converted PNGs; leave the destination blank to convert in place
+- **Convert Existing Screenshots button** — sweeps the source folder for any leftover `.bmp` files right now, not just new ones
+
+### Star Finder
+A pop-out window (opened from its own top-bar icon) for finding the nearest star of a chosen type relative to your current system.
+
+- **Star type dropdown** — curated from the canonical Elite Dangerous journal star-type list: Neutron Star, Black Hole, Supermassive Black Hole, White Dwarf, Wolf-Rayet, Herbig Ae/Be, T Tauri, Carbon, Brown Dwarf, every main-sequence class (O through M), and each class's supergiant/giant variant as its own separate entry
+- **Closest count** — how many results to return (up to 50)
+- Resolves your current system's galactic coordinates via EDSM (works even for a procedurally-named system nobody has visited yet), then queries [Spansh](https://spansh.co.uk)'s galaxy database, sorted by distance
+- Each result shows system name, distance, and region, with a **Copy** button per row and a **Copy All** for the whole list
+- Copy the system name and paste it into the in-game galaxy map's search box to plot your own route — the app has no way to plot or push a route into Elite Dangerous directly, so this is a lookup-and-copy tool, not automation
+- Read-only and user-triggered only — no background network activity, and not tied to the EDSM Integration opt-in above (this is a one-off coordinate lookup, not exploration-data upload/download)
 
 ### Settings (⚙ gear icon)
 - Show Bio Survey Sidebar (right)
 - Show Bio Sites Sidebar (left)
 - Radar scan animation (expanding pulse effect)
-- Show Geological Sites Info (adds the geological section to both the left Bio Sites panel and the right Bio Survey sidebar)
+- Show Geological Sites Info (adds the geological section to both sidebars)
 - Auto Scale
 - Default Scale (200m – 10km)
+- Gravity Warning (enable toggle, threshold in G)
+- Screenshot Conversion (enable toggle, source/destination folders, convert-existing button)
 - Earnings section with journal scan and clear options
+- EDSM Integration (enable toggle, commander name, API key, manual sync)
 - About (version, credits, links)
 
 ### Session Persistence
@@ -319,6 +265,7 @@ happened to get logged as a personal first discovery.
 - Planet bio and geo lists cleared and rebuilt cleanly on FSD jump to new system
 - Returning to a previously scanned planet reloads completed scan history
 - Window position and size restored on launch, with off-screen safety fallback
+- All writes are atomic (written to a temp file, then swapped in), so a hard kill of the app or the game mid-write can't corrupt a data file
 
 ---
 
@@ -331,6 +278,8 @@ happened to get logged as a personal first discovery.
 5. Land and begin scanning — dots appear on the radar as you scan each organism
 6. The radar shows your position relative to all scan sites, with colony range rings to help plan your route between them
 7. After the third scan, wait for the **Analyse** prompt — all dots go grey and the organism is logged
+
+Along the way, open **System Scan** from the top bar for a dashboard of the whole system, or **Scan Log** for your lifetime survey. Both work whether or not you're currently in the system they cover.
 
 ### VR Usage
 EliteBioRadar is a standard Windows application and works in any VR environment that supports pinning Windows apps into the playspace, including:
@@ -380,7 +329,13 @@ Elite Dangerous writes `Status.json` every ~250ms. The app polls every 300ms wit
 FSD hyperdrive charging (which drives the automatic switch to the DESTINATION tab) is read directly from `Flags2` bit 19 (`FsdHyperdriveCharging`) rather than the journal's `StartJump` event — that journal write can lag or occasionally not land promptly, while `Status.json` reflects the charge the instant it starts and clears the instant it stops. `Flags` bit 17 (`FsdCharging`) is set for both a real hyperspace charge and a plain supercruise charge and so isn't specific enough on its own; `Flags2` bit 19 only fires for an actual jump.
 
 ### NavRoute.json / route persistence
-`NavRoute.json` only ever shows the route from your current position onward — it shrinks every jump and never lists hops already passed. Its **last** entry (the final destination) is the one thing that stays constant for a route's entire lifetime, so it's used as the identity key for the persisted route cache (`EliteBioRadar.route.json`): as long as the final destination still matches, the cached full route/hop position/total distance are reused; the moment it changes, that's treated as a genuinely new route and the cache resets.
+`NavRoute.json` only ever shows the route from your current position onward — it shrinks every jump and never lists hops already passed. Its **last** entry (the final destination) is the one thing that stays constant for a route's entire lifetime, so it's used as the identity key for the persisted route cache (`EliteBioRadar.route.json`): as long as the final destination still matches, the cached full route/hop position/total distance are reused; the moment it changes, that's treated as a new route and the cache resets.
+
+### Nav-panel signal resolution
+A signal picked in the nav panel (e.g. a Planetary Mining Location Signal) reports a `Destination.Name` like `$SAA_Unknown_Signal:#type=$PlanetaryMiningLocation_Name;:#index=13;` — not a real body name. The app matches this pattern, reads `Destination.Body` (the signal's real parent planet's BodyID), and resolves it against known scanned bodies so the Planet tab shows the correct target instead of falling back to the primary star.
+
+### Deorbit/Launch telemetry
+Altitude and vertical speed are derived from `Status.json` updates that only actually change a few times a second, dead-reckoned forward between updates using the last known sink rate, bounded so one noisy reading can't fling the estimate off course. Progress along the glide arc is monotonic — it can only move forward, never backward, however the underlying estimate jitters. Direction (ascending vs descending) requires a sustained reading before committing to either the launch or descent scene, and the animation state is fully reset on every entry to and exit from the mode, so a stale leftover from a previous glide can't bleed into the next one.
 
 ### Journal events used
 
@@ -388,24 +343,32 @@ FSD hyperdrive charging (which drives the automatic switch to the DESTINATION ta
 |---|---|
 | `ScanOrganic` | Each scan interaction — drives dot placement and colour |
 | `SAASignalsFound` | DSS completion — provides genus names, bio count, and geological signal counts |
-| `SAAScanComplete` | DSS mapping complete — flips a body's scan-state tag to `MAPPED` on the PLANET tab |
+| `SAAScanComplete` | DSS mapping complete — flips a body's scan-state tag to `MAPPED` |
 | `FSSBodySignals` | FSS scan — registers biology and geology signal counts per body |
-| `Scan` | Star/planet/asteroid-belt scan — provides `WasFootfalled` for payout calculation, and all the physical detail shown on the STAR/PLANET tabs |
+| `Scan` | Star/planet/asteroid-belt scan — provides `WasFootfalled`/`WasDiscovered`/`WasMapped` for payout and discovery-credit calculation, and the physical detail shown on the STAR/PLANET/System Scan views |
 | `FSDTarget` | Nav-panel/galaxy-map target set — drives the DESTINATION tab's next-system info |
-| `Loadout` | Ship jump range/fuel capacity and FSD module stats, used to calculate live jump range |
+| `Loadout` / `LoadGame` | Ship jump range/fuel capacity, FSD module stats, and current ship type/ID — used for live jump range and EDSM attribution |
 | `StartJump` | Backup signal for FSD charging (see Status.json polling above) |
 | `Disembark` | Confirms First Footfall when player steps off ship on an unvisited planet |
 | `Touchdown` | Body detection — loads cached scan history |
 | `LeaveBody` | Clears radar display, preserves cache |
 | `FSDJump` / `CarrierJump` | Clears display, wipes cache for old body, clears and rebuilds planet lists for new system |
+| `Materials` / `MaterialCollected` / `MaterialDiscarded` / `MaterialTrade` / `EngineerCraft` / `Synthesis` / `TechnologyBroker` | Keeps a live tally of your raw-material stock for System Scan's "Hide Full Mats" filter |
 
 ### Journal backfill
-On startup, the app scans up to 60 recent journal files (in batches, starting at 20) to rebuild state for the current body — including scan dot positions, genus names, bio counts, and first footfall status. The Biological Sites and Geological Sites panels scan all journal files to find every relevant planet in the current system. The STAR/PLANET/DESTINATION info panel state (current star, targeted body, route) is rebuilt the same way from the last 20 journal files. This works whether or not the game is running.
+On startup, the app scans up to 60 recent journal files (in batches, starting at 20) to rebuild state for the current body — scan dot positions, genus names, bio counts, first footfall status. The Biological Sites and Geological Sites panels scan all journal files to find every relevant planet in the current system. The STAR/PLANET/DESTINATION info panel state (current star, targeted body, route) is rebuilt the same way from the last 20 journal files. This works whether or not the game is running.
 
-The app also reads recent journals during startup to establish the current system before backfill begins, ensuring that cached data from a previous system is never incorrectly shown.
+The app also reads recent journals during startup to establish the current system before backfill begins, so cached data from a previous system is never shown by mistake.
+
+A live scan's actual ship position is only used for a scan happening live, in the moment — never as a substitute during backfill for a historical scan whose position can't otherwise be determined. That way a relaunch after a hard close can't misplace a dot at wherever the ship happens to be sitting right now.
+
+Journal files are sorted by their real embedded date, not by filename text — Elite Dangerous changed its journal filename format in 2022, and a plain text sort silently misorders files for anyone whose journal history spans that change, which could make the app treat a stale file as the current one.
 
 ### First Footfall detection
 The `Scan` event (fired during DSS from orbit) carries a `WasFootfalled` flag. If false, the app sets a pending first footfall state. This is confirmed — and the `✓ First Footfall` indicator activated — only when a `Disembark` event fires, meaning you physically stepped off your ship on the planet surface.
+
+### Discovery / mapped-by-other detection
+A `Scan`'s `WasDiscovered`/`WasMapped` flags only mean "someone had already done this before this particular scan" — and that someone can be you, revisiting a body from an earlier trip. To tell your own history apart from another commander's, the app separately tracks every body you've personally discovered (a `Scan` you made with `WasDiscovered:false`) or mapped (a `SAAScanComplete` you made) across your full journal history. The "D"/"M" badges only fire when the flag says someone got there first AND your own history confirms it wasn't you.
 
 ### Colony ranges
 Each genus has a community-documented minimum distance between scan sites. Active scan rings use a solid border with a colour-matched diagonal hatch fill. Completed rings use a faint dashed border only. Examples: Bacterium = 500m, Osseus = 800m, Tubus = 800m, Aleoida = 150m.
@@ -416,7 +379,7 @@ Uses polling instead of `FileSystemWatcher` for `Status.json` to avoid conflicts
 A `FileSystemWatcher` is used exclusively to detect when Elite Dangerous creates a new `Journal.*.log` file. When a new journal is detected, the app waits 1.5 seconds for the game to finish writing the file header, then automatically triggers a full state refresh — the same operation as clicking the ⟳ Refresh button manually.
 
 ### Log Snapshots
-Each time the ⟳ Refresh button is clicked, the app saves a timestamped copy of the current diagnostic log to the app folder before wiping and rebuilding state. The snapshot filename follows the format `EliteBioRadar_YYYY-MM-DD_HH-MM-SS.log`. This preserves a point-in-time record of what the app saw before the refresh, which is useful for diagnosing journal-switch issues. Snapshots accumulate in the app folder and can be safely deleted at any time.
+Each time the ⟳ Refresh button is clicked, the app saves a timestamped copy of the current diagnostic log to the app folder before wiping and rebuilding state. The snapshot filename follows the format `EliteBioRadar_YYYY-MM-DD_HH-MM-SS.log`. Snapshots accumulate in the app folder and can be safely deleted at any time.
 
 ### Single instance
 A named system mutex prevents more than one instance of the app from running simultaneously, protecting the cache file from concurrent write conflicts.
@@ -431,11 +394,12 @@ These files are created next to the exe and are excluded from the repository:
 |---|---|
 | `EliteBioRadar.cache.json` | Scan location and body metadata cache |
 | `EliteBioRadar.settings.json` | Saved app settings, including window position and size |
-| `EliteBioRadar.earnings.json` | Persistent earnings history |
+| `EliteBioRadar.earnings.json` | Persistent lifetime earnings history |
+| `EliteBioRadar.trip.json` | Persistent trip-value total (System Scan's Trip Scans bar), independent of lifetime Earnings |
 | `EliteBioRadar.regions.json` | System-to-galactic-region lookup cache, used by the Scan Log's Region grouping |
 | `EliteBioRadar.route.json` | Persisted full plotted route (DESTINATION tab), so hop count/progress survive an app or game restart mid-route |
 | `EliteBioRadar.log` | Diagnostic log (overwritten each launch) |
-| `EliteBioRadar_YYYY-MM-DD_HH-MM-SS.log` | Timestamped log snapshot — created automatically each time the ⟳ Refresh button is clicked, capturing state at the moment of refresh |
+| `EliteBioRadar_YYYY-MM-DD_HH-MM-SS.log` | Timestamped log snapshot — created automatically each time the ⟳ Refresh button is clicked |
 
 ---
 

@@ -74,7 +74,7 @@ namespace EliteBioRadar
             try
             {
                 var json = JsonConvert.SerializeObject(_data, Formatting.Indented);
-                File.WriteAllText(_path, json);
+                AtomicFile.WriteAllText(_path, json);
             }
             catch (Exception ex) { Log.Write($"EarningsTracker.Save error: {ex.Message}"); }
         }

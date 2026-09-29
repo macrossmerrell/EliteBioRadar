@@ -118,7 +118,7 @@ namespace EliteBioRadar
         private static void WriteAll(Dictionary<string, string> data)
         {
             var json = JsonConvert.SerializeObject(data, Formatting.Indented);
-            File.WriteAllText(_path, json);
+            AtomicFile.WriteAllText(_path, json);
         }
     }
 }

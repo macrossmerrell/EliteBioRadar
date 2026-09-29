@@ -524,11 +524,15 @@ namespace EliteBioRadar
         private void DrawText(double x, double y, string text, double size,
                               Color col, bool bold = false)
         {
+            // Was plain Consolas — first tab to pick up the app-wide embedded JetBrains Mono
+            // swap. TrackLight (a hair space between letters, not the gas-giant HUD's full thin
+            // space) keeps the same tracked-out look without the extra width breaking layout —
+            // radar labels sit right up against a moving dot/ring, not in a spacious stat column.
             var tb = new TextBlock
             {
-                Text       = text,
+                Text       = AppFonts.TrackLight(text),
                 Foreground = new SolidColorBrush(col),
-                FontFamily = new FontFamily("Consolas"),
+                FontFamily = AppFonts.Mono,
                 FontSize   = size,
                 FontWeight = bold ? FontWeights.Bold : FontWeights.Normal,
             };

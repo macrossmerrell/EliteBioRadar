@@ -58,6 +58,11 @@ namespace EliteBioRadar
         // whatever in-system target happens to be more "recent" by timestamp. Supercruise
         // (boosted or not) never sets this.
         public bool             IsChargingJump        { get; private set; }
+        // Armed by the FSDJump handler, cleared once Status.json's charging flag has been seen
+        // false (or after a few seconds) — see the ReadStatus comment where it's consumed.
+        private volatile bool   _chargeFlagStaleSinceArrival;
+        private DateTime        _chargeStaleSetAtUtc;
+        private bool            _loggedStaleChargeSuppress;
 
         // Assigns (and remembers) a random belt art variant (1-5) for this body name, so the
         // same belt keeps the same look for as long as it's targeted this session.
@@ -125,6 +130,18 @@ namespace EliteBioRadar
         public string DisplayedBody  { get; private set; } = "";
         public event EventHandler? PlanetListChanged;
         public string StarSystem        { get; private set; } = "";
+        // Current ship's numeric ShipID, from the most recent Loadout/LoadGame event — tracked
+        // purely so it can be injected as EDSM's "_shipId" transient field on every outgoing
+        // upload (see EdsmService). EDSM's own journal API falls back to server-side session
+        // state to attribute a traffic-log entry's ship when a submission doesn't carry this,
+        // and that fallback proved unreliable (confirmed via a real report: ship showed as the
+        // default Sidewinder on EDSM despite Loadout/LoadGame both carrying the correct ship) —
+        // matches EDMC's own approach of always sending this itself rather than relying on that.
+        public long?  CurrentShipId     { get; private set; } = null;
+        // Real per-system population from FSDJump/Location's own "Population" field — used by
+        // the Earthlike renderer to gate city lights (only inhabited systems would show any),
+        // not tracked anywhere else in the app before now.
+        public long   SystemPopulation  { get; private set; } = 0;
         public string CachedBodyName    { get; private set; } = "";
         public bool   WasFootfalled     { get; private set; } = false;
         // Tracks bodies confirmed (via a Scan event) to have WasFootfalled=false and not yet
@@ -147,6 +164,12 @@ namespace EliteBioRadar
         // never let an older file's Log event remove dots placed by the newer file.
         private bool _backfillIsLatestFile = false;
         private string _backfillLastIncompleteGenus = "";
+        // Per-genus position in the Log→Sample→Sample sequence as REPLAYED from the journal
+        // (Log=1, first Sample=2, second Sample=3). Backfill used to infer a Sample's number
+        // from how many dots were already in memory, so replaying the journal onto dots that
+        // were already there (app kept running through a game crash, or a cache reload) turned
+        // the real 2nd sample into a phantom 3rd.
+        private readonly Dictionary<string, int> _backfillSampleSeq = new(StringComparer.OrdinalIgnoreCase);
 
         private readonly object _planetLock = new();
 
@@ -211,6 +234,7 @@ namespace EliteBioRadar
             {
                 SystemBioPlanets.Clear();
                 SystemGeoPlanets.Clear();
+                SystemMiningPlanets.Clear();
             }
             lock (_bodyBioSignals)
                 _bodyBioSignals.Clear();
@@ -219,9 +243,6 @@ namespace EliteBioRadar
             // runs BackfillJournal again — exactly as it does on first startup
             _currentJournalFile = "";
             _journalPosition    = 0;
-
-            // Reset status cache so Status.json is re-read immediately
-            _lastStatusModified = DateTime.MinValue;
 
             // Reset the statusReady signal so the journal loop waits for a
             // fresh position fix before proceeding, just like on first start
@@ -254,6 +275,34 @@ namespace EliteBioRadar
         public int    GeologyCount  { get; private set; }
         public string TargetedBody  { get; private set; } = "";
         public int    TargetedBodyBioCount { get; private set; }
+        // Non-empty while the nav-panel target is a surface signal (e.g. a Planetary Mining
+        // Location Signal), not a real body — e.g. "Mining Location Signal (13)". See the
+        // Destination-parsing block below for how this is resolved. Cleared once the target
+        // goes back to a real body or is cleared entirely.
+        public string TargetedSignalLabel { get; private set; } = "";
+
+        // Nav-panel signal targets never carry a usable body NAME — Destination.Name is
+        // something like "$SAA_Unknown_Signal:#type=$PlanetaryMiningLocation_Name;:#index=13;",
+        // which matches no real body. Destination.Body is the numeric BodyID of the signal's
+        // PARENT planet, which IS resolvable. Real report: selecting a mining signal made the
+        // radar jump to the primary star, because the old code fed that raw signal string
+        // through as if it were a body name and nothing matched it.
+        private static readonly System.Text.RegularExpressions.Regex SignalDestinationRegex =
+            new(@"\$SAA_Unknown_Signal:#type=\$(\w+)_Name;(?:#index=(\d+);)?", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        // Known internal type names -> the label shown on the Planet tab. Anything not in this
+        // list still gets a readable fallback (split on internal capitalization) rather than
+        // showing the raw "$PlanetaryMiningLocation_Name;"-style string.
+        private static readonly Dictionary<string, string> SignalTypeNames = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["PlanetaryMiningLocation"] = "Mining Location Signal",
+        };
+        private static string FormatSignalLabel(string internalType, string index)
+        {
+            if (!SignalTypeNames.TryGetValue(internalType, out var label))
+                label = System.Text.RegularExpressions.Regex.Replace(internalType, "(?<!^)([A-Z])", " $1") + " Signal";
+            return string.IsNullOrEmpty(index) ? label : $"{label} ({index})";
+        }
 
         // Per-body biology signal counts for current system — populated from FSS/DSS scans
         // Key = short body name (e.g. "5 c"), Value = (BioCount, BodyName full)
@@ -273,8 +322,28 @@ namespace EliteBioRadar
             public int    DiscoveredCount { get; set; } // unique CodexEntry types found
         }
 
+        // Same shape as PlanetGeoInfo, minus DiscoveredCount — there's no confirmed per-instance
+        // discovery event for a mining location yet (nobody's actually visited one to capture
+        // journal data from it), so unlike geo sites this list can never show "all found" greyed
+        // out, only the raw orbital-scan count.
+        public class PlanetMiningInfo
+        {
+            public string FullBodyName { get; set; } = "";
+            public string ShortName    { get; set; } = "";
+            public int    MiningCount  { get; set; }
+        }
+
         public readonly List<PlanetBioInfo> SystemBioPlanets = new();
         public readonly List<PlanetGeoInfo> SystemGeoPlanets = new();
+        public readonly List<PlanetMiningInfo> SystemMiningPlanets = new();
+
+        // Ring hotspot signals, keyed by the ring's own BodyName (e.g. "...2 A Ring") — a
+        // distinct signal shape from Bio/Geo/Mining (Type is the raw material name itself, not
+        // a localised signal-type key). Confirmed against real 2024 journal data, so this has
+        // existed far longer than the new planetary mining signal; the app just hasn't parsed it
+        // until now. Live-session-only, same as _bodyScanDetails.
+        public readonly Dictionary<string, List<RingHotspotSignal>> RingHotspots =
+            new Dictionary<string, List<RingHotspotSignal>>(StringComparer.OrdinalIgnoreCase);
 
         private readonly Dictionary<string, int> _bodyBioSignals =
             new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -283,6 +352,12 @@ namespace EliteBioRadar
         // not persisted (see plan: this data is intentionally not written to ScanCache).
         private readonly Dictionary<string, BodyScanDetail> _bodyScanDetails =
             new Dictionary<string, BodyScanDetail>(StringComparer.OrdinalIgnoreCase);
+        // FSS Scanner tab: total bodies in the current system (from FSSDiscoveryScan, the
+        // "honk") and every body resolved so far, in resolution order. Both reset on a real
+        // system change (FSDJump), same lifetime as _bodyScanDetails.
+        public int SystemBodyCount { get; private set; }
+        private readonly List<string> _resolvedBodiesOrder = new();
+        public IReadOnlyList<string> ResolvedBodiesOrder => _resolvedBodiesOrder;
         // Scan detail for every body (star OR planet) seen this session, keyed by full body
         // name — unlike _bodyScanDetails this is NEVER cleared on a system change. Frontier only
         // fires the automatic arrival "Scan" event (and re-fires per-planet Scan/FSS events) the
@@ -303,6 +378,59 @@ namespace EliteBioRadar
             if (_bodyScanDetails.TryGetValue(bodyName, out var d)) return d;
             return _sessionBodyDetails.TryGetValue(bodyName, out var sd) ? sd : null;
         }
+        // Public passthrough — the DEORBIT screen needs the gravity/atmosphere of whatever
+        // body Status.json's BodyName names mid-glide (not necessarily CurrentBody, since
+        // you haven't landed yet) or the FSS Scanner needs a specific resolved body's detail.
+        public BodyScanDetail? GetKnownBodyDetail(string bodyName) => GetBodyDetail(bodyName);
+
+        // For the System Scan window — every locally-known detail for the CURRENT system only
+        // (_bodyScanDetails already clears on a real system change, so no name-prefix filtering
+        // needed). A defensive copy: the window builds its own snapshot rather than holding a
+        // live reference into state this service keeps mutating.
+        public List<BodyScanDetail> GetCurrentSystemBodyDetails() => _bodyScanDetails.Values.ToList();
+
+        // A "Belt Cluster" body's own Scan event carries almost nothing (BodyName/BodyID/
+        // Parents/SemiMajorAxis at most — no RingClass, no composition) — that real data lives
+        // on the parent RING's own entry instead, inside whichever star/planet it orbits' own
+        // Rings list, under the ring's real Name (e.g. "Sol A Belt"). A cluster's own name is
+        // always "<that ring name> Cluster <N>", so stripping the " Cluster N" suffix recovers
+        // the exact ring name to search for.
+        private static readonly System.Text.RegularExpressions.Regex BeltClusterSuffix =
+            new(@" Cluster \d+$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        public static string GetBeltRingName(string beltClusterBodyName) => BeltClusterSuffix.Replace(beltClusterBodyName, "");
+
+        // Real ring class (Icy/Rocky/Metallic/MetalRich, exact in-game spelling) for a belt
+        // cluster's parent ring, found by searching every known body's own Rings list for a
+        // name match — checks the current system first, then the never-cleared session cache
+        // so a revisited system's belts still resolve.
+        public string? GetBeltRingClass(string beltClusterBodyName)
+        {
+            var ringName = GetBeltRingName(beltClusterBodyName);
+            string? Search(Dictionary<string, BodyScanDetail> details) => details.Values
+                .SelectMany(d => d.Rings)
+                .FirstOrDefault(r => string.Equals(r.Name, ringName, StringComparison.OrdinalIgnoreCase))?.RingClass;
+            return Search(_bodyScanDetails) ?? Search(_sessionBodyDetails);
+        }
+
+        // Real distance from the star (metres) for the RING a belt cluster belongs to — for the
+        // System Scan window's ordering. A belt cluster's own SemiMajorAxis (from its own Scan
+        // event) turned out NOT to be a reliable real distance-from-star for this purpose (a
+        // real screenshot showed belts sorting to the very end despite genuinely being closest
+        // to the star) — same root-cause pattern already documented elsewhere in this file for
+        // co-orbital clusters: a cluster's own reported position is relative to its LOCAL
+        // grouping, not the star. The parent ring's own InnerRad, from the star/planet's own
+        // Rings list, is real orbital data actually measured from the star and doesn't have
+        // that problem.
+        public double? GetBeltRingInnerRadius(string beltClusterBodyName)
+        {
+            var ringName = GetBeltRingName(beltClusterBodyName);
+            double? Search(Dictionary<string, BodyScanDetail> details) => details.Values
+                .SelectMany(d => d.Rings)
+                .FirstOrDefault(r => string.Equals(r.Name, ringName, StringComparison.OrdinalIgnoreCase))?.InnerRad;
+            return Search(_bodyScanDetails) ?? Search(_sessionBodyDetails);
+        }
+
         // Random asteroid-belt art variant (1-5), assigned once per body the first time it's
         // looked up and kept for as long as that belt stays targeted — cleared alongside
         // _bodyScanDetails on a real system change so a new belt gets a fresh roll.
@@ -324,10 +452,17 @@ namespace EliteBioRadar
         private readonly string _journalDir;
         private readonly string _statusFile;
         private readonly string _navRouteFile;
+        private string? _lastNavRouteJson;
         private string _currentJournalFile = "";
         private long   _journalPosition;
-        private DateTime _lastStatusModified = DateTime.MinValue;
-        private DateTime _lastNavRouteModified = DateTime.MinValue;
+        private int _lastLoggedGuiFocus = 0;
+        // Captured from each journal file's own "Fileheader" line (game version/build) — EDSM's
+        // journal API rejects every submission with msgnum 207 ("Game/Build version not found")
+        // without these attached, so they need to be known before the first live upload of the
+        // session. Captured during backfill too (Fileheader appears once per file, replayed or
+        // not) so they're already set by the time the first real live event fires.
+        private string _gameVersion = "";
+        private string _gameBuild   = "";
         private readonly CancellationTokenSource _cts = new();
 
         // The route's full history/total, persisted via RouteCache so it survives an app or
@@ -401,7 +536,7 @@ namespace EliteBioRadar
             try
             {
                 var recentJournals = Directory.GetFiles(_journalDir, "Journal.*.log")
-                    .OrderByDescending(f => f).Take(10).ToArray();
+                    .OrderByJournalDateDescending().Take(10).ToArray();
                 foreach (var jf in recentJournals)
                 {
                     var lines = SafeReadAllLines(jf);
@@ -467,30 +602,37 @@ namespace EliteBioRadar
             {
                 try
                 {
+                    // Always re-read Status.json rather than gating on a changed
+                    // File.GetLastWriteTimeUtc — that static, path-based overload is a known
+                    // .NET/Windows footgun: it can cache file-attribute data internally per
+                    // process and keep returning the SAME stale timestamp for the rest of the
+                    // process's life even while the file is actively being rewritten. That
+                    // silently froze CurrentStatus at whatever it read on the very first poll —
+                    // a real captured symptom: the app stayed stuck on the Deorbit screen
+                    // indefinitely after the player left the body, because HasPosition never
+                    // updated again for the rest of the session. The file is tiny and this
+                    // parses in microseconds, so reading it unconditionally every 30ms tick
+                    // costs nothing and removes the whole failure mode.
                     if (File.Exists(_statusFile))
                     {
-                        var modified = File.GetLastWriteTimeUtc(_statusFile);
-                        if (modified != _lastStatusModified)
+                        ReadStatus();
+                        // Signal journal loop that we have a valid status reading
+                        if (CurrentStatus.HasPosition && !_statusReady.IsSet)
                         {
-                            _lastStatusModified = modified;
-                            ReadStatus();
-                            // Signal journal loop that we have a valid status reading
-                            if (CurrentStatus.HasPosition && !_statusReady.IsSet)
-                            {
-                                Log.Write("StatusPollLoop: position confirmed, signalling journal loop");
-                                _statusReady.Set();
-                            }
+                            Log.Write("StatusPollLoop: position confirmed, signalling journal loop");
+                            _statusReady.Set();
                         }
                     }
+                    // Same footgun as Status.json above, same fix: the static path-based
+                    // File.GetLastWriteTimeUtc overload this used to gate on can cache a file's
+                    // attribute data internally per process and keep returning the SAME stale
+                    // timestamp for the rest of the process's life even while NavRoute.json is
+                    // actively being rewritten — which silently froze LoadNavRoute() from ever
+                    // running again after its first read, leaving REMAINING DIST stuck at the
+                    // route's original total forever. The file is tiny, so just re-read it
+                    // unconditionally every tick.
                     if (File.Exists(_navRouteFile))
-                    {
-                        var navModified = File.GetLastWriteTimeUtc(_navRouteFile);
-                        if (navModified != _lastNavRouteModified)
-                        {
-                            _lastNavRouteModified = navModified;
-                            LoadNavRoute();
-                        }
-                    }
+                        LoadNavRoute();
                 }
                 catch { }
                 Thread.Sleep(30);
@@ -585,7 +727,22 @@ namespace EliteBioRadar
                     PlanetRadius = obj.Value<double?>("PlanetRadius") ?? 0,
                     FuelMain      = fuelObj?.Value<double?>("FuelMain")      ?? 0,
                     FuelReservoir = fuelObj?.Value<double?>("FuelReservoir") ?? 0,
+                    GuiFocus      = (int)(obj.Value<long?>("GuiFocus") ?? -1),
                 };
+
+                // GuiFocus 9 is our best-effort read of "FSS scanner has focus" — not
+                // independently confirmed against a real capture the way IsGliding was.
+                // Log every distinct non-zero value so the first real FSS session can
+                // confirm or correct it.
+                if (status.GuiFocus != 0 && status.GuiFocus != _lastLoggedGuiFocus)
+                {
+                    Log.Write($"ReadStatus: GuiFocus={status.GuiFocus}");
+                    _lastLoggedGuiFocus = status.GuiFocus;
+                }
+                else if (status.GuiFocus == 0)
+                {
+                    _lastLoggedGuiFocus = 0;
+                }
 
                 CurrentStatus = status;
                 if (CurrentDestination != null)
@@ -599,8 +756,35 @@ namespace EliteBioRadar
                 // relying solely on the journal's "StartJump" event — that journal write can lag
                 // or occasionally not land promptly, while Status.json is polled every tick and
                 // reflects the charge the moment it starts (and clears the moment it stops).
+                // Real report: after a completed jump the panel often stayed on Destination
+                // instead of switching to Star, and only a restart fixed it. Status.json is
+                // polled independently of the journal, so right after the FSDJump line (which
+                // sets IsChargingJump = false) a poll can still read the OLD charging flag for a
+                // moment. That looked like a brand-new charge starting: it re-armed
+                // IsChargingJump AND stamped FsdTargetedAt with "now" — a time later than the
+                // arrival — so the "was the next hop targeted after arrival" check
+                // (MainWindow.ComputeMode's hasDestTarget) stayed true even after the flag
+                // dropped, pinning the panel on Destination. A restart rebuilds these from the
+                // journal's own timestamps, which is why it always came back correct. After an
+                // arrival, don't trust "charging" until the flag has been seen false once (or
+                // enough time has passed that it can only be a genuine new charge).
+                bool rawCharging = status.FsdHyperdriveCharging;
+                if (_chargeFlagStaleSinceArrival)
+                {
+                    if (!rawCharging || (DateTime.UtcNow - _chargeStaleSetAtUtc).TotalSeconds > 6)
+                        _chargeFlagStaleSinceArrival = false;
+                    else
+                    {
+                        rawCharging = false;
+                        if (!_loggedStaleChargeSuppress)
+                        {
+                            _loggedStaleChargeSuppress = true;
+                            Log.Write("ReadStatus: ignoring lingering FsdHyperdriveCharging flag right after arrival (stale, not a new charge)");
+                        }
+                    }
+                }
                 bool wasChargingJump = IsChargingJump;
-                IsChargingJump = status.FsdHyperdriveCharging;
+                IsChargingJump = rawCharging;
                 if (IsChargingJump && !wasChargingJump)
                 {
                     FsdTargetedAt = DateTime.UtcNow;
@@ -616,6 +800,41 @@ namespace EliteBioRadar
                 if (destObj != null)
                 {
                     var destName = destObj.Value<string>("Name") ?? "";
+
+                    // Resolve a signal target to its real parent body BEFORE anything below
+                    // treats destName as a body name — see SignalDestinationRegex/
+                    // TargetedSignalLabel. Only the surface-mining case gets its own dedicated
+                    // image (MainWindow's RenderSignalTargetPanel); any other signal type still
+                    // benefits from this fix (no more falling back to the star), just without
+                    // the special illustration.
+                    string newSignalLabel = "";
+                    var sigMatch = SignalDestinationRegex.Match(destName);
+                    if (sigMatch.Success)
+                    {
+                        var bodyId = destObj.Value<int?>("Body");
+                        var parentBody = bodyId.HasValue
+                            ? _bodyScanDetails.Values.FirstOrDefault(b => b.BodyID == bodyId.Value)
+                            : null;
+                        if (parentBody != null)
+                        {
+                            newSignalLabel = FormatSignalLabel(sigMatch.Groups[1].Value, sigMatch.Groups[2].Value);
+                            destName = parentBody.BodyName;
+                        }
+                        else
+                        {
+                            // Parent not resolved yet (rare — usually already scanned by the time
+                            // its signals are visible in the nav panel). Leave destName as-is;
+                            // downstream lookups will simply find nothing, same as before this
+                            // fix, rather than guessing.
+                            Log.Write($"Destination: signal target's parent BodyID={bodyId} not yet known — can't resolve");
+                        }
+                    }
+                    if (newSignalLabel != TargetedSignalLabel)
+                    {
+                        TargetedSignalLabel = newSignalLabel;
+                        PlanetTargetUpdated?.Invoke(this, EventArgs.Empty);
+                    }
+
                     if (!string.IsNullOrEmpty(destName))
                     {
                         bool nameChanged = destName != TargetedBody;
@@ -702,6 +921,7 @@ namespace EliteBioRadar
                         // Destination block present but empty — target was cleared
                         TargetedBody = "";
                         TargetedBodyBioCount = 0;
+                        TargetedSignalLabel = "";
                         PlanetTargetedAt = DateTime.UtcNow;
                         PlanetTargetUpdated?.Invoke(this, EventArgs.Empty);
                     }
@@ -711,6 +931,7 @@ namespace EliteBioRadar
                     // No Destination block at all — target was cleared
                     TargetedBody = "";
                     TargetedBodyBioCount = 0;
+                    TargetedSignalLabel = "";
                     PlanetTargetedAt = DateTime.UtcNow;
                     PlanetTargetUpdated?.Invoke(this, EventArgs.Empty);
                 }
@@ -804,6 +1025,21 @@ namespace EliteBioRadar
 
                 if (string.IsNullOrWhiteSpace(json)) return;
 
+                // Re-read unconditionally every poll tick now (see the stale-mtime footgun
+                // comment at the call site), but only actually do anything below when the raw
+                // content has genuinely changed — DestinationUpdated firing 30ms/tick regardless
+                // was resetting the Destination tab's manual mode override (see MainWindow's
+                // DestinationUpdated handler) on every single tick, which made clicking any tab
+                // (Radar/Star/Planet/Destination) instantly snap back to the auto-selected one.
+                // _lastNavRouteJson is only committed once ALL of the processing below has
+                // actually succeeded (see the end of the try block) — committing it here first
+                // meant any exception partway through processing (EnsureRouteState, hop parsing,
+                // etc.) left CurrentDestination stuck half-updated while this same unchanged
+                // file content got silently skipped on every single tick afterward forever, with
+                // no way to ever retry: a real captured symptom, the whole Destination tab
+                // going permanently blank ("route is still set in game") after one bad tick.
+                if (json == _lastNavRouteJson) return;
+
                 var obj = JObject.Parse(json);
                 var route = obj["Route"];
                 if (route == null) return;
@@ -831,8 +1067,10 @@ namespace EliteBioRadar
 
                 CurrentDestination ??= new DestinationInfo();
                 CurrentDestination.Hops = hops;
-                CurrentDestination.RemainingDistanceLy = hops.Sum(h => h.DistanceFromPrevLy);
+                // RemainingDistanceLy is set inside EnsureRouteState instead, anchored off the
+                // same "current position" logic as RemainingJumpsInRoute — see its comment.
                 EnsureRouteState(CurrentDestination, hops);
+                _lastNavRouteJson = json;
                 DestinationUpdated?.Invoke(this, EventArgs.Empty);
             }
             catch (Exception ex) { Log.Write($"LoadNavRoute error: {ex.Message}"); }
@@ -856,28 +1094,73 @@ namespace EliteBioRadar
             _routeCache ??= RouteCache.Load();
 
             var finalHop = currentHops[^1];
-            bool sameRoute = _routeCache != null &&
+            bool sameDestination = _routeCache != null &&
                 _routeCache.FinalDestinationAddress != 0 &&
                 _routeCache.FinalDestinationAddress == finalHop.SystemAddress;
 
+            // Same final destination alone isn't proof it's still the same PLOTTED PATH — a
+            // mid-route re-plot to the same endpoint (a normal recalibration after a game
+            // restart, a new FSD, or just re-optimizing) can produce a genuinely different
+            // path, which the final-destination-only check above can't tell apart from "same
+            // route, just further along" since it never inspects the hops in between. Verify
+            // currentHops is an actual contiguous SUFFIX of the cached route (every system,
+            // same order, from wherever it starts in the cache) before trusting it as-is.
+            bool samePath = false;
+            int startIdx = -1;
+            if (sameDestination)
+            {
+                startIdx = _routeCache!.KnownHops.FindIndex(h => h.SystemAddress == currentHops[0].SystemAddress);
+                samePath = startIdx >= 0 && _routeCache.KnownHops.Count - startIdx == currentHops.Count;
+                for (int i = 0; samePath && i < currentHops.Count; i++)
+                    if (_routeCache.KnownHops[startIdx + i].SystemAddress != currentHops[i].SystemAddress)
+                        samePath = false;
+            }
+
             // New route (or nothing cached yet), or the cache is somehow shorter than what's
             // currently visible (shouldn't normally happen — remaining only ever shrinks for
-            // the same route — but if it does, this snapshot is the fullest picture we have).
-            if (!sameRoute || currentHops.Count > _routeCache!.KnownHops.Count)
+            // the same path — but if it does, this snapshot is the fullest picture we have).
+            if (!samePath || currentHops.Count > _routeCache!.KnownHops.Count)
             {
+                // Real report: without this, a mid-journey re-plot (13 real jumps already
+                // flown, toward the SAME final destination) reset progress to "hop 1" (~1%)
+                // instead of the correct ~15% (13 of ~85 jumps) — the old leg's own history
+                // was simply discarded the moment the remaining path stopped matching
+                // hop-for-hop. Hops/Ly already completed toward THIS SAME destination carry
+                // forward into the new leg's own baseline; only an actual destination change
+                // (sameDestination false) starts the count over, per direct feedback that an
+                // automatic recalibration should never lose progress, only a real new trip
+                // should reset it.
+                int carriedHops = 0; double carriedLy = 0;
+                if (sameDestination && startIdx >= 0)
+                {
+                    carriedHops = _routeCache!.HopsCompleted + startIdx;
+                    carriedLy   = _routeCache.LyCompleted + _routeCache.KnownHops.Take(startIdx + 1).Sum(h => h.DistanceFromPrevLy);
+                }
+                else if (sameDestination)
+                {
+                    // Same destination but current position isn't found anywhere in the old
+                    // cached path at all (e.g. a real detour) — can't say how much of THAT
+                    // cache was completed, so just keep whatever was already known rather
+                    // than guessing or discarding it.
+                    carriedHops = _routeCache!.HopsCompleted;
+                    carriedLy   = _routeCache.LyCompleted;
+                }
+
                 _routeCache = new RouteCacheData
                 {
                     FinalDestinationAddress = finalHop.SystemAddress,
                     FinalDestinationName    = finalHop.StarSystem,
                     KnownHops               = currentHops.Select(CloneHop).ToList(),
                     TotalRouteLy            = currentHops.Sum(h => h.DistanceFromPrevLy),
+                    HopsCompleted           = carriedHops,
+                    LyCompleted             = carriedLy,
                 };
                 RouteCache.Save(_routeCache);
             }
 
             dest.FullRouteHops = _routeCache.KnownHops;
-            dest.TotalRouteJumps = _routeCache.KnownHops.Count;
-            dest.TotalRouteLy    = _routeCache.TotalRouteLy;
+            dest.TotalRouteJumps = _routeCache.KnownHops.Count + _routeCache.HopsCompleted;
+            dest.TotalRouteLy    = _routeCache.TotalRouteLy + _routeCache.LyCompleted;
             // Anchor off dest.NextSystem (set directly from the FSDTarget journal event, so it's
             // never stale) against the stable, never-shrinking FullRouteHops cache — this is the
             // exact same list the hop-list UI draws and highlights "next" from, so RemainingJumpsInRoute
@@ -891,15 +1174,31 @@ namespace EliteBioRadar
             int nextIdx = !string.IsNullOrEmpty(dest.NextSystem)
                 ? dest.FullRouteHops.FindIndex(h => string.Equals(h.StarSystem, dest.NextSystem, StringComparison.OrdinalIgnoreCase))
                 : -1;
+            // RemainingDistanceLy used to just be the raw file's own hop list summed top to
+            // bottom (in LoadNavRoute) — correct in theory ("current position onward") but that
+            // premise is exactly what the comment above already found false for a long auto-
+            // plotted route: the file can sit unchanged for several real jumps while StarSystem
+            // keeps advancing, so that sum kept including hops already passed and read as stuck
+            // at the full route's total. Anchoring off the same nextIdx used for
+            // RemainingJumpsInRoute (dest.NextSystem against the stable FullRouteHops cache)
+            // instead means it shrinks in lockstep with the hop counter and the hop-list UI.
             if (nextIdx > 0)
             {
-                dest.RemainingJumpsInRoute = dest.TotalRouteJumps - nextIdx;
+                // Against FullRouteHops.Count (the CURRENT leg only), not dest.TotalRouteJumps
+                // — that now also carries forward hops completed in EARLIER legs (see above),
+                // which "remaining" must never count against, or it'd overshoot by however
+                // many hops were carried in.
+                dest.RemainingJumpsInRoute = dest.FullRouteHops.Count - nextIdx;
+                dest.RemainingDistanceLy = dest.FullRouteHops.Skip(nextIdx).Sum(h => h.DistanceFromPrevLy);
             }
             else
             {
                 int currentIdx = currentHops.FindIndex(h => string.Equals(h.StarSystem, StarSystem, StringComparison.OrdinalIgnoreCase));
                 if (currentIdx >= 0)
+                {
                     dest.RemainingJumpsInRoute = currentHops.Count - 1 - currentIdx;
+                    dest.RemainingDistanceLy = currentHops.Skip(currentIdx + 1).Sum(h => h.DistanceFromPrevLy);
+                }
             }
         }
 
@@ -1054,7 +1353,7 @@ namespace EliteBioRadar
 
         // Shared star/planet field extraction for a "Scan" event — used both by the live
         // dispatcher (ProcessJournalLine) and by BackfillInfoPanelState's historical replay.
-        private static BodyScanDetail ParseBodyScanDetail(JObject obj, string bodyName, bool isStar)
+        internal static BodyScanDetail ParseBodyScanDetail(JObject obj, string bodyName, bool isStar)
         {
             var detail = new BodyScanDetail
             {
@@ -1063,7 +1362,49 @@ namespace EliteBioRadar
                 IsBelt             = bodyName.Contains("Belt Cluster", StringComparison.OrdinalIgnoreCase),
                 ScanType           = obj.Value<string>("ScanType") ?? "",
                 SurfaceTemperature = obj.Value<double?>("SurfaceTemperature") ?? 0,
+                SemiMajorAxis      = obj.Value<double?>("SemiMajorAxis") ?? 0,
+                BodyID             = obj.Value<int?>("BodyID") ?? -1,
+                WasDiscovered      = obj.Value<bool?>("WasDiscovered"),
+                WasMapped          = obj.Value<bool?>("WasMapped"),
             };
+
+            // Parents[0] is USUALLY the immediate parent — {"Star":N} for a planet orbiting the
+            // star directly, {"Planet":N} for a moon orbiting another planet — but a co-orbital
+            // moon cluster (siblings sharing a barycenter, e.g. real journal data for
+            // "...1 f"/"...1 g") inserts a {"Null":N} placeholder entry ahead of it instead:
+            // Parents:[{"Null":14},{"Planet":7},{"Star":0}]. Taking only Parents[0] then missed
+            // the real Planet parent entirely, defaulted ParentBodyID/IsMoon to "not a moon", and
+            // let that body's tiny distance-from-its-actual-parent SemiMajorAxis get compared
+            // directly against real planets' distance-from-star (confirmed root cause of the FSS
+            // Scanner manifest sorting bodies like "6 f"/"6 g" ahead of "1"/"2" — those tiny
+            // values look like the closest thing to the star). Walk the array instead, skipping
+            // any non-Planet/non-Star (e.g. Null/Ring) entries, and use the first real one found.
+            var parentsArr = obj["Parents"];
+            if (parentsArr != null)
+            {
+                foreach (var p in parentsArr)
+                {
+                    if (p is not JObject po) continue;
+                    // A Null seen before the real parent is the barycenter this body shares with
+                    // its co-orbiting siblings (first one only — later Nulls are further up the tree).
+                    var baryId = po.Value<int?>("Null");
+                    if (baryId.HasValue && detail.BarycenterID < 0) detail.BarycenterID = baryId.Value;
+                    var planetParent = po.Value<int?>("Planet");
+                    if (planetParent.HasValue)
+                    {
+                        detail.ParentBodyID = planetParent.Value;
+                        detail.IsMoon = true;
+                        break;
+                    }
+                    var starParent = po.Value<int?>("Star");
+                    if (starParent.HasValue)
+                    {
+                        detail.ParentBodyID = starParent.Value;
+                        break;
+                    }
+                    // Null/Ring/etc — not a real parent, keep scanning.
+                }
+            }
 
             if (isStar)
             {
@@ -1079,6 +1420,7 @@ namespace EliteBioRadar
             else
             {
                 detail.PlanetClass    = obj.Value<string>("PlanetClass") ?? "";
+                detail.Radius         = obj.Value<double?>("Radius") ?? 0;
                 detail.AtmosphereType = obj.Value<string>("AtmosphereType") ?? "None";
                 detail.Volcanism      = obj.Value<string>("Volcanism") ?? "";
                 detail.SurfaceGravity  = obj.Value<double?>("SurfaceGravity") ?? 0;
@@ -1086,6 +1428,7 @@ namespace EliteBioRadar
                 detail.TidalLock      = obj.Value<bool?>("TidalLock") ?? false;
                 detail.TerraformState = obj.Value<string>("TerraformState") ?? "";
                 detail.Landable       = obj.Value<bool?>("Landable") ?? false;
+                detail.MassEM         = obj.Value<double?>("MassEM") ?? 0;
                 var comp = obj["Composition"];
                 if (comp != null)
                 {
@@ -1093,6 +1436,29 @@ namespace EliteBioRadar
                     detail.RockComposition  = comp.Value<double?>("Rock")  ?? 0;
                     detail.MetalComposition = comp.Value<double?>("Metal") ?? 0;
                 }
+
+                // Gas giants have no discrete AtmosphereType at all (confirmed against real
+                // scan data), only this list — without parsing it there was simply no real
+                // atmosphere data available for them, and it silently showed "None" even on a
+                // real, thick hydrogen/helium atmosphere.
+                var atmoComp = obj["AtmosphereComposition"];
+                if (atmoComp != null)
+                    foreach (var g in atmoComp)
+                    {
+                        var name = g.Value<string>("Name") ?? "";
+                        if (string.IsNullOrEmpty(name)) continue;
+                        detail.AtmosphereComposition.Add((name, g.Value<double?>("Percent") ?? 0));
+                    }
+
+                // Only present when Landable — drives the terrain renderer's real surface tint.
+                var materialsArr = obj["Materials"];
+                if (materialsArr != null)
+                    foreach (var m in materialsArr)
+                    {
+                        var name = m.Value<string>("Name") ?? "";
+                        if (string.IsNullOrEmpty(name)) continue;
+                        detail.Materials.Add((name, m.Value<double?>("Percent") ?? 0));
+                    }
             }
 
             var ringsArr = obj["Rings"];
@@ -1102,6 +1468,8 @@ namespace EliteBioRadar
                     {
                         Name      = r.Value<string>("Name") ?? "",
                         RingClass = r.Value<string>("RingClass") ?? "",
+                        InnerRad  = r.Value<double?>("InnerRad") ?? 0,
+                        OuterRad  = r.Value<double?>("OuterRad") ?? 0,
                     });
 
             return detail;
@@ -1139,7 +1507,16 @@ namespace EliteBioRadar
                 // so this replay tracks signal counts itself rather than depending on them.
                 var bioSignals = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
                 var geoSignals = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                var miningSignals = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
                 var mappedBodies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                // FSS Scanner manifest state — reset on each FSDJump alongside planetDetails, so
+                // by the end of the replay these reflect only the current system, same as
+                // everything else here. Without this, restarting the app mid-system left the
+                // FSS Scanner showing "0 / ?" forever: Frontier doesn't re-fire FSSDiscoveryScan
+                // or per-body Scan events for a system already fully honked/scanned earlier this
+                // session, so nothing would ever populate these live post-restart.
+                int lastBodyCount = 0;
+                var resolvedOrder = new List<string>();
 
                 // Scan the last several files in chronological order, not just latestFile —
                 // if the game rotated to a fresh journal file (new session, same system), the
@@ -1148,9 +1525,9 @@ namespace EliteBioRadar
                 // as live play) means the final state correctly reflects the current system
                 // even though the data that produced it came from an older file.
                 var files = Directory.GetFiles(_journalDir, "Journal.*.log")
-                    .OrderByDescending(f => f)
+                    .OrderByJournalDateDescending()
                     .Take(20)
-                    .OrderBy(f => f) // oldest to newest
+                    .OrderByJournalDate() // oldest to newest
                     .ToArray();
 
                 foreach (var file in files)
@@ -1159,7 +1536,18 @@ namespace EliteBioRadar
                     var obj = TryParse(line); if (obj == null) continue;
                     var ev = obj.Value<string>("event");
 
-                    if (ev == "FSDJump" || ev == "CarrierJump")
+                    // "Location" fires (instead of another FSDJump) whenever the game confirms
+                    // current position without an actual jump having just happened — most
+                    // notably right after a game crash/relaunch mid-flight. Missing it here (this
+                    // loop used to only match FSDJump/CarrierJump, unlike the other backfill
+                    // replays elsewhere in this file, which all already include it) left
+                    // trackSystem stuck on the last real FSDJump seen, one or more systems behind
+                    // the true current one — a real captured bug: after a crash, that stale
+                    // trackSystem then failed the "is the restored route still relevant" check
+                    // below (the truly-current system genuinely isn't near where that stale one
+                    // was in the route), wrongly deleting a route cache for a route that was
+                    // still very much active.
+                    if (ev == "FSDJump" || ev == "CarrierJump" || ev == "Location")
                     {
                         charging = false;
                         var sys = obj.Value<string>("StarSystem") ?? "";
@@ -1185,7 +1573,16 @@ namespace EliteBioRadar
                             }
                             bioSignals.Clear();
                             geoSignals.Clear();
+                            miningSignals.Clear();
+                            lastBodyCount = 0;
+                            resolvedOrder.Clear();
                         }
+                        continue;
+                    }
+
+                    if (ev == "FSSDiscoveryScan")
+                    {
+                        lastBodyCount = obj.Value<int?>("BodyCount") ?? 0;
                         continue;
                     }
 
@@ -1195,18 +1592,38 @@ namespace EliteBioRadar
                         var signals = obj["Signals"];
                         if (!string.IsNullOrEmpty(sigBody) && signals != null)
                         {
+                            // Ring hotspots — same reasoning as the live handler: written
+                            // straight into RingHotspots rather than a local dict, since it
+                            // isn't nested inside a per-body detail that needs retroactive
+                            // patching. Restarting the app after a ring was already scanned
+                            // earlier this session would otherwise lose that data entirely,
+                            // same bug class as the Mining Sites sidebar fix.
+                            if (sigBody.EndsWith(" Ring", StringComparison.OrdinalIgnoreCase))
+                            {
+                                var hotspots = new List<RingHotspotSignal>();
+                                foreach (var sig in signals)
+                                {
+                                    var mat = sig.Value<string>("Type_Localised") ?? sig.Value<string>("Type") ?? "";
+                                    var cnt = sig.Value<int>("Count");
+                                    if (!string.IsNullOrEmpty(mat)) hotspots.Add(new RingHotspotSignal { Material = mat, Count = cnt });
+                                }
+                                lock (RingHotspots) RingHotspots[sigBody] = hotspots;
+                                continue;
+                            }
                             foreach (var sig in signals)
                             {
                                 var t = sig.Value<string>("Type") ?? "";
                                 var c = sig.Value<int>("Count");
                                 if (t.Contains("Biological"))       bioSignals[sigBody] = c;
                                 else if (t.Contains("Geological"))  geoSignals[sigBody] = c;
+                                else if (t.Contains("Mining"))      miningSignals[sigBody] = c;
                             }
                             // Retroactively apply to a body already scanned earlier in this replay
                             if (planetDetails.TryGetValue(sigBody, out var already))
                             {
                                 if (bioSignals.TryGetValue(sigBody, out var b)) already.BioSignalCount = b;
                                 if (geoSignals.TryGetValue(sigBody, out var g)) already.GeoSignalCount = g;
+                                if (miningSignals.TryGetValue(sigBody, out var m)) already.MiningSignalCount = m;
                             }
                         }
                         continue;
@@ -1229,9 +1646,12 @@ namespace EliteBioRadar
                         {
                             if (bioSignals.TryGetValue(bodyName, out var b)) detail.BioSignalCount = b;
                             if (geoSignals.TryGetValue(bodyName, out var g)) detail.GeoSignalCount = g;
+                            if (miningSignals.TryGetValue(bodyName, out var m)) detail.MiningSignalCount = m;
                         }
                         planetDetails[bodyName] = detail;
                         allBodyDetailsSeen[bodyName] = detail;
+                        if (!resolvedOrder.Contains(bodyName, StringComparer.OrdinalIgnoreCase))
+                            resolvedOrder.Add(bodyName);
 
                         bool isPrimaryStar = isStar &&
                             (string.Equals(bodyName, trackSystem, StringComparison.OrdinalIgnoreCase) ||
@@ -1265,6 +1685,29 @@ namespace EliteBioRadar
                         var fuelCap = obj["FuelCapacity"];
                         if (fuelCap != null) dest.FuelCapacityMain = fuelCap.Value<double?>("Main") ?? 0;
                         ParseFsdStats(obj, dest);
+                        // Real report: EDSM kept not showing the right ship on a live jump.
+                        // Root cause — this whole replay is THE startup backfill that picks up
+                        // the session's Loadout/LoadGame (ProcessJournalLine's own backfill path
+                        // only ever routes CodexEntry/ScanOrganic/FSSBodySignals/SAASignalsFound
+                        // through itself, never Loadout/LoadGame), and this block was extracting
+                        // FSD stats from Loadout without ever touching ShipID — so CurrentShipId
+                        // stayed null for the entire session unless a NEW live Loadout happened
+                        // to fire after the app was already running (ship swap, module change),
+                        // which most sessions never do. Every live event's EDSM upload injects
+                        // _shipId from CurrentShipId (see EdsmService/ProcessJournalLine), so a
+                        // null CurrentShipId meant no ship attribution on any of them.
+                        var loadoutShipId = obj.Value<long?>("ShipID");
+                        if (loadoutShipId.HasValue) CurrentShipId = loadoutShipId;
+                        continue;
+                    }
+
+                    // LoadGame carries ShipID too (fires once, at actual game launch) — captured
+                    // here for the same reason as Loadout just above; wasn't handled by this
+                    // replay loop in any form before.
+                    if (ev == "LoadGame")
+                    {
+                        var loadGameShipId = obj.Value<long?>("ShipID");
+                        if (loadGameShipId.HasValue) CurrentShipId = loadGameShipId;
                         continue;
                     }
                 }
@@ -1277,6 +1720,11 @@ namespace EliteBioRadar
                 // replay window (not just the current system) so a revisited, not-freshly-scanned
                 // body's detail is available via GetBodyDetail immediately at startup.
                 foreach (var kv in allBodyDetailsSeen) _sessionBodyDetails[kv.Key] = kv.Value;
+                // Restores the FSS Scanner manifest for the current system across a restart —
+                // see lastBodyCount/resolvedOrder's declaration comment above.
+                SystemBodyCount = lastBodyCount;
+                _resolvedBodiesOrder.Clear();
+                _resolvedBodiesOrder.AddRange(resolvedOrder);
                 IsChargingJump = charging;
                 SystemArrivedAt = systemArrivedAt;
                 if (dest != null)
@@ -1287,8 +1735,30 @@ namespace EliteBioRadar
                 }
                 // LoadNavRoute -> EnsureRouteState derives TotalRouteJumps/TotalRouteLy/
                 // FullRouteHops from the persisted route cache, restoring true hop position
-                // across the restart instead of re-anchoring to "hop 1".
+                // across the restart instead of re-anchoring to "hop 1". CurrentDestination was
+                // just replaced with a fresh object above, which still needs that hydration even
+                // when NavRoute.json's own content hasn't changed since the last time it was
+                // read — LoadNavRoute's "skip unchanged content" short-circuit exists to avoid
+                // redundant work/events on repeat polls of the SAME destination object, not to
+                // skip hydrating a brand new one. Forcing it through here by clearing the cached
+                // content is what that short-circuit needs to not silently no-op on this call.
+                _lastNavRouteJson = null;
                 LoadNavRoute();
+
+                // Same staleness check as the live FSDJump handler (see its comment there): if
+                // the current system isn't anywhere in the route we just restored, it's a leftover
+                // from an earlier, unrelated journey (e.g. the GAME was restarted mid-route without
+                // reopening the galaxy map, so NavRoute.json never refreshed to prove otherwise) —
+                // don't keep showing it as if it were current.
+                if (CurrentDestination != null && CurrentDestination.FullRouteHops.Count > 0 &&
+                    !string.IsNullOrEmpty(trackSystem) &&
+                    !CurrentDestination.FullRouteHops.Any(h => string.Equals(h.StarSystem, trackSystem, StringComparison.OrdinalIgnoreCase)))
+                {
+                    Log.Write($"BackfillInfoPanelState: current system '{trackSystem}' isn't in the restored route — clearing stale cache");
+                    CurrentDestination = null;
+                    _routeCache = null;
+                    RouteCache.Delete();
+                }
 
                 Log.Write($"BackfillInfoPanelState: star={(starDetail != null ? starDetail.BodyName : "none")} " +
                           $"planets={planetDetails.Count} dest={(dest != null ? dest.NextSystem : "none")}");
@@ -1434,7 +1904,7 @@ namespace EliteBioRadar
                 try
                 {
                     var latest = Directory.GetFiles(_journalDir, "Journal.*.log")
-                        .OrderByDescending(f => f)
+                        .OrderByJournalDateDescending()
                         .FirstOrDefault();
 
                     if (latest == null) { Thread.Sleep(2000); continue; }
@@ -1443,6 +1913,18 @@ namespace EliteBioRadar
                     {
                         Log.Write($"JournalLoop: new file {Path.GetFileName(latest)}");
                         _currentJournalFile = latest;
+
+                        // Real bug found via a live EDSM rejection log: BackfillJournal/
+                        // BackfillInfoPanelState below use their own independent line-scanning
+                        // loops, never ProcessJournalLine — so its "Fileheader" capture (for
+                        // EDSM's required fromGameVersion/fromGameBuild) never actually ran for
+                        // a file reached through this path, i.e. EVERY file, including a brand
+                        // new one from a fresh game session, since position also jumps straight
+                        // to EOF below without replaying anything through ProcessJournalLine
+                        // either. Reading the file's own first few lines directly here is the
+                        // one path guaranteed to run for every file this app ever sees.
+                        CaptureFileheader(latest);
+
                         Log.Write("JournalLoop: starting backfill...");
 
                         // Remember the system we already know before backfill potentially
@@ -1451,6 +1933,23 @@ namespace EliteBioRadar
 
                         BackfillJournal(latest);
                         Log.Write($"JournalLoop: backfill done, {ScannedOrganisms.Count} organisms loaded");
+
+                        // Set the live-tail position to end-of-file HERE, right after
+                        // BackfillJournal's own read of `latest` — not after the slower work
+                        // below (BackfillSystemPlanets alone can scan hundreds of journal files
+                        // and take several real seconds). Real report: a scan's final Analyse
+                        // event, written by the still-running game in that multi-second gap
+                        // (relaunching the app doesn't pause play), landed in the file AFTER
+                        // BackfillJournal's own read but BEFORE this position capture used to
+                        // run — so it was never in the backfill snapshot, and the live tail then
+                        // started from an EOF position that was already PAST it, permanently
+                        // skipping that one event (an orange 3rd-sample dot that could never
+                        // grey out, though the Bio Survey panel still separately picks up its own
+                        // completed-scan signal, appearing to disagree with the radar dot).
+                        long tailStartPosition;
+                        using (var fsTail = new FileStream(latest, FileMode.Open, FileAccess.Read,
+                                   FileShare.ReadWrite | FileShare.Delete))
+                            tailStartPosition = fsTail.Length;
 
                         // Prefer the system we knew before backfill if it gets corrupted
                         string systemForPlanets = _backfillSystem;
@@ -1463,7 +1962,7 @@ namespace EliteBioRadar
                         if (string.IsNullOrEmpty(systemForPlanets))
                         {
                             foreach (var jf in Directory.GetFiles(_journalDir, "Journal.*.log")
-                                .OrderByDescending(f => f).Take(10))
+                                .OrderByJournalDateDescending().Take(10))
                             {
                                 foreach (var line in SafeReadAllLines(jf).AsEnumerable().Reverse())
                                 {
@@ -1487,13 +1986,13 @@ namespace EliteBioRadar
                         else
                             Log.Write("JournalLoop: no system found in journals, skipping BackfillSystemPlanets");
 
-                        // Set position to END of file so the tail only picks up new events
-                        // Never replay historical lines as live events
-                        using (var fs2 = new FileStream(latest, FileMode.Open, FileAccess.Read,
-                                   FileShare.ReadWrite | FileShare.Delete))
-                            _journalPosition = fs2.Length;
+                        // Position captured right after BackfillJournal's own read, above —
+                        // never replay historical lines as live events, but don't let the slow
+                        // work in between (BackfillSystemPlanets) push the position past events
+                        // the game wrote during that gap.
+                        _journalPosition = tailStartPosition;
 
-                        Log.Write($"JournalLoop: journal position set to {_journalPosition} (end of file)");
+                        Log.Write($"JournalLoop: journal position set to {_journalPosition} (end of file at backfill time)");
                     }
 
                     // Tail new lines
@@ -1527,7 +2026,7 @@ namespace EliteBioRadar
             if (string.IsNullOrEmpty(system) && !string.IsNullOrEmpty(CurrentBody))
             {
                 // Search journals for FSDJump/Location that preceded this body's scans
-                foreach (var f in Directory.GetFiles(_journalDir, "Journal.*.log").OrderByDescending(x => x).Take(30))
+                foreach (var f in Directory.GetFiles(_journalDir, "Journal.*.log").OrderByJournalDateDescending().Take(30))
                 {
                     string lastSys = "";
                     foreach (var line in SafeReadAllLines(f))
@@ -1556,10 +2055,10 @@ namespace EliteBioRadar
             try
             {
                 // Clear stale planet data before rebuilding for the current system
-                lock (_planetLock) { SystemBioPlanets.Clear(); SystemGeoPlanets.Clear(); }
+                lock (_planetLock) { SystemBioPlanets.Clear(); SystemGeoPlanets.Clear(); SystemMiningPlanets.Clear(); }
 
                 var files = Directory.GetFiles(_journalDir, "Journal.*.log")
-                    .OrderByDescending(f => f)
+                    .OrderByJournalDateDescending()
                     .ToArray();
                 Log.Write($"BackfillSystemPlanets: scanning {files.Length} files for system '{system}'");
 
@@ -1663,12 +2162,13 @@ namespace EliteBioRadar
                                 || body.StartsWith(system, StringComparison.OrdinalIgnoreCase);
                             if (!inSystem) continue;
 
-                            int bio = 0, geo = 0;
+                            int bio = 0, geo = 0, mining = 0;
                             foreach (var sig in signals)
                             {
                                 var t = sig.Value<string>("Type") ?? "";
                                 if (t.Contains("Biological"))  bio = sig.Value<int>("Count");
                                 if (t.Contains("Geological"))  geo = sig.Value<int>("Count");
+                                if (t.Contains("Mining"))      mining = sig.Value<int>("Count");
                             }
 
                             if (bio > 0)
@@ -1728,6 +2228,25 @@ namespace EliteBioRadar
                                             DiscoveredCount = discovered,
                                         });
                                         Log.Write($"BackfillSystemPlanets: added geo '{shortName}' geo={geo} discovered={discovered}");
+                                    }
+                                }
+                            }
+
+                            if (mining > 0)
+                            {
+                                var miningShortName = GetShortBodyName(body, system);
+                                lock (_planetLock)
+                                {
+                                    if (!SystemMiningPlanets.Any(p =>
+                                        string.Equals(p.FullBodyName, body, StringComparison.OrdinalIgnoreCase)))
+                                    {
+                                        SystemMiningPlanets.Add(new PlanetMiningInfo
+                                        {
+                                            FullBodyName = body,
+                                            ShortName    = miningShortName,
+                                            MiningCount  = mining,
+                                        });
+                                        Log.Write($"BackfillSystemPlanets: added mining '{miningShortName}' mining={mining}");
                                     }
                                 }
                             }
@@ -1825,7 +2344,7 @@ namespace EliteBioRadar
         {
             foundInFile = "";
             var allJournalFiles = Directory.GetFiles(_journalDir, "Journal.*.log")
-                .OrderByDescending(f => f)
+                .OrderByJournalDateDescending()
                 .ToArray();
 
             foreach (var file in allJournalFiles)
@@ -1889,7 +2408,7 @@ namespace EliteBioRadar
             try
             {
                 var files = Directory.GetFiles(_journalDir, "Journal.*.log")
-                    .OrderByDescending(f => f)
+                    .OrderByJournalDateDescending()
                     .Take(20)  // search more files to catch multi-session planets
                     .ToArray();
 
@@ -2004,6 +2523,7 @@ namespace EliteBioRadar
                 }
 
                 _backfillLastIncompleteGenus = "";
+                _backfillSampleSeq.Clear();
                 bool _isFirstBackfillFile = true;
                 foreach (var file in files)
                 {
@@ -2125,7 +2645,7 @@ namespace EliteBioRadar
                 {
                     // Derive system from the body's journal context
                     foreach (var jf in Directory.GetFiles(_journalDir, "Journal.*.log")
-                        .OrderByDescending(f => f).Take(30))
+                        .OrderByJournalDateDescending().Take(30))
                     {
                         string lastSys2 = "";
                         bool found2 = false;
@@ -2304,6 +2824,138 @@ namespace EliteBioRadar
         }
 
         // ---------------------------------------------------------------
+        // ---------------------------------------------------------------
+        // EDSM catch-up backfill — real trigger: a bug (fixed separately) meant the journal
+        // API's fromGameVersion/fromGameBuild fields were missing, so EDSM silently rejected
+        // every single live upload with msgnum 207 for as long as that bug stood, even though
+        // this app's own local journal correctly recorded everything as normal. Rather than try
+        // to reverse-engineer what's missing from EDSM's own state (querying its last-known
+        // location and diffing), the local journal files already ARE the ground truth for
+        // everything that happened — so this just re-walks them from a watermark forward and
+        // re-submits, the same way the live hook would have if it had been working. EDSM's
+        // journal endpoint is a descriptive log, not a ledger, so re-submitting something
+        // already known is harmless (no double-counting risk) if the watermark and live upload
+        // ever overlap.
+        //
+        // Runs both automatically (quietly, once per app start — see MainWindow's startup path)
+        // and on demand from the Settings "Sync Journals to EDSM" button; both share this one
+        // method; the button just wants progress/completion feedback the automatic run doesn't.
+        public async Task<(int sent, int total)> BackfillEdsmAsync(IProgress<(int done, int total)>? progress, CancellationToken ct)
+        {
+            var settings = AppSettings.Load();
+            if (!settings.EdsmEnabled ||
+                string.IsNullOrWhiteSpace(settings.EdsmCommanderName) ||
+                string.IsNullOrWhiteSpace(settings.EdsmApiKey))
+                return (0, 0);
+
+            // Never synced before: catch up a bounded recent window rather than a full lifetime
+            // journal replay, which could be a large one-off burst against EDSM for a returning
+            // player with years of journal history. A deliberate full resync is a future "pick a
+            // date range" option, not this quiet/automatic path's default behavior. Trimmed from
+            // an original 7 days down to 2: a real first run against 7 days of active exploring
+            // took several minutes to work through at this pace (network latency + the throttle
+            // below), which is a long time to wait just to confirm today's scans went up.
+            DateTime sinceUtc = settings.LastEdsmSyncUtc ?? DateTime.UtcNow.AddDays(-2);
+
+            var files = Directory.GetFiles(_journalDir, "Journal.*.log")
+                .OrderByJournalDate() // oldest to newest — keeps Fileheader's version/build tracking chronologically correct
+                // File mtime is a cheap pre-filter only; a whole extra day of slack covers a
+                // file that started writing before the cutoff but still has later, relevant
+                // lines near its end — the real per-line timestamp check below is authoritative.
+                .Where(f => File.GetLastWriteTimeUtc(f) >= sinceUtc.AddDays(-1))
+                .ToArray();
+
+            var candidates = new List<(string evt, string line, string gameVersion, string gameBuild, long? shipId)>();
+            string gv = "", gb = "";
+            // Tracked chronologically alongside gv/gb (both walked oldest-to-newest) so each
+            // candidate is tagged with whatever ship was actually current AT THAT POINT in the
+            // journal history — not just this session's present-day ship — then injected as
+            // EDSM's "_shipId" transient field on send, same as the live path.
+            long? sid = null;
+            foreach (var file in files)
+            {
+                foreach (var line in SafeReadAllLines(file))
+                {
+                    var obj = TryParse(line); if (obj == null) continue;
+                    var evt = obj.Value<string>("event"); if (string.IsNullOrEmpty(evt)) continue;
+                    if (evt == "Fileheader")
+                    {
+                        gv = obj.Value<string>("gameversion") ?? gv;
+                        gb = obj.Value<string>("build") ?? gb;
+                        continue;
+                    }
+                    if (evt == "Loadout" || evt == "LoadGame")
+                    {
+                        var s = obj.Value<long?>("ShipID");
+                        if (s.HasValue) sid = s;
+                    }
+                    if (!EdsmService.IsUploadable(evt)) continue;
+                    var ts = obj.Value<DateTime?>("timestamp") ?? DateTime.MinValue;
+                    if (ts < sinceUtc) continue;
+                    candidates.Add((evt, line, gv, gb, sid));
+                }
+            }
+
+            // Files/lines above are walked oldest-to-newest on purpose (Fileheader's own
+            // version/build only makes sense read forward), but sending in THAT order made the
+            // most recent, most-likely-to-be-checked events (what you just did a minute ago)
+            // the very last thing to sync after however long a real backlog took to drain —
+            // exactly backwards from what "did my current session make it up?" wants. Reverse
+            // just the send order so newest goes first.
+            candidates.Reverse();
+
+            int sent = 0;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                if (ct.IsCancellationRequested) break;
+                var c = candidates[i];
+                bool ok = await EdsmService.SubmitJournalEventAsync(
+                    settings.EdsmCommanderName, settings.EdsmApiKey, c.evt, c.line, c.gameVersion, c.gameBuild, c.shipId);
+                if (ok) sent++;
+                progress?.Report((i + 1, candidates.Count));
+                // Visible progress without waiting for the whole backlog to finish, same reason
+                // as reversing the order above — a real backlog can take a couple minutes.
+                if ((i + 1) % 20 == 0 || i == candidates.Count - 1)
+                    Log.Write($"EdsmService backfill progress: {i + 1}/{candidates.Count} ({sent} sent ok)");
+                // Throttle — this can be a few hundred events after a bug-affected session or a
+                // long time away; no reason to burst them all at EDSM at once.
+                try { await Task.Delay(120, ct); } catch (TaskCanceledException) { break; }
+            }
+
+            if (!ct.IsCancellationRequested)
+            {
+                settings.LastEdsmSyncUtc = DateTime.UtcNow;
+                AppSettings.Save(settings);
+            }
+            return (sent, candidates.Count);
+        }
+
+        // Reads just a file's first few lines looking for "Fileheader" (always line 1 in a real
+        // journal file — a few lines of slack costs nothing and guards against any oddity). See
+        // the call site in JournalLoop for why this needs to be its own direct read rather than
+        // relying on ProcessJournalLine's own Fileheader handling.
+        private void CaptureFileheader(string file)
+        {
+            try
+            {
+                using var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var sr = new StreamReader(fs);
+                for (int i = 0; i < 5; i++)
+                {
+                    var line = sr.ReadLine();
+                    if (line == null) break;
+                    var obj = TryParse(line);
+                    if (obj?.Value<string>("event") == "Fileheader")
+                    {
+                        _gameVersion = obj.Value<string>("gameversion") ?? _gameVersion;
+                        _gameBuild   = obj.Value<string>("build") ?? _gameBuild;
+                        break;
+                    }
+                }
+            }
+            catch (Exception ex) { Log.Write($"CaptureFileheader error: {ex.Message}"); }
+        }
+
         private static List<string> SafeReadAllLines(string file)
         {
             var result = new List<string>();
@@ -2334,8 +2986,56 @@ namespace EliteBioRadar
             var obj = TryParse(line); if (obj == null) return;
             var evt = obj.Value<string>("event"); if (string.IsNullOrEmpty(evt)) return;
 
+            // First line of every journal file — captured on backfill too (not just live) so
+            // the game version/build are already known by the time the first real live event
+            // needs to upload; EDSM's journal API otherwise rejects everything with msgnum 207
+            // ("Game/Build version not found").
+            if (evt == "Fileheader")
+            {
+                _gameVersion = obj.Value<string>("gameversion") ?? _gameVersion;
+                _gameBuild   = obj.Value<string>("build") ?? _gameBuild;
+            }
+
+            // Captured on backfill too (not just live), same reasoning as Fileheader above — so
+            // CurrentShipId is already correct by the time the first live event needs to upload
+            // after an app restart, instead of starting null until this session's own first
+            // Loadout/LoadGame happens to reappear.
+            if (evt == "Loadout" || evt == "LoadGame")
+            {
+                var sid = obj.Value<long?>("ShipID");
+                if (sid.HasValue) CurrentShipId = sid;
+            }
+
+            // EDSM upload — live events only. Backfill/replay lines are excluded: EDSM already
+            // has that same historical data from the first time it was played live, so
+            // forwarding hundreds of replayed lines on every app restart would just hammer EDSM
+            // for no benefit. No-ops entirely unless the user has opted in via Settings.
+            if (!backfill) EdsmService.SubmitJournalEventFireAndForget(evt, line, _gameVersion, _gameBuild, CurrentShipId);
+
+            // Raw-material stock for System Scan's "hide full materials" filter. Live only —
+            // MaterialInventory.BuildAsync replays history at startup.
+            if (!backfill) MaterialInventory.Apply(evt, obj);
+
             switch (evt)
             {
+                // The initial "honk" — hands us the total body count for the FSS Scanner's
+                // manifest before any individual body is resolved. Doesn't reset on its own;
+                // the FSDJump handler clears SystemBodyCount/_resolvedBodiesOrder on a real
+                // system change, same as the rest of the per-system state.
+                case "FSSDiscoveryScan":
+                {
+                    SystemBodyCount = obj.Value<int?>("BodyCount") ?? 0;
+                    break;
+                }
+
+                // Live only — backfill would otherwise try to convert (and delete) every
+                // screenshot from journal history on every app restart, not just new ones.
+                case "Screenshot":
+                {
+                    if (!backfill) ScreenshotConverterService.OnScreenshotEventFireAndForget(obj);
+                    break;
+                }
+
                 case "Scan":
                 {
                     var bodyName      = obj.Value<string>("BodyName") ?? "";
@@ -2380,11 +3080,33 @@ namespace EliteBioRadar
                                 var gp = SystemGeoPlanets.FirstOrDefault(p =>
                                     string.Equals(p.FullBodyName, bodyName, StringComparison.OrdinalIgnoreCase));
                                 if (gp != null) detail.GeoSignalCount = gp.GeoCount;
+                                var mp = SystemMiningPlanets.FirstOrDefault(p =>
+                                    string.Equals(p.FullBodyName, bodyName, StringComparison.OrdinalIgnoreCase));
+                                if (mp != null) detail.MiningSignalCount = mp.MiningCount;
                             }
                         }
 
+                        // WasDiscovered == false on YOUR scan means nobody had discovered it yet —
+                        // you're the discoverer. Recorded here so a later revisit (which reports
+                        // WasDiscovered == true, same as for another commander's find) can still
+                        // tell your own discovery apart — see DiscoveryIndex.
+                        if (detail.WasDiscovered == false) DiscoveryIndex.MarkDiscoveredByMe(bodyName);
                         _bodyScanDetails[bodyName] = detail;
                         _sessionBodyDetails[bodyName] = detail;
+                        // Trip total — live scans only (matches the EDSM upload hook's own
+                        // backfill exclusion just above): a fresh app restart replaying old
+                        // journal history shouldn't silently inflate an in-progress trip's total.
+                        // Estimate() itself already returns 0 for stars/belts, so this is a
+                        // harmless no-op call for those rather than needing its own isStar check.
+                        if (!backfill)
+                        {
+                            var (estValue, _) = ScanValueEstimator.Estimate(detail);
+                            TripTracker.RecordScanValue(bodyName, estValue);
+                        }
+                        // FSS Scanner manifest — every body resolved this system, in the order
+                        // it was resolved. Deduped against the mapping re-fire noted above.
+                        if (!_resolvedBodiesOrder.Contains(bodyName, StringComparer.OrdinalIgnoreCase))
+                            _resolvedBodiesOrder.Add(bodyName);
 
                         // Primary star of the system: named the same as the system, or at
                         // zero distance from arrival. Avoids a secondary star in a binary/
@@ -2413,6 +3135,9 @@ namespace EliteBioRadar
                 case "SAAScanComplete":
                 {
                     var mappedBody = obj.Value<string>("BodyName") ?? "";
+                    // You just DSS-mapped it — see DiscoveryIndex for why "mapped by you" has to
+                    // be tracked separately from a later Scan's WasMapped flag.
+                    DiscoveryIndex.MarkMappedByMe(mappedBody);
                     if (!string.IsNullOrEmpty(mappedBody) &&
                         _bodyScanDetails.TryGetValue(mappedBody, out var mappedDetail) && !mappedDetail.IsMapped)
                     {
@@ -2421,6 +3146,14 @@ namespace EliteBioRadar
                         var updated = mappedDetail.Clone();
                         updated.IsMapped = true;
                         _bodyScanDetails[mappedBody] = updated;
+                        // Re-estimate with IsMapped now true — RecordScanValue replaces rather
+                        // than adds, so this corrects the trip total up to the mapped-bonus
+                        // value instead of double-counting the unmapped estimate plus this one.
+                        if (!backfill)
+                        {
+                            var (estValue, _) = ScanValueEstimator.Estimate(updated);
+                            TripTracker.RecordScanValue(mappedBody, estValue);
+                        }
                         if (!backfill && string.Equals(mappedBody, TargetedBody, StringComparison.OrdinalIgnoreCase))
                             PlanetTargetUpdated?.Invoke(this, EventArgs.Empty);
                     }
@@ -2478,13 +3211,41 @@ namespace EliteBioRadar
                     var signals = obj["Signals"];
                     if (string.IsNullOrEmpty(body) || signals == null) break;
 
-                    int bio = 0, geo = 0;
+                    // A ring's own signals look nothing like a planet's — Type is the raw
+                    // material name directly ("Alexandrite"), not a "$SAA_SignalType_*;" key —
+                    // so ring bodies are parsed as hotspots entirely separately from Bio/Geo/
+                    // Mining below.
+                    if (body.EndsWith(" Ring", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var hotspots = new List<RingHotspotSignal>();
+                        foreach (var sig in signals)
+                        {
+                            var mat = sig.Value<string>("Type_Localised") ?? sig.Value<string>("Type") ?? "";
+                            var cnt = sig.Value<int>("Count");
+                            if (!string.IsNullOrEmpty(mat)) hotspots.Add(new RingHotspotSignal { Material = mat, Count = cnt });
+                        }
+                        lock (RingHotspots) RingHotspots[body] = hotspots;
+                        // Ring hotspots often resolve well after the planet's own Scan event
+                        // already rendered the Planet tab — nothing else would ever prompt a
+                        // redraw otherwise, since this mutates data behind an object reference
+                        // that hasn't itself changed. Piggyback on PlanetTargetUpdated (the
+                        // planet-tab-refresh signal) whenever the ring belongs to whichever body
+                        // is currently shown.
+                        if (!backfill &&
+                            ((!string.IsNullOrEmpty(TargetedBody) && body.StartsWith(TargetedBody, StringComparison.OrdinalIgnoreCase)) ||
+                             (!string.IsNullOrEmpty(CurrentBody) && body.StartsWith(CurrentBody, StringComparison.OrdinalIgnoreCase))))
+                            PlanetTargetUpdated?.Invoke(this, EventArgs.Empty);
+                        break;
+                    }
+
+                    int bio = 0, geo = 0, mining = 0;
                     foreach (var sig in signals)
                     {
                         var t = sig.Value<string>("Type") ?? "";
                         var c = sig.Value<int>("Count");
-                        if (t.Contains("Biological"))  bio = c;
-                        else if (t.Contains("Geological")) geo = c;
+                        if (t.Contains("Biological"))       bio = c;
+                        else if (t.Contains("Geological"))  geo = c;
+                        else if (t.Contains("Mining"))       mining = c;
                     }
 
                     // Store per-body so we can show counts when targeting any planet
@@ -2598,6 +3359,45 @@ namespace EliteBioRadar
                         }
                         PlanetListChanged?.Invoke(this, EventArgs.Empty);
                     }
+
+                    // Update SystemMiningPlanets live, same pattern as geo just above — skipped
+                    // during backfill for the same reason. Unlike bio/geo there's no deep
+                    // BackfillSystemPlanets equivalent for mining yet, so this list only reflects
+                    // what's resolved live in the current session, not the system's full journal
+                    // history — acceptable for now since there's no per-instance discovery data
+                    // to backfill toward anyway (see PlanetMiningInfo).
+                    if (mining > 0 && !backfill)
+                    {
+                        string systemForMining = StarSystem;
+                        if (!(!string.IsNullOrEmpty(StarSystem) &&
+                              body.StartsWith(StarSystem, StringComparison.OrdinalIgnoreCase))
+                            && !string.IsNullOrEmpty(CurrentBody))
+                        {
+                            var parts = CurrentBody.Split(' ');
+                            for (int i = parts.Length - 1; i >= 2; i--)
+                            {
+                                var candidate = string.Join(" ", parts.Take(i));
+                                if (body.StartsWith(candidate, StringComparison.OrdinalIgnoreCase))
+                                { systemForMining = candidate; break; }
+                            }
+                        }
+                        var miningShortName = GetShortBodyName(body, systemForMining);
+                        lock (_planetLock)
+                        {
+                            var existing = SystemMiningPlanets.FirstOrDefault(p =>
+                                string.Equals(p.FullBodyName, body, StringComparison.OrdinalIgnoreCase));
+                            if (existing == null)
+                                SystemMiningPlanets.Add(new PlanetMiningInfo
+                                    { FullBodyName = body, ShortName = miningShortName, MiningCount = mining });
+                            else
+                            {
+                                existing.MiningCount = mining;
+                                existing.ShortName   = miningShortName;
+                            }
+                        }
+                        PlanetListChanged?.Invoke(this, EventArgs.Empty);
+                    }
+
                     if (string.Equals(body, CurrentBody, StringComparison.OrdinalIgnoreCase) ||
                         string.IsNullOrEmpty(CurrentBody))
                     {
@@ -2606,6 +3406,22 @@ namespace EliteBioRadar
                     }
                     if (string.Equals(body, TargetedBody, StringComparison.OrdinalIgnoreCase))
                         TargetedBodyBioCount = bio;
+
+                    // Retroactively apply to a body already scanned this session (mirrors the
+                    // Bio/Geo lookup in the "Scan" case below, but that one only fires when a NEW
+                    // Scan event arrives — this covers the FSSBodySignals/SAASignalsFound arriving
+                    // after the Scan already happened, which is the common order in practice).
+                    // Real bug found via the System Scan window showing zero bio/geo badges
+                    // anywhere: only MiningSignalCount was ever patched back here — Bio/Geo counts
+                    // were silently stuck at whatever they were (usually 0) at Scan time whenever
+                    // this event arrived after it, which BackfillSystemPlanets's own population
+                    // timing makes the common case, not the rare one.
+                    if (_bodyScanDetails.TryGetValue(body, out var signalDetail))
+                    {
+                        if (bio > 0)    signalDetail.BioSignalCount    = bio;
+                        if (geo > 0)    signalDetail.GeoSignalCount    = geo;
+                        if (mining > 0) signalDetail.MiningSignalCount = mining;
+                    }
 
                     // SAASignalsFound (detailed surface scan) includes a Genuses array.
                     // Build the event's genera into a local list FIRST so we can save it to the
@@ -2846,13 +3662,40 @@ namespace EliteBioRadar
                         _         => 1
                     };
 
-                    // Position priority: embedded in line > caller-supplied (backfill) > current status (live only)
+                    // Backfill: number Samples by their order in the journal, not by whatever
+                    // dots happen to be in memory (see _backfillSampleSeq). If no Log was seen
+                    // for this genus in this pass (sequence started in another file), fall
+                    // back to the dot-count inference above.
+                    if (backfill)
+                    {
+                        if (scanTypeStr == "Log") _backfillSampleSeq[genus] = 1;
+                        else if (scanTypeStr == "Sample" && _backfillSampleSeq.TryGetValue(genus, out var seq))
+                        {
+                            _backfillSampleSeq[genus] = ++seq;
+                            scanNum = seq >= 3 ? 3 : 2;
+                        }
+                    }
+
+                    // Position priority: embedded in line > caller-supplied (backfill) > current
+                    // status — but CurrentStatus is THIS INSTANT's real ship position, so it's
+                    // only ever a legitimate source for a LIVE scan happening right now. Real
+                    // report: a bio scan made right as the app closed, replayed via backfill
+                    // after the game relaunched, showed up at the ship's (new, post-relaunch)
+                    // location — this fallback used to apply unconditionally, ignoring the
+                    // backfill flag entirely, exactly contradicting the guard a few lines below
+                    // ("during backfill lat/lon must come from caller... never fall back to
+                    // current ship position for historical events") which the code never
+                    // actually enforced. ScanOrganic itself never embeds a real position (only
+                    // CodexEntry does, and only for a genus/species's first-ever discovery), so
+                    // a live scan of an already-known species has nothing embedded and must rely
+                    // on this exact fallback — which is why it can't be removed outright, only
+                    // restricted to when it's actually live.
                     double useLat = obj["Latitude"]  != null ? obj.Value<double>("Latitude")  :
                                     lat != 0                 ? lat                             :
-                                    CurrentStatus.Latitude;
+                                    !backfill                ? CurrentStatus.Latitude : 0;
                     double useLon = obj["Longitude"] != null ? obj.Value<double>("Longitude") :
                                     lon != 0                 ? lon                             :
-                                    CurrentStatus.Longitude;
+                                    !backfill                ? CurrentStatus.Longitude : 0;
 
                     // Reject if no real position — during backfill lat/lon must come from caller (CodexEntry),
                     // never fall back to current ship position for historical events.
@@ -2995,6 +3838,12 @@ namespace EliteBioRadar
                         if (scanNum <= highestSeen && scanNum < 3)
                         {
                             Log.Write($"ScanOrganic: skipping scan={scanNum} for {genus}, already have scan={highestSeen}");
+                            break;
+                        }
+
+                        if (scanNum == 3 && backfill && highestSeen >= 3)
+                        {
+                            Log.Write($"ScanOrganic: skipping replayed scan=3 for {genus}, already have it");
                             break;
                         }
 
@@ -3169,6 +4018,7 @@ namespace EliteBioRadar
                     if (!string.IsNullOrEmpty(sys))
                     {
                         StarSystem = sys;
+                        SystemPopulation = obj.Value<long?>("Population") ?? 0;
                         // Location/CarrierJump confirms system — clear the location-fix flag.
                         // Also extract the body name (present when OnFoot=true or landed) and
                         // trigger a targeted backfill to recover any incomplete scan dots from
@@ -3255,6 +4105,9 @@ namespace EliteBioRadar
                     if (!backfill)
                     {
                         IsChargingJump = false;
+                        _chargeStaleSetAtUtc = DateTime.UtcNow;
+                        _loggedStaleChargeSuppress = false;
+                        _chargeFlagStaleSinceArrival = true;
                         // FSDJump confirms the current system — clear the location-fix flag
                         if (_awaitingLocationFix)
                         {
@@ -3265,14 +4118,22 @@ namespace EliteBioRadar
                         if (!string.Equals(newSystem, StarSystem, StringComparison.OrdinalIgnoreCase))
                         {
                             StarSystem = newSystem;
+                            SystemPopulation = obj.Value<long?>("Population") ?? 0;
                             SystemArrivedAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
-                            lock (_planetLock) { SystemBioPlanets.Clear(); SystemGeoPlanets.Clear(); }
+                            Log.Write($"FSDJump arrival: '{newSystem}' arrivedAt={SystemArrivedAt:O} fsdTargetedAt={FsdTargetedAt:O} nextSystem='{CurrentDestination?.NextSystem}'");
+                            // SystemMiningPlanets was missing from this clear — Bio/Geo sidebar
+                            // sections correctly emptied on a jump, but Mining Sites kept
+                            // showing the previous system's list until BackfillSystemPlanets
+                            // happened to repopulate it (or never, if the new system had none).
+                            lock (_planetLock) { SystemBioPlanets.Clear(); SystemGeoPlanets.Clear(); SystemMiningPlanets.Clear(); }
                             PlanetListChanged?.Invoke(this, EventArgs.Empty);
 
                             // New system — clear the previous system's star/planet info-panel
                             // state so it never bleeds into the new one.
                             CurrentStarDetail  = null;
                             _bodyScanDetails.Clear();
+                            SystemBodyCount = 0;
+                            _resolvedBodiesOrder.Clear();
                             // FSDJump itself names the arrival star ("Body"/"BodyType":"Star") —
                             // if we've already scanned it earlier this session (e.g. revisiting a
                             // system), Frontier won't re-fire the automatic arrival Scan event, so
@@ -3300,6 +4161,26 @@ namespace EliteBioRadar
                                 string.Equals(CurrentDestination.NextSystem, newSystem, StringComparison.OrdinalIgnoreCase))
                             {
                                 CurrentDestination = null;
+                            }
+                            // Sanity check for the "kept it, next-hop target raced ahead" branch
+                            // above: if the system we just actually arrived in isn't ANYWHERE in
+                            // that kept route's hop list, it isn't racing ahead of this arrival at
+                            // all — it's a stale, unrelated route. This happens after restarting the
+                            // game mid-route without reopening the galaxy map: NavRoute.json isn't
+                            // rewritten until the map is opened, so LoadNavRoute (which normally
+                            // detects "a different route is now plotted" by comparing the final
+                            // destination) never gets a fresh signal, and the last-cached route
+                            // (possibly from an earlier, already-finished journey) just keeps
+                            // showing forever. FSDTarget/FSDJump still fire correctly without the
+                            // map though, so this check is always available regardless. Wipes the
+                            // on-disk cache too so it doesn't resurrect on the next app restart.
+                            else if (CurrentDestination.FullRouteHops.Count > 0 &&
+                                !CurrentDestination.FullRouteHops.Any(h => string.Equals(h.StarSystem, newSystem, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                Log.Write($"FSDJump: arrived in '{newSystem}', which isn't in the cached route (stale — likely NavRoute.json hasn't refreshed since a game restart) — clearing");
+                                CurrentDestination = null;
+                                _routeCache = null;
+                                RouteCache.Delete();
                             }
                             lock (_beltVariants) _beltVariants.Clear();
                             lock (_planetVariants) _planetVariants.Clear();
@@ -3361,11 +4242,25 @@ namespace EliteBioRadar
                     CurrentDestination ??= new DestinationInfo();
                     CurrentDestination.NextSystem            = obj.Value<string>("Name") ?? "";
                     CurrentDestination.StarClass             = obj.Value<string>("StarClass") ?? "";
+                    // Provisional only — Frontier's own RemainingJumpsInRoute field here has
+                    // been observed to drift on a long auto-plotted route (confirmed against a
+                    // real screenshot: it read 3 hops ahead of where NextSystem actually sits in
+                    // the hop list, dimming three unvisited rows as if already passed). The
+                    // EnsureRouteState call below is what's actually supposed to correct this
+                    // via real index-matching — but LoadNavRoute only reaches it when
+                    // NavRoute.json's own content has changed, which on a long route can sit
+                    // unchanged across many real jumps (see its own comment), leaving this raw
+                    // value uncorrected for a while. Calling EnsureRouteState directly here too,
+                    // against whatever Hops are already cached, means the correction runs on
+                    // every single FSDTarget — i.e. every real hop — not just when the file
+                    // happens to change.
                     CurrentDestination.RemainingJumpsInRoute = obj.Value<int?>("RemainingJumpsInRoute") ?? 0;
                     FsdTargetedAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
                     // TotalRouteJumps/TotalRouteLy are (re)derived from the persisted route
                     // cache inside LoadNavRoute -> EnsureRouteState, not tracked here.
                     LoadNavRoute();
+                    if (CurrentDestination.Hops.Count > 0)
+                        EnsureRouteState(CurrentDestination, CurrentDestination.Hops);
                     if (!backfill) DestinationUpdated?.Invoke(this, EventArgs.Empty);
                     break;
                 }

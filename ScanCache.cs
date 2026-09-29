@@ -635,7 +635,7 @@ namespace EliteBioRadar
                 var result = JsonConvert.DeserializeObject<Dictionary<string, CachedBodyData>>(json);
                 if (result != null) return result;
             }
-            catch
+            catch (Exception newFormatEx)
             {
                 // Old format was List<CachedOrganism> per body — migrate it
                 try
@@ -653,7 +653,19 @@ namespace EliteBioRadar
                         return migrated;
                     }
                 }
-                catch { }
+                catch (Exception oldFormatEx)
+                {
+                    // Real bug this fixed: both parse attempts failing used to fall straight
+                    // through to an empty dictionary with NO log entry at all — a corrupted
+                    // file (e.g. from a kill mid-write, now prevented by AtomicFile, but this
+                    // still matters for any other corruption source) silently read as "no
+                    // history", and the next save then overwrote the file with just whatever
+                    // accumulated afterward, permanently losing everything that was there
+                    // with zero trace. Loud on purpose — this should never happen quietly.
+                    Log.Write($"ScanCache.ReadAll: FAILED TO PARSE {_path} in either format — " +
+                        $"treating as empty (real data may be lost if this file had content). " +
+                        $"New-format error: {newFormatEx.Message} | Old-format error: {oldFormatEx.Message}");
+                }
             }
             return new Dictionary<string, CachedBodyData>(StringComparer.OrdinalIgnoreCase);
         }
@@ -661,7 +673,7 @@ namespace EliteBioRadar
         private static void WriteAll(Dictionary<string, CachedBodyData> data)
         {
             var json = JsonConvert.SerializeObject(data, Formatting.Indented);
-            File.WriteAllText(_path, json);
+            AtomicFile.WriteAllText(_path, json);
         }
     }
 }

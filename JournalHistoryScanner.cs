@@ -53,7 +53,7 @@ namespace EliteBioRadar
                 return summary;
             }
 
-            var files = Directory.GetFiles(journalDir, "Journal.*.log").OrderBy(f => f).ToArray();
+            var files = Directory.GetFiles(journalDir, "Journal.*.log").OrderByJournalDate().ToArray();
             summary.FilesScanned = files.Length;
 
             var pending = new Dictionary<string, CachedBodyData>(StringComparer.OrdinalIgnoreCase);

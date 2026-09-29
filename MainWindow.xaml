@@ -8,15 +8,19 @@
         SizeChanged="Window_SizeChanged">
 
     <Window.Resources>
+        <!-- Was Consolas — top/bottom info bars picking up the embedded JetBrains Mono the
+             gas-giant/star HUD, Radar tab, sidebars, and Destination tab already use. Written
+             as the same "<fontFileUri>#<family name>" pack-URI syntax the code-behind's
+             AppFonts.Mono uses, since a Style setter needs a string, not a FontFamily object. -->
         <Style x:Key="BarLabel" TargetType="TextBlock">
             <Setter Property="Foreground" Value="#88bbbb"/>
-            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontFamily" Value="pack://application:,,,/Assets/Fonts/#JetBrains Mono"/>
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
         <Style x:Key="BarValue" TargetType="TextBlock">
             <Setter Property="Foreground" Value="#00e5ff"/>
-            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontFamily" Value="pack://application:,,,/Assets/Fonts/#JetBrains Mono"/>
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
@@ -26,8 +30,8 @@
         <Style x:Key="ModeTabButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="#080d0d"/>
             <Setter Property="Foreground" Value="#335555"/>
-            <Setter Property="FontFamily" Value="Consolas"/>
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontFamily" Value="pack://application:,,,/Assets/Fonts/#JetBrains Mono"/>
+            <Setter Property="FontSize" Value="12.5"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="BorderBrush" Value="#1a4444"/>
             <Setter Property="BorderThickness" Value="0,0,1,1"/>
@@ -102,28 +106,13 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="40"/>
         </Grid.RowDefinitions>
 
         <!-- TOP BAR -->
         <Border Grid.Row="0" Background="#0d1a1a" BorderBrush="#1a4444"
                 BorderThickness="0,0,0,1" Padding="8,6">
             <DockPanel LastChildFill="False">
-
-                <!-- Refresh button — forces full journal re-backfill without restarting -->
-                <Button x:Name="btnRefresh" DockPanel.Dock="Right"
-                        Width="30" Height="30"
-                        Background="Transparent" BorderThickness="0"
-                        Cursor="Hand" Padding="0" VerticalAlignment="Center"
-                        Margin="0,0,4,0"
-                        Click="BtnRefresh_Click"
-                        ToolTip="Refresh — re-reads journals and rebuilds all state">
-                    <Viewbox Width="20" Height="20">
-                        <Canvas Width="24" Height="24">
-                            <Path Fill="#00e5ff" Data="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"/>
-                        </Canvas>
-                    </Viewbox>
-                </Button>
 
                 <Button x:Name="btnSettings" DockPanel.Dock="Right"
                         Width="30" Height="30"
@@ -133,6 +122,42 @@
                     <Viewbox Width="20" Height="20">
                         <Canvas Width="24" Height="24">
                             <Path Fill="#00e5ff" Data="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.68 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63Z"/>
+                        </Canvas>
+                    </Viewbox>
+                </Button>
+
+                <!-- Declared after btnSettings so it docks to Settings' visual left
+                     (DockPanel.Dock="Right" stacks right-to-left in declaration order) -->
+                <Button x:Name="btnStarFinder" DockPanel.Dock="Right"
+                        Width="30" Height="30"
+                        Background="Transparent" BorderThickness="0"
+                        Cursor="Hand" Padding="0" VerticalAlignment="Center"
+                        Click="BtnStarFinder_Click"
+                        ToolTip="Star Finder — nearest neutron star, black hole, etc.">
+                    <Viewbox Width="20" Height="20">
+                        <Canvas Width="24" Height="24">
+                            <Path Fill="#00e5ff" Data="M12,2L14.4,9.6L22,12L14.4,14.4L12,22L9.6,14.4L2,12L9.6,9.6L12,2Z"/>
+                        </Canvas>
+                    </Viewbox>
+                </Button>
+
+                <!-- Declared after btnSettings so it docks to Settings' visual left
+                     (DockPanel.Dock="Right" stacks right-to-left in declaration order) -->
+                <Button x:Name="btnSystemScan" DockPanel.Dock="Right"
+                        Width="30" Height="30"
+                        Background="Transparent" BorderThickness="0"
+                        Cursor="Hand" Padding="0" VerticalAlignment="Center"
+                        Click="BtnSystemScan_Click"
+                        ToolTip="System Scan — current system overview">
+                    <Viewbox Width="20" Height="20">
+                        <Canvas Width="24" Height="24">
+                            <Ellipse Canvas.Left="9" Canvas.Top="9" Width="6" Height="6" Fill="#00e5ff"/>
+                            <Ellipse Canvas.Left="16" Canvas.Top="5" Width="3.4" Height="3.4" Stroke="#00e5ff" StrokeThickness="1.3"/>
+                            <Ellipse Canvas.Left="3" Canvas.Top="15" Width="3.4" Height="3.4" Stroke="#00e5ff" StrokeThickness="1.3"/>
+                            <Ellipse Canvas.Left="17" Canvas.Top="16" Width="2.6" Height="2.6" Stroke="#00e5ff" StrokeThickness="1.1"/>
+                            <Line X1="12" Y1="12" X2="17.7" Y2="6.7" Stroke="#00e5ff" StrokeThickness="1"/>
+                            <Line X1="12" Y1="12" X2="4.7" Y2="16.7" Stroke="#00e5ff" StrokeThickness="1"/>
+                            <Line X1="12" Y1="12" X2="18.3" Y2="17.3" Stroke="#00e5ff" StrokeThickness="1"/>
                         </Canvas>
                     </Viewbox>
                 </Button>
@@ -168,15 +193,14 @@
                         <TextBlock x:Name="txtBioCount" Text="0" Style="{StaticResource BarValue}"/>
                     </StackPanel>
                     <StackPanel x:Name="geoCountPanel" Orientation="Horizontal" Margin="0,2,14,2" Visibility="Collapsed">
-                        <TextBlock Text="GEO: " Foreground="#ffaa00" FontFamily="Consolas" FontSize="14" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="txtGeoScanned" Text="0" Foreground="#ffaa00" FontFamily="Consolas" FontSize="14" VerticalAlignment="Center"/>
-                        <TextBlock Text="/" Foreground="#88bbbb" FontFamily="Consolas" FontSize="14" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="txtGeoCount" Text="0" Foreground="#ffaa00" FontFamily="Consolas" FontSize="14" VerticalAlignment="Center"/>
+                        <TextBlock Text="GEO: " Foreground="#ffaa00" FontFamily="pack://application:,,,/Assets/Fonts/#JetBrains Mono" FontSize="14" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="txtGeoScanned" Text="0" Foreground="#ffaa00" FontFamily="pack://application:,,,/Assets/Fonts/#JetBrains Mono" FontSize="14" VerticalAlignment="Center"/>
+                        <TextBlock Text="/" Foreground="#88bbbb" FontFamily="pack://application:,,,/Assets/Fonts/#JetBrains Mono" FontSize="14" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="txtGeoCount" Text="0" Foreground="#ffaa00" FontFamily="pack://application:,,,/Assets/Fonts/#JetBrains Mono" FontSize="14" VerticalAlignment="Center"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,2,14,2">
                         <TextBlock Text="SCALE: " Style="{StaticResource BarLabel}"/>
                         <TextBlock x:Name="txtScale" Text="1000m" Style="{StaticResource BarValue}"/>
-                        <TextBlock Text=" [scroll]" Style="{StaticResource BarLabel}" Foreground="#335555" FontSize="11"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,2,14,2">
                         <TextBlock Text="POTENTIAL: " Style="{StaticResource BarLabel}"/>
@@ -233,11 +257,17 @@
                  mockup's viewBox/preserveAspectRatio trick: content scales uniformly with
                  the panel, keeping the body's circle round regardless of window resize. -->
             <Viewbox x:Name="starPanelViewbox" Grid.Column="1" Stretch="Uniform" Visibility="Collapsed">
-                <Canvas x:Name="starPanelCanvas" Width="620" Height="580" Background="#080d0d"/>
+                <Canvas x:Name="starPanelCanvas" Width="713" Height="580" Background="#080d0d"/>
             </Viewbox>
 
+            <!-- Widened 15% (620→713) specifically to give the gas-giant HUD's text columns
+                 more room — the fixed square-ish aspect was letterboxing inside the actual
+                 (wider) available area, wasting real horizontal space on both sides. Legacy
+                 (non-gas-giant) content below still centers on the OLD 310 mark and hasn't
+                 been re-centered for this width yet — same "until its own phase lands"
+                 deferral as everything else non-gas-giant. -->
             <Viewbox x:Name="planetPanelViewbox" Grid.Column="1" Stretch="Uniform" Visibility="Collapsed">
-                <Canvas x:Name="planetPanelCanvas" Width="620" Height="580" Background="#080d0d"/>
+                <Canvas x:Name="planetPanelCanvas" Width="713" Height="580" Background="#080d0d"/>
             </Viewbox>
 
             <!-- DESTINATION info panel — ordinary WPF layout, no viewBox-style scaling needed -->
@@ -252,6 +282,44 @@
                 </ScrollViewer>
             </Grid>
 
+            <!-- DEORBIT — temporarily replaces radarCanvas while Status.json's glide flag is
+                 set (see EliteStatus.IsGliding). Same fixed-canvas + Viewbox scaling as the
+                 STAR/PLANET panels. -->
+            <Viewbox x:Name="deorbitPanelViewbox" Grid.Column="1" Stretch="Uniform" Visibility="Collapsed">
+                <Canvas x:Name="deorbitPanelCanvas" Width="620" Height="580" Background="#080d0d"/>
+            </Viewbox>
+
+            <!-- FSS SCANNER — temporarily replaces the STAR panel while the FSS has focus.
+                 Orbital diagram (left, viewBox-scaled like the other info panels) plus a
+                 manifest list (right, ordinary WPF layout so its row count/sizing can be
+                 measured and shrunk to fit — see FitFssManifest in the code-behind). -->
+            <Grid x:Name="fssScannerPanel" Grid.Column="1" Background="#080d0d" Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="220"/>
+                </Grid.ColumnDefinitions>
+                <Viewbox Grid.Column="0" Stretch="Uniform">
+                    <Canvas x:Name="fssScannerCanvas" Width="620" Height="580" Background="#080d0d"/>
+                </Viewbox>
+                <Border Grid.Column="1" Background="#0b1616" BorderBrush="#1a4444"
+                        BorderThickness="1,0,0,0" Margin="0,16,16,16" Padding="10,8">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <DockPanel Grid.Row="0" Margin="0,0,0,6">
+                            <TextBlock Text="MANIFEST" Foreground="#00e5ff" FontFamily="Consolas" FontSize="10"/>
+                            <TextBlock x:Name="fssManifestCount" DockPanel.Dock="Right" Text="0 / 0"
+                                       Foreground="#00e5ff" FontFamily="Consolas" FontSize="10" HorizontalAlignment="Right"/>
+                        </DockPanel>
+                        <ScrollViewer Grid.Row="1" Style="{StaticResource ThinScrollViewer}">
+                            <StackPanel x:Name="fssManifestStack"/>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+            </Grid>
+
             <Border x:Name="sidebarPanel" Grid.Column="2"
                     Background="#0d1a1a" BorderBrush="#1a4444"
                     BorderThickness="1,0,0,0" Padding="8"
@@ -264,7 +332,7 @@
 
         <!-- BOTTOM BAR -->
         <Border Grid.Row="3" Background="#0d1a1a" BorderBrush="#1a4444"
-                BorderThickness="0,1,0,0" Padding="8,6">
+                BorderThickness="0,1,0,0" Padding="8,6" ClipToBounds="True">
             <WrapPanel Orientation="Horizontal">
                 <StackPanel Orientation="Horizontal" Margin="0,2,14,2">
                     <TextBlock Text="LAT: " Style="{StaticResource BarLabel}"/>
@@ -281,10 +349,6 @@
                 <StackPanel Orientation="Horizontal" Margin="0,2,14,2">
                     <TextBlock Text="ALT: " Style="{StaticResource BarLabel}"/>
                     <TextBlock x:Name="txtAlt" Text="—" Style="{StaticResource BarValue}"/>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,2,14,2">
-                    <TextBlock Text="NEAREST: " Style="{StaticResource BarLabel}"/>
-                    <TextBlock x:Name="txtScanOne" Text="—" Style="{StaticResource BarValue}"/>
                 </StackPanel>
                 <!-- Scan pips -->
                 <StackPanel Orientation="Horizontal" Margin="0,2,12,2" VerticalAlignment="Center">
@@ -307,19 +371,34 @@
                                  Fill="#110800" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,2,0,2">
+                <StackPanel Orientation="Horizontal" Margin="0,2,14,2">
                     <TextBlock Text="EARNED: " Style="{StaticResource BarLabel}"/>
                     <TextBlock x:Name="txtSessionEarned" Text="—" Style="{StaticResource BarValue}"/>
+                </StackPanel>
+                <!-- NEAREST last — its value swings from a bare "—" to a full genus name plus
+                     distance, and that swing lands right around HasPosition transitions (i.e.
+                     right as descent starts/ends). Keeping it last means IT is what gets pushed
+                     off the fixed-height, clipped bar if the line ever runs long, not EARNED or
+                     the scan pips, which real feedback said need to stay visible. -->
+                <StackPanel Orientation="Horizontal" Margin="0,2,0,2">
+                    <TextBlock Text="NEAREST: " Style="{StaticResource BarLabel}"/>
+                    <TextBlock x:Name="txtScanOne" Text="—" Style="{StaticResource BarValue}"/>
                 </StackPanel>
             </WrapPanel>
         </Border>
 
         <!-- SETTINGS POPUP -->
+        <!-- VerticalAlignment="Stretch" (was "Top") + the ScrollViewer below — the settings
+             list kept growing (checkboxes, earnings, now diagnostics) and a plain fixed-to-top
+             StackPanel just clips silently past the bottom of a shorter window with no
+             indication anything's missing. Stretching to the actual available height and
+             scrolling internally means every section stays reachable regardless of window size. -->
         <Border x:Name="settingsPanel" Grid.Row="0" Grid.RowSpan="4"
                 Background="#EE0d1a1a" BorderBrush="#1a4444" BorderThickness="1"
-                HorizontalAlignment="Right" VerticalAlignment="Top"
-                Margin="0,38,0,0" Padding="14" Width="280"
+                HorizontalAlignment="Right" VerticalAlignment="Stretch"
+                Margin="0,38,0,8" Padding="14" Width="560"
                 Visibility="Collapsed">
+            <ScrollViewer Style="{StaticResource ThinScrollViewer}">
             <StackPanel>
                 <DockPanel Margin="0,0,0,10">
                     <TextBlock Text="SETTINGS" Foreground="#00e5ff" FontFamily="Consolas"
@@ -333,108 +412,272 @@
                             Click="BtnAbout_Click"/>
                 </DockPanel>
 
-                <CheckBox x:Name="chkSidebar" Foreground="#00e5ff" FontFamily="Consolas"
-                          FontSize="13" Margin="0,5"
-                          Checked="ChkSidebar_Changed" Unchecked="ChkSidebar_Changed">
-                    Show Bio Survey Sidebar
-                </CheckBox>
+                <!-- Two columns, split by whole section — never by splitting a section's own
+                     controls across the gap (that's exactly what would separate the From/To
+                     date fields, or a checkbox from its own description line). Left column is
+                     display/radar-behavior settings; right column is data management (journal
+                     scans, EDSM, diagnostics) — a natural split that also came out roughly
+                     balanced in height. -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="20"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
 
-                <CheckBox x:Name="chkBioSites" Foreground="#00e5ff" FontFamily="Consolas"
-                          FontSize="13" Margin="0,5"
-                          Checked="ChkBioSites_Changed" Unchecked="ChkBioSites_Changed">
-                    Show Bio Sites Sidebar
-                </CheckBox>
+                    <StackPanel Grid.Column="0">
+                        <CheckBox x:Name="chkSidebar" Foreground="#00e5ff" FontFamily="Consolas"
+                                  FontSize="13" Margin="0,5"
+                                  Checked="ChkSidebar_Changed" Unchecked="ChkSidebar_Changed">
+                            Show Bio Survey Sidebar
+                        </CheckBox>
 
-                <CheckBox x:Name="chkRadarAnimation" Foreground="#00e5ff" FontFamily="Consolas"
-                          FontSize="13" Margin="0,5"
-                          Checked="ChkRadarAnimation_Changed" Unchecked="ChkRadarAnimation_Changed">
-                    Radar scan animation
-                </CheckBox>
-                <TextBlock Text="  Expanding pulse on radar background"
-                           Foreground="#446666" FontFamily="Consolas" FontSize="11"
-                           Margin="0,0,0,8" TextWrapping="Wrap"/>
+                        <CheckBox x:Name="chkBioSites" Foreground="#00e5ff" FontFamily="Consolas"
+                                  FontSize="13" Margin="0,5"
+                                  Checked="ChkBioSites_Changed" Unchecked="ChkBioSites_Changed">
+                            Show Bio Sites Sidebar
+                        </CheckBox>
 
-                <CheckBox x:Name="chkShowGeo" Foreground="#00e5ff" FontFamily="Consolas"
-                          FontSize="13" Margin="0,5"
-                          Checked="ChkShowGeo_Changed" Unchecked="ChkShowGeo_Changed">
-                    Show Geological Sites Info
-                </CheckBox>
-                <TextBlock Text="  Shows geo planets panel and geo survey"
-                           Foreground="#446666" FontFamily="Consolas" FontSize="11"
-                           Margin="0,0,0,8" TextWrapping="Wrap"/>
+                        <CheckBox x:Name="chkRadarAnimation" Foreground="#00e5ff" FontFamily="Consolas"
+                                  FontSize="13" Margin="0,5"
+                                  Checked="ChkRadarAnimation_Changed" Unchecked="ChkRadarAnimation_Changed">
+                            Radar scan animation
+                        </CheckBox>
+                        <TextBlock Text="  Expanding pulse on radar background"
+                                   Foreground="#446666" FontFamily="Consolas" FontSize="11"
+                                   Margin="0,0,0,8" TextWrapping="Wrap"/>
 
-                <CheckBox x:Name="chkAutoScale" Foreground="#00e5ff" FontFamily="Consolas"
-                          FontSize="13" Margin="0,5"
-                          Checked="ChkAutoScale_Changed" Unchecked="ChkAutoScale_Changed">
-                    Auto Scale
-                </CheckBox>
-                <TextBlock Text="  Expands view to keep all organisms visible"
-                           Foreground="#446666" FontFamily="Consolas" FontSize="11"
-                           Margin="0,0,0,8" TextWrapping="Wrap"/>
+                        <CheckBox x:Name="chkShowGeo" Foreground="#00e5ff" FontFamily="Consolas"
+                                  FontSize="13" Margin="0,5"
+                                  Checked="ChkShowGeo_Changed" Unchecked="ChkShowGeo_Changed">
+                            Show Geological Sites Info
+                        </CheckBox>
+                        <TextBlock Text="  Shows geo planets panel and geo survey"
+                                   Foreground="#446666" FontFamily="Consolas" FontSize="11"
+                                   Margin="0,0,0,8" TextWrapping="Wrap"/>
 
-                <TextBlock Text="Default Scale:" Foreground="#88bbbb"
-                           FontFamily="Consolas" FontSize="13" Margin="0,6,0,4"/>
-                <ComboBox x:Name="cmbDefaultScale"
-                          Background="#0d2020" Foreground="#000000"
-                          FontFamily="Consolas" FontSize="13" Width="110"
-                          HorizontalAlignment="Left"
-                          SelectionChanged="CmbDefaultScale_Changed">
-                    <ComboBoxItem Tag="200">200m</ComboBoxItem>
-                    <ComboBoxItem Tag="500">500m</ComboBoxItem>
-                    <ComboBoxItem Tag="1000" IsSelected="True">1000m</ComboBoxItem>
-                    <ComboBoxItem Tag="2000">2000m</ComboBoxItem>
-                    <ComboBoxItem Tag="5000">5000m</ComboBoxItem>
-                    <ComboBoxItem Tag="10000">10000m</ComboBoxItem>
-                </ComboBox>
+                        <CheckBox x:Name="chkAutoScale" Foreground="#00e5ff" FontFamily="Consolas"
+                                  FontSize="13" Margin="0,5"
+                                  Checked="ChkAutoScale_Changed" Unchecked="ChkAutoScale_Changed">
+                            Auto Scale
+                        </CheckBox>
+                        <TextBlock Text="  Expands view to keep all organisms visible"
+                                   Foreground="#446666" FontFamily="Consolas" FontSize="11"
+                                   Margin="0,0,0,8" TextWrapping="Wrap"/>
 
-                <TextBlock Text="─────────────────" Foreground="#1a4444"
-                           FontFamily="Consolas" FontSize="10" Margin="0,10,0,6"/>
+                        <TextBlock Text="Default Scale:" Foreground="#88bbbb"
+                                   FontFamily="Consolas" FontSize="13" Margin="0,6,0,4"/>
+                        <ComboBox x:Name="cmbDefaultScale"
+                                  Background="#0d2020" Foreground="#000000"
+                                  FontFamily="Consolas" FontSize="13" Width="110"
+                                  HorizontalAlignment="Left"
+                                  SelectionChanged="CmbDefaultScale_Changed">
+                            <ComboBoxItem Tag="200">200m</ComboBoxItem>
+                            <ComboBoxItem Tag="500">500m</ComboBoxItem>
+                            <ComboBoxItem Tag="1000" IsSelected="True">1000m</ComboBoxItem>
+                            <ComboBoxItem Tag="2000">2000m</ComboBoxItem>
+                            <ComboBoxItem Tag="5000">5000m</ComboBoxItem>
+                            <ComboBoxItem Tag="10000">10000m</ComboBoxItem>
+                        </ComboBox>
 
-                <TextBlock Text="Earnings" Foreground="#00e5ff" FontFamily="Consolas"
-                           FontSize="13" FontWeight="Bold" Margin="0,0,0,6"/>
-                <TextBlock x:Name="txtTotalEarned" Text="Total: —"
-                           Foreground="#88bbbb" FontFamily="Consolas" FontSize="12" Margin="0,0,0,8"/>
+                        <TextBlock Text="─────────────────" Foreground="#1a4444"
+                                   FontFamily="Consolas" FontSize="10" Margin="0,10,0,6"/>
 
-                <Button x:Name="btnScanJournals" Content="Scan All Journals"
-                        Margin="0,4,0,0"
-                        Background="#1a3333" Foreground="#00e5ff"
-                        FontFamily="Consolas" FontSize="12"
-                        BorderBrush="#1a4444" Padding="8,4"
-                        HorizontalAlignment="Left"
-                        Click="BtnScanJournals_Click"/>
+                        <TextBlock Text="Gravity Warning" Foreground="#00e5ff" FontFamily="Consolas"
+                                   FontSize="13" FontWeight="Bold" Margin="0,0,0,6"/>
+                        <CheckBox x:Name="chkGravityWarning" Foreground="#00e5ff" FontFamily="Consolas"
+                                  FontSize="13" Margin="0,5"
+                                  Checked="ChkGravityWarning_Changed" Unchecked="ChkGravityWarning_Changed">
+                            Enable Gravity Warning
+                        </CheckBox>
+                        <TextBlock Text="  Flags a body's gravity on the Planet tab and System Scan once it meets or exceeds the value below"
+                                   Foreground="#446666" FontFamily="Consolas" FontSize="11"
+                                   Margin="0,0,0,6" TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Warn at or above: " Foreground="#88bbbb" FontFamily="Consolas"
+                                       FontSize="12" VerticalAlignment="Center"/>
+                            <TextBox x:Name="txtGravityThreshold" Background="#0d2020" Foreground="#cceeee"
+                                     FontFamily="Consolas" FontSize="12" Padding="4,2" Width="60"
+                                     BorderBrush="#1a4444"
+                                     LostFocus="TxtGravityThreshold_LostFocus"/>
+                            <TextBlock Text=" G" Foreground="#88bbbb" FontFamily="Consolas"
+                                       FontSize="12" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                        </StackPanel>
 
-                <TextBlock Text="  — or scan a date range —"
-                           Foreground="#446666" FontFamily="Consolas" FontSize="10"
-                           Margin="0,6,0,2"/>
+                        <TextBlock Text="─────────────────" Foreground="#1a4444"
+                                   FontFamily="Consolas" FontSize="10" Margin="0,10,0,6"/>
 
-                <StackPanel Orientation="Horizontal" Margin="0,2,0,2">
-                    <TextBlock Text="From: " Foreground="#88bbbb" FontFamily="Consolas"
-                               FontSize="12" VerticalAlignment="Center"/>
-                    <DatePicker x:Name="dateFrom" FontSize="11" Width="130"
-                                Background="#0d2020" Foreground="#000000"/>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,2,0,4">
-                    <TextBlock Text="To:   " Foreground="#88bbbb" FontFamily="Consolas"
-                               FontSize="12" VerticalAlignment="Center"/>
-                    <DatePicker x:Name="dateTo" FontSize="11" Width="130"
-                                Background="#0d2020" Foreground="#000000"/>
-                </StackPanel>
+                        <TextBlock Text="Screenshots" Foreground="#00e5ff" FontFamily="Consolas"
+                                   FontSize="13" FontWeight="Bold" Margin="0,0,0,6"/>
+                        <CheckBox x:Name="chkScreenshotConvert" Foreground="#00e5ff" FontFamily="Consolas"
+                                  FontSize="13" Margin="0,5"
+                                  Checked="ChkScreenshotConvert_Changed" Unchecked="ChkScreenshotConvert_Changed">
+                            Convert Screenshots to PNG
+                        </CheckBox>
+                        <TextBlock Text="  Watches for new Elite Dangerous screenshots and converts them from BMP to PNG, deleting the original BMP once the PNG is confirmed saved."
+                                   Foreground="#446666" FontFamily="Consolas" FontSize="11"
+                                   Margin="0,0,0,6" TextWrapping="Wrap"/>
 
-                <Button x:Name="btnScanJournalsRange" Content="Scan Date Range"
-                        Margin="0,0,0,8"
-                        Background="#1a3333" Foreground="#00e5ff"
-                        FontFamily="Consolas" FontSize="12"
-                        BorderBrush="#1a4444" Padding="8,4"
-                        HorizontalAlignment="Left"
-                        Click="BtnScanJournalsRange_Click"/>
+                        <TextBlock Text="Screenshots folder:" Foreground="#88bbbb"
+                                   FontFamily="Consolas" FontSize="12" Margin="0,0,0,2"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBox x:Name="txtScreenshotSource" Background="#0d2020" Foreground="#cceeee"
+                                     FontFamily="Consolas" FontSize="12" Padding="4,2" Width="150"
+                                     BorderBrush="#1a4444"
+                                     LostFocus="TxtScreenshotSource_LostFocus"/>
+                            <Button x:Name="btnBrowseScreenshotSource" Content="Browse…" Margin="6,0,0,0"
+                                    Background="#1a3333" Foreground="#00e5ff"
+                                    FontFamily="Consolas" FontSize="12"
+                                    BorderBrush="#1a4444" Padding="8,4"
+                                    Click="BtnBrowseScreenshotSource_Click"/>
+                        </StackPanel>
 
-                <Button x:Name="btnClearEarnings" Content="Clear Earnings"
-                        Background="#331a1a" Foreground="#ff6666"
-                        FontFamily="Consolas" FontSize="12"
-                        BorderBrush="#441a1a" Padding="8,4"
-                        HorizontalAlignment="Left"
-                        Click="BtnClearEarnings_Click"/>
+                        <TextBlock Text="Save PNGs to (blank = same folder):" Foreground="#88bbbb"
+                                   FontFamily="Consolas" FontSize="12" Margin="0,0,0,2"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBox x:Name="txtScreenshotDest" Background="#0d2020" Foreground="#cceeee"
+                                     FontFamily="Consolas" FontSize="12" Padding="4,2" Width="150"
+                                     BorderBrush="#1a4444"
+                                     LostFocus="TxtScreenshotDest_LostFocus"/>
+                            <Button x:Name="btnBrowseScreenshotDest" Content="Browse…" Margin="6,0,0,0"
+                                    Background="#1a3333" Foreground="#00e5ff"
+                                    FontFamily="Consolas" FontSize="12"
+                                    BorderBrush="#1a4444" Padding="8,4"
+                                    Click="BtnBrowseScreenshotDest_Click"/>
+                        </StackPanel>
+
+                        <Button x:Name="btnConvertExistingScreenshots" Content="Convert Existing Screenshots"
+                                Margin="0,0,0,2"
+                                Background="#1a3333" Foreground="#00e5ff"
+                                FontFamily="Consolas" FontSize="12"
+                                BorderBrush="#1a4444" Padding="8,4"
+                                HorizontalAlignment="Left"
+                                Click="BtnConvertExistingScreenshots_Click"
+                                ToolTip="Converts every .bmp already in the screenshots folder right now, not just new ones"/>
+                        <TextBlock x:Name="txtScreenshotStatus" Text="" Foreground="#446666"
+                                   FontFamily="Consolas" FontSize="10.5" Margin="0,4,0,8" TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="Earnings" Foreground="#00e5ff" FontFamily="Consolas"
+                                   FontSize="13" FontWeight="Bold" Margin="0,0,0,6"/>
+                        <TextBlock x:Name="txtTotalEarned" Text="Total: —"
+                                   Foreground="#88bbbb" FontFamily="Consolas" FontSize="12" Margin="0,0,0,8"/>
+
+                        <Button x:Name="btnScanJournals" Content="Scan All Journals"
+                                Margin="0,4,0,0"
+                                Background="#1a3333" Foreground="#00e5ff"
+                                FontFamily="Consolas" FontSize="12"
+                                BorderBrush="#1a4444" Padding="8,4"
+                                HorizontalAlignment="Left"
+                                Click="BtnScanJournals_Click"/>
+
+                        <TextBlock Text="  — or scan a date range —"
+                                   Foreground="#446666" FontFamily="Consolas" FontSize="10"
+                                   Margin="0,6,0,2"/>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,2,0,2">
+                            <TextBlock Text="From: " Foreground="#88bbbb" FontFamily="Consolas"
+                                       FontSize="12" VerticalAlignment="Center"/>
+                            <DatePicker x:Name="dateFrom" FontSize="11" Width="130"
+                                        Background="#0d2020" Foreground="#000000"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2,0,4">
+                            <TextBlock Text="To:   " Foreground="#88bbbb" FontFamily="Consolas"
+                                       FontSize="12" VerticalAlignment="Center"/>
+                            <DatePicker x:Name="dateTo" FontSize="11" Width="130"
+                                        Background="#0d2020" Foreground="#000000"/>
+                        </StackPanel>
+
+                        <Button x:Name="btnScanJournalsRange" Content="Scan Date Range"
+                                Margin="0,0,0,8"
+                                Background="#1a3333" Foreground="#00e5ff"
+                                FontFamily="Consolas" FontSize="12"
+                                BorderBrush="#1a4444" Padding="8,4"
+                                HorizontalAlignment="Left"
+                                Click="BtnScanJournalsRange_Click"/>
+
+                        <Button x:Name="btnClearEarnings" Content="Clear Earnings"
+                                Background="#331a1a" Foreground="#ff6666"
+                                FontFamily="Consolas" FontSize="12"
+                                BorderBrush="#441a1a" Padding="8,4"
+                                HorizontalAlignment="Left"
+                                Click="BtnClearEarnings_Click"/>
+
+                        <TextBlock Text="─────────────────" Foreground="#1a4444"
+                                   FontFamily="Consolas" FontSize="10" Margin="0,10,0,6"/>
+
+                        <TextBlock Text="EDSM Integration" Foreground="#00e5ff" FontFamily="Consolas"
+                                   FontSize="13" FontWeight="Bold" Margin="0,0,0,6"/>
+                        <CheckBox x:Name="chkEdsm" Foreground="#00e5ff" FontFamily="Consolas"
+                                  FontSize="13" Margin="0,5"
+                                  Checked="ChkEdsm_Changed" Unchecked="ChkEdsm_Changed">
+                            Enable EDSM Integration
+                        </CheckBox>
+                        <TextBlock Text="  Uploads your scans to EDSM as you play and looks up known system/body data for the Destination route. Off by default — no data leaves this PC until enabled."
+                                   Foreground="#446666" FontFamily="Consolas" FontSize="11"
+                                   Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                        <TextBlock Text="Commander Name:" Foreground="#88bbbb"
+                                   FontFamily="Consolas" FontSize="12" Margin="0,0,0,2"/>
+                        <TextBox x:Name="txtEdsmCommander" Background="#0d2020" Foreground="#cceeee"
+                                 FontFamily="Consolas" FontSize="12" Padding="4,2" Margin="0,0,0,6"
+                                 BorderBrush="#1a4444"
+                                 LostFocus="TxtEdsmCommander_LostFocus"/>
+
+                        <TextBlock Text="EDSM API Key:" Foreground="#88bbbb"
+                                   FontFamily="Consolas" FontSize="12" Margin="0,0,0,2"/>
+                        <PasswordBox x:Name="txtEdsmApiKey" Background="#0d2020" Foreground="#cceeee"
+                                      FontFamily="Consolas" FontSize="12" Padding="4,2" Margin="0,0,0,2"
+                                      BorderBrush="#1a4444"
+                                      PasswordChanged="TxtEdsmApiKey_PasswordChanged"/>
+                        <TextBlock Text="  Find yours at edsm.net → Commander Settings → API"
+                                   Foreground="#446666" FontFamily="Consolas" FontSize="10"
+                                   Margin="0,0,0,4"/>
+                        <TextBlock x:Name="txtEdsmStatus" Text="" Foreground="#88bbbb"
+                                   FontFamily="Consolas" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                        <Button x:Name="btnEdsmSync" Content="Sync Journals to EDSM"
+                                Margin="0,0,0,2"
+                                Background="#1a3333" Foreground="#00e5ff"
+                                FontFamily="Consolas" FontSize="12"
+                                BorderBrush="#1a4444" Padding="8,4"
+                                HorizontalAlignment="Left"
+                                Click="BtnEdsmSync_Click"
+                                ToolTip="Also runs quietly on every app start — use this to catch up right now instead of waiting, or after fixing a sync problem"/>
+                        <TextBlock x:Name="txtEdsmSyncStatus" Text="" Foreground="#446666"
+                                   FontFamily="Consolas" FontSize="10.5" Margin="0,4,0,8" TextWrapping="Wrap"/>
+
+                        <TextBlock Text="─────────────────" Foreground="#1a4444"
+                                   FontFamily="Consolas" FontSize="10" Margin="0,10,0,6"/>
+
+                        <TextBlock Text="Diagnostics" Foreground="#00e5ff" FontFamily="Consolas"
+                                   FontSize="13" FontWeight="Bold" Margin="0,0,0,6"/>
+                        <Button x:Name="btnRefresh" Content="Refresh App State"
+                                Background="#1a3333" Foreground="#00e5ff"
+                                FontFamily="Consolas" FontSize="12"
+                                BorderBrush="#1a4444" Padding="8,4"
+                                HorizontalAlignment="Left"
+                                Click="BtnRefresh_Click"
+                                ToolTip="Re-reads journals and rebuilds all state, if data ever stops updating"/>
+                    </StackPanel>
+                </Grid>
             </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <!-- TOAST — brief transient notifications (e.g. "Screenshot converted"). Spans every
+             row so it can float over any mode; last child in this Grid so it always paints on
+             top, same convention settingsPanel above already uses. Starts fully transparent and
+             non-hit-testing so it never blocks clicks to whatever's underneath while hidden or
+             fading. -->
+        <Border x:Name="toastPanel" Grid.Row="0" Grid.RowSpan="4"
+                HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                Margin="0,0,20,20" Padding="14,10"
+                Background="#EE0d1a1a" BorderBrush="#00e5ff" BorderThickness="1" CornerRadius="4"
+                Opacity="0" IsHitTestVisible="False">
+            <TextBlock x:Name="txtToast" Text="" Foreground="#cceeee"
+                       FontFamily="Consolas" FontSize="12.5"/>
         </Border>
     </Grid>
 </Window>

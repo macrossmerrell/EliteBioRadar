@@ -147,6 +147,11 @@ namespace EliteBioRadar
         public double PlanetRadius { get; set; }
         public double FuelMain      { get; set; }
         public double FuelReservoir { get; set; }
+        // Numeric enum of which full-screen game panel has focus (galaxy map, system map,
+        // FSS, etc.) — Frontier doesn't publish an authoritative list, so this is our best
+        // read of it; verify/correct against Log.Write's GuiFocus line the first time the
+        // FSS scanner is actually opened with this build running (see ReadStatus).
+        public int    GuiFocus      { get; set; }
 
         // Elite Dangerous Status.json Flags bitmasks
         public bool Docked      => (Flags & (1u << 0))  != 0;
@@ -159,6 +164,18 @@ namespace EliteBioRadar
         // Set specifically for an actual hyperspace charge-up — distinct from Flags bit17
         // "FsdCharging", which is ambiguous (also set for a plain supercruise charge).
         public bool FsdHyperdriveCharging => (Flags2 & (1u << 19)) != 0;
+        // The ambiguous one — true while charging for EITHER a hyperspace jump or a plain
+        // supercruise entry. Combined with !FsdHyperdriveCharging elsewhere to isolate "just
+        // charging to leave a body via supercruise" (e.g. ascending back out through an
+        // atmosphere) from "charging an actual hyperspace jump while sitting on the surface"
+        // (Odyssey allows both from a landed position, and only this combination tells them
+        // apart).
+        public bool FsdChargingAny => (Flags & (1u << 17)) != 0;
+        // Confirmed against a real captured glide (2026-08-29): Flags2 gains this bit the
+        // instant Supercruise drops on final approach, and loses it again the instant normal
+        // powered flight resumes — a real, always-available start/end signal, no altitude
+        // fallback needed despite Frontier not documenting a dedicated journal event for it.
+        public bool IsGliding    => (Flags2 & (1u << 12)) != 0;
 
         // True when we have any positional data (flag OR non-zero coords)
         public bool HasPosition => HasLatLong || Latitude != 0 || Longitude != 0;
@@ -167,13 +184,29 @@ namespace EliteBioRadar
     // ---------------------------------------------------------------
     //  Info panel: STAR / PLANET / DESTINATION / RADAR mode
     // ---------------------------------------------------------------
-    public enum InfoPanelMode { Radar, Star, Planet, Destination }
+    public enum InfoPanelMode { Radar, Star, Planet, Destination, Deorbit, FssScanner }
 
     // A ring, from a Scan event's Rings[] array (present on both stars and planets)
     public class RingInfo
     {
         public string Name      { get; set; } = "";
         public string RingClass { get; set; } = ""; // eRingClass_Icy/MetalRich/Metalic/Rocky (exact in-game spelling)
+        // Real inner/outer radius in metres, straight off the Scan event — drives the actual
+        // ring geometry (scaled against the body's own Radius) instead of an arbitrary band.
+        public double InnerRad { get; set; }
+        public double OuterRad { get; set; }
+    }
+
+    // One material's hotspot count within a ring — from a SAASignalsFound event whose BodyName
+    // is the ring itself (e.g. "...2 A Ring"), confirmed against real 2024 journal data. Distinct
+    // signal shape from the planet-surface Bio/Geo/Mining signals: here Type IS the raw material
+    // name directly ("Alexandrite", "LowTemperatureDiamond"), not a localised "$SAA_SignalType_*;"
+    // key, so it's parsed and stored separately (EliteWatcherService.RingHotspots) rather than
+    // folding into BodyScanDetail's signal counts.
+    public class RingHotspotSignal
+    {
+        public string Material { get; set; } = "";
+        public int    Count    { get; set; }
     }
 
     // Physical detail from a star or planet Scan event. One class covers both —
@@ -183,6 +216,18 @@ namespace EliteBioRadar
         public string BodyName { get; set; } = "";
         public bool   IsStar   { get; set; }
         public bool   IsBelt   { get; set; } // asteroid belt cluster (BodyName contains "Belt Cluster") — no StarType/PlanetClass
+        // From the Scan event's own BodyID/Parents[0] — real parent-child hierarchy straight
+        // from the game, no guessing. ParentBodyID is -1 when there's no immediate parent
+        // (Parents missing/empty) or it couldn't be parsed. IsMoon is true specifically when
+        // the immediate parent is another planet rather than the star — used by the FSS
+        // Scanner to auto-zoom to a moon's parent planet.
+        public int  BodyID       { get; set; } = -1;
+        public int  ParentBodyID { get; set; } = -1;
+        public bool IsMoon       { get; set; }
+        // BodyID of the {"Null":N} barycenter entry that sits ahead of the real Planet/Star parent
+        // in Parents. Bodies sharing one (and having a real parent) orbit each other — binary,
+        // trinary, ... -1 when the body orbits its parent directly.
+        public int  BarycenterID { get; set; } = -1;
         public string ScanType { get; set; } = ""; // informational tag only ("AutoScan"/"Detailed"), not a completeness signal
         public bool   IsMapped { get; set; } // DSS-mapped this session (SAAScanComplete) — a later, distinct milestone than a Detailed scan
 
@@ -199,6 +244,11 @@ namespace EliteBioRadar
         // Planet fields
         public string PlanetClass      { get; set; } = "";
         public string AtmosphereType   { get; set; } = ""; // short enum ("None" when absent) — drives the atmosphere halo
+        // Gas giants never get a discrete AtmosphereType at all (confirmed against real scan
+        // data — the field is simply absent), only this composition list — so anything reading
+        // AtmosphereType alone for a gas giant always saw "None", even on a real, thick
+        // hydrogen/helium atmosphere. Ordered as the game reports it (roughly descending %).
+        public List<(string Name, double Percent)> AtmosphereComposition { get; set; } = new();
         public string Volcanism        { get; set; } = "";
         public double SurfaceGravity   { get; set; }
         public double SurfacePressure  { get; set; }
@@ -208,12 +258,36 @@ namespace EliteBioRadar
         public double IceComposition   { get; set; }
         public double RockComposition  { get; set; }
         public double MetalComposition { get; set; }
+        // Planet mass in Earth masses, from the Scan event's own "MassEM" — feeds the System
+        // Scan window's exploration value estimate (the standard k + 3*k*mass^0.2/5.3 formula
+        // needs it; nothing else in the app used mass before this, so it was never parsed).
+        public double MassEM { get; set; }
+        // From the Scan event's own "WasDiscovered"/"WasMapped" booleans — whether anyone
+        // (any commander, not just you) had already found/mapped this body before your scan.
+        // Null when the Scan event predates this field or wasn't a real body scan; false is a
+        // real, meaningful "nobody had" rather than "unknown".
+        public bool? WasDiscovered { get; set; }
+        public bool? WasMapped     { get; set; }
+        // Real per-body surface materials (only present when Landable), ordered as the game
+        // reports them (descending %) — drives the terrain renderer's surface tint (e.g. High
+        // Metal Content's rust/ochre comes from its own real iron/nickel/sulphur mix, not a
+        // fixed palette).
+        public List<(string Name, double Percent)> Materials { get; set; } = new();
 
         // Shared
         public double SurfaceTemperature { get; set; }
+        // Real orbital distance from the Scan event, in metres — drives the FSS Scanner's ring
+        // placement (bucketed into distance bands, see RingForDistance in MainWindow.xaml.cs)
+        // instead of the arbitrary scan-order slot it used before.
+        public double SemiMajorAxis { get; set; }
         public List<RingInfo> Rings      { get; set; } = new();
         public int BioSignalCount { get; set; }
         public int GeoSignalCount { get; set; }
+        // From the "$PlanetaryMiningLocation_Name;" signal type (FSSBodySignals/SAASignalsFound)
+        // — a new-update surface signal, same shape as Bio/Geo. Only a count from orbit; there's
+        // no per-instance discovery event confirmed yet (nobody's actually visited one to capture
+        // it), so there's no lat/lon-level data behind this the way KnownGeoSites has for geo.
+        public int MiningSignalCount { get; set; }
 
         // Shallow copy — used when a field (e.g. IsMapped) needs to change on an already-stored
         // detail without mutating the same object in place, since the UI debounces re-renders

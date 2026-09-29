@@ -18,6 +18,7 @@ EliteBioRadar.settings.json
 EliteBioRadar.earnings.json
 EliteBioRadar.regions.json
 EliteBioRadar.route.json
+EliteBioRadar.trip.json
 EliteBioRadar.log
 EliteBioRadar_*.log
 
@@ -30,3 +31,6 @@ EliteBioRadar_*.log
 # OS
 .DS_Store
 Thumbs.db
+
+# Claude Code local settings (per-machine tool permissions, not project config)
+.claude/settings.local.json
