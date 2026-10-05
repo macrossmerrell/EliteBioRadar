@@ -57,6 +57,555 @@ namespace EliteBioRadar
             return (baseLayer, cloudA, cloudB, topLayer);
         }
 
+        // ---- GPU shader path (GasGiantShaderEffect). The shader draws the sphere itself, so the
+        // static layers around it are just the ring back-pass and the front-sliver/atmosphere
+        // layer WITHOUT the CPU limb darkening (the shader does its own). ----
+        public static (BitmapSource ringBack, BitmapSource top) GetGasGiantShaderStaticLayers(
+            BodyScanDetail detail, string iconCode, int width, int height)
+        {
+            var baseKey = detail.BodyName + "|ggshader|" + iconCode + "|" + width + "x" + height;
+            if (!_cache.TryGetValue(baseKey + "|ring", out var ring)) { ring = RenderGasGiantBase(detail, iconCode, width, height, includeSphere: false); _cache[baseKey + "|ring"] = ring; }
+            if (!_cache.TryGetValue(baseKey + "|top", out var top)) { top = RenderGasGiantTop(detail, iconCode, width, height, includeLimb: false); _cache[baseKey + "|top"] = top; }
+            return (ring, top);
+        }
+
+        // Sphere center/radius in scene pixels (same geometry the CPU layers use).
+        public static (double cx, double cy, double sphereR) GetGasGiantSphere(BodyScanDetail detail, int width, int height)
+        {
+            var (cx, cy, R, rings) = ComputeGeometry(detail, width, height);
+            return (cx, cy, rings.Count > 0 ? R * 0.85 : R);
+        }
+
+        // string.GetHashCode is randomized per process in .NET, which would give a body a
+        // different seed (and so a different look) every launch.
+        private static int StableHash(string s)
+        {
+            unchecked
+            {
+                uint h = 2166136261;
+                foreach (char c in s ?? "") h = (h ^ c) * 16777619;
+                return (int)(h & 0x7FFFFFFF);
+            }
+        }
+
+        // ---- GPU landable worlds (Shaders\LandableWorld.fx) ----
+        public static bool IsLandableWorld(BodyScanDetail detail, string iconCode) =>
+            (iconCode == "HMC" || iconCode == "ICY" || iconCode == "RBD") && detail.Landable &&
+            !detail.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0);
+
+        // Calibrated against five real landable HMC screenshots (matched to their journal scans).
+        // All five carry the same composition (iron ~22%, nickel ~17%, sulphur ~16%) yet look
+        // completely different, so colour comes from five curated looks. Which look a body gets is a
+        // best guess from temperature (the hottest is dark rust with glowing flecks, mid-heat bodies
+        // are grey/beige, the cold ammonia ones are grey-green or salmon) and then a stable hash of
+        // the name picks within that group - treat the temperature mapping as a hypothesis to refine
+        // as more bodies come in.
+        public static LandableWorldLook GetLandableWorldLook(BodyScanDetail detail, string iconCode = "HMC")
+        {
+            int hash = StableHash(detail.BodyName);
+            Color rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
+            double temp = detail.SurfaceTemperature;
+            if (iconCode == "ICY") return GetIcyLandableLook(detail, hash, temp);
+            if (iconCode == "RBD") return GetRockyLandableLook(detail, hash);
+
+            // Colour does not follow temperature (13 real bodies from 450 K to 900 K ranged over every look), so it is
+            // picked from the name hash across all eleven looks.
+            // Bodies around the same star tend to share a family of looks (reported from play), so the star group
+            // ("<system> <star letters>", the name up to the first number) picks a window of five looks and the
+            // body picks within it.
+            int look = (hash >> 4) % 11;   // by name alone: a star-group window did not hold up against real rocky bodies
+
+            var l = new LandableWorldLook
+            {
+                Ice = rgb(206, 226, 238), Hot = rgb(255, 120, 40),
+                Seed = (hash % 5000) / 100.0 + 1.0,
+                Tilt = (((hash >> 3) % 100) / 100.0 - 0.5) * 0.35,
+                Pitch = (((hash >> 12) % 9) - 4) * 0.08,
+                Mottle = 0.85 + ((hash >> 7) % 40) / 100.0,
+                AtmGlow = detail.SurfacePressure > 0 ? 0.35 : 0.0,
+            };
+            switch (look)
+            {
+                case 0: // dark rust brown, tan patches
+                    l.Light = rgb(150, 110, 88); l.Dark = rgb(62, 40, 32); l.Accent = rgb(140, 64, 40); l.Bright = rgb(190, 170, 155);
+                    l.Contrast = 1.0; l.RustAmt = 0.6; l.BrightAmt = 0.2; l.CraterAmt = 0.7; l.RayAmt = 0.3; break;
+                case 1: // grey with white regolith patches and rust streaks
+                    l.Light = rgb(146, 136, 128); l.Dark = rgb(86, 78, 74); l.Accent = rgb(118, 52, 46); l.Bright = rgb(214, 208, 202);
+                    l.Contrast = 0.9; l.RustAmt = 0.9; l.BrightAmt = 0.8; l.CraterAmt = 0.6; l.RayAmt = 0.2; break;
+                case 2: // lunar grey-beige
+                    l.Light = rgb(152, 142, 134); l.Dark = rgb(98, 94, 86); l.Accent = rgb(120, 92, 70); l.Bright = rgb(190, 184, 176);
+                    l.Contrast = 0.7; l.RustAmt = 0.1; l.BrightAmt = 0.0; l.CraterAmt = 0.9; l.RayAmt = 0.3; break;
+                case 3: // dim smooth grey-green
+                    l.Light = rgb(84, 90, 78); l.Dark = rgb(58, 64, 56); l.Accent = rgb(84, 80, 60); l.Bright = rgb(150, 156, 144);
+                    l.Contrast = 0.35; l.RustAmt = 0.0; l.BrightAmt = 0.0; l.CraterAmt = 0.4; l.RayAmt = 0.0; break;
+                case 5: // orange-tan, large smooth pale patches (real: DG-F b25-0 B 1)
+                    l.Light = rgb(190, 140, 106); l.Dark = rgb(134, 98, 78); l.Accent = rgb(170, 112, 78); l.Bright = rgb(214, 170, 120);
+                    l.Contrast = 0.55; l.RustAmt = 0.15; l.BrightAmt = 0.7; l.CraterAmt = 0.4; l.RayAmt = 0.0; break;
+                case 6: // grey-brown with olive-grey basins and a dark-rayed crater (B 2)
+                    l.Light = rgb(142, 128, 118); l.Dark = rgb(98, 96, 84); l.Accent = rgb(110, 96, 88); l.Bright = rgb(160, 140, 126);
+                    l.Contrast = 0.65; l.RustAmt = 0.15; l.BrightAmt = 0.3; l.CraterAmt = 0.5; l.RayAmt = -0.6; break;
+                case 7: // olive-tan with green patches, dark-rayed craters (C 3)
+                    l.Light = rgb(150, 138, 112); l.Dark = rgb(104, 106, 78); l.Accent = rgb(100, 112, 70); l.Bright = rgb(108, 128, 70);
+                    l.Contrast = 0.7; l.RustAmt = 0.2; l.BrightAmt = 0.55; l.CraterAmt = 0.6; l.RayAmt = -0.9; break;
+                case 8: // dark brown mottled (C 4)
+                    l.Light = rgb(124, 96, 80); l.Dark = rgb(66, 54, 46); l.Accent = rgb(110, 62, 48); l.Bright = rgb(150, 124, 108);
+                    l.Contrast = 0.9; l.RustAmt = 0.4; l.BrightAmt = 0.25; l.CraterAmt = 0.4; l.RayAmt = 0.0; break;
+                case 9: // salmon with tiny dark-green flecks and big dark-rayed craters (C 2)
+                    l.Light = rgb(206, 156, 118); l.Dark = rgb(150, 118, 96); l.Accent = rgb(60, 70, 44); l.Bright = rgb(224, 184, 150);
+                    l.Contrast = 0.6; l.RustAmt = 0.45; l.BrightAmt = 0.25; l.CraterAmt = 0.8; l.RayAmt = -1.0; break;
+                case 10: // rust red with rayed craters (C 1)
+                    l.Light = rgb(176, 88, 58); l.Dark = rgb(110, 62, 48); l.Accent = rgb(96, 64, 56); l.Bright = rgb(150, 112, 120);
+                    l.Contrast = 0.8; l.RustAmt = 0.3; l.BrightAmt = 0.3; l.CraterAmt = 0.8; l.RayAmt = -0.9; break;
+                default: // salmon-orange with brown mottling, rayed craters
+                    l.Light = rgb(192, 148, 114); l.Dark = rgb(104, 78, 58); l.Accent = rgb(116, 86, 62); l.Bright = rgb(222, 188, 160);
+                    l.Contrast = 0.75; l.RustAmt = 0.1; l.BrightAmt = 0.0; l.CraterAmt = 0.9; l.RayAmt = 0.9; break;
+            }
+
+            // Frost on the cold bodies.
+            if (temp > 0 && temp < 250)
+                l.IceAmt = 0.20 + 0.35 * (((hash >> 9) % 100) / 100.0);
+            // Glowing flecks on hot magma-volcanic bodies.
+            bool magma = !string.IsNullOrEmpty(detail.Volcanism) &&
+                detail.Volcanism.Contains("magma", StringComparison.OrdinalIgnoreCase);
+            if (magma && temp > 500) l.HotAmt = 0.8;
+            return l;
+        }
+
+        // Landable ICY bodies, calibrated against nine real in-game screenshots (matched to journal scans).
+        // All nine carry the same composition (about 69% ice; sulphur ~23%, carbon ~19%, iron ~16%) yet
+        // range from near-white to a dark charcoal, so - as with the landable HMC bodies - colour comes
+        // from curated looks picked by a stable name hash (only the coldest bodies, ~27 K, lean towards the
+        // light grey cratered look). The coloured blotches of real icy worlds (teal, mint, tan, gold) are
+        // rendered through the shader's "pale patch" layer, and icy surfaces are glossy, so every look also
+        // carries a sun-glint.
+        private static LandableWorldLook GetIcyLandableLook(BodyScanDetail detail, int hash, double temp)
+        {
+            Color rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
+            var l = new LandableWorldLook
+            {
+                Ice = rgb(206, 226, 238), Hot = rgb(255, 120, 40),
+                Seed = (hash % 5000) / 100.0 + 1.0,
+                Tilt = (((hash >> 3) % 100) / 100.0 - 0.5) * 0.35,
+                Pitch = (((hash >> 12) % 9) - 4) * 0.08,
+                Mottle = 0.85 + ((hash >> 7) % 40) / 100.0,
+                AtmGlow = detail.SurfacePressure > 0 ? 0.20 : 0.0,
+                IceAmt = 0.0, HotAmt = 0.0, SpecAmt = 0.8,
+                LightDir = new System.Windows.Media.Media3D.Vector3D(-0.30, 0.30, 0.90),   // real icy shots are nearly full-lit
+            };
+
+            int look = hash % 7;
+            if (((hash >> 16) % 7) == 0) look = 7;   // ~1 in 7 bodies: white ice with blue crevasses (kept off the main modulus so existing bodies keep their look)
+            if (temp > 0 && temp < 35 && (hash % 10) < 7) look = 2;   // the coldest lean towards light grey, cratered
+            switch (look)
+            {
+                case 0: // white with teal-green blotches
+                    l.Light = rgb(236, 238, 238); l.Dark = rgb(198, 206, 208); l.Accent = rgb(60, 72, 74); l.Bright = rgb(58, 128, 118);
+                    l.Contrast = 0.45; l.RustAmt = 0.35; l.BrightAmt = 0.75; l.CraterAmt = 0.5; l.RayAmt = 0.2; break;
+                case 1: // pale mint-white, soft seafoam patches
+                    l.Light = rgb(222, 228, 226); l.Dark = rgb(184, 196, 194); l.Accent = rgb(120, 128, 128); l.Bright = rgb(150, 214, 200);
+                    l.Contrast = 0.40; l.RustAmt = 0.20; l.BrightAmt = 0.90; l.CraterAmt = 0.4; l.RayAmt = 0.1; break;
+                case 2: // light grey with rayed craters and dark brown flecks
+                    l.Light = rgb(196, 196, 194); l.Dark = rgb(158, 158, 156); l.Accent = rgb(92, 70, 62); l.Bright = rgb(226, 226, 224);
+                    l.Contrast = 0.50; l.RustAmt = 0.50; l.BrightAmt = 0.30; l.CraterAmt = 0.9; l.RayAmt = 0.8; break;
+                case 3: // near-white with strong dark flecks
+                    l.Light = rgb(240, 240, 238); l.Dark = rgb(212, 212, 210); l.Accent = rgb(70, 66, 64); l.Bright = rgb(250, 250, 250);
+                    l.Contrast = 0.30; l.RustAmt = 0.70; l.BrightAmt = 0.20; l.CraterAmt = 0.6; l.RayAmt = 0.4; break;
+                case 4: // blue-grey with tan patches
+                    l.Light = rgb(150, 162, 176); l.Dark = rgb(100, 112, 126); l.Accent = rgb(70, 76, 86); l.Bright = rgb(232, 196, 156);
+                    l.Contrast = 0.90; l.RustAmt = 0.50; l.BrightAmt = 0.70; l.CraterAmt = 0.6; l.RayAmt = 0.3; break;
+                case 5: // dark charcoal with mixed-colour speckle
+                    l.Light = rgb(88, 84, 80); l.Dark = rgb(50, 48, 46); l.Accent = rgb(150, 100, 100); l.Bright = rgb(140, 130, 120);
+                    l.Contrast = 0.80; l.RustAmt = 0.20; l.BrightAmt = 0.30; l.CraterAmt = 0.5; l.RayAmt = 0.1; l.SpecAmt = 1.0; break;
+                case 7: // white ice with long blue crevasses and small blue patches (real: DG-F b25-0 A 2 a)
+                    l.Light = rgb(238, 240, 240); l.Dark = rgb(226, 229, 230); l.Accent = rgb(150, 156, 160); l.Bright = rgb(120, 170, 200); l.Ice = rgb(66, 128, 176);
+                    l.Contrast = 0.12; l.RustAmt = 0.10; l.BrightAmt = 0.05; l.CraterAmt = 0.25; l.RayAmt = 0.1; l.LineAmt = 1.0; l.SpecAmt = 0.3; break;
+                default: // dark rust-pink with gold flecks
+                    l.Light = rgb(136, 98, 92); l.Dark = rgb(86, 64, 60); l.Accent = rgb(74, 62, 48); l.Bright = rgb(214, 176, 96);
+                    l.Contrast = 0.90; l.RustAmt = 0.30; l.BrightAmt = 0.25; l.CraterAmt = 0.5; l.RayAmt = 0.1; l.SpecAmt = 0.9; break;
+            }
+            return l;
+        }
+
+        // Landable ROCKY bodies, calibrated against six real screenshots (ZM-D c12-0 A 5 a; RR-N d6-47 A 3 and A 4 moons). All
+        // of them share one composition (rock 86-91%, iron ~19-21%, sulphur ~19%), yet they range from pale grey with a frost cap
+        // to rust-orange, charcoal, salmon, dark olive-green and tan - so, as with HMC, the look comes from the star group
+        // (a window of three looks) and then the body name.
+        private static LandableWorldLook GetRockyLandableLook(BodyScanDetail detail, int hash)
+        {
+            Color rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
+            var l = new LandableWorldLook
+            {
+                Ice = rgb(226, 232, 238), Hot = rgb(255, 120, 40),
+                Seed = (hash % 5000) / 100.0 + 1.0,
+                Tilt = (((hash >> 3) % 100) / 100.0 - 0.5) * 0.35,
+                Pitch = (((hash >> 12) % 9) - 4) * 0.08,
+                Mottle = 0.85 + ((hash >> 7) % 40) / 100.0,
+                AtmGlow = 0.0, SpecAmt = 0.0,
+            };
+            int look = (hash >> 4) % 6;   // by name alone: a star-group window did not hold up (4E was grey beside orange 3 moons)
+            switch (look)
+            {
+                case 0: // pale grey, pink-brown patches, frost (cold bodies)
+                    l.Light = rgb(158, 154, 148); l.Dark = rgb(98, 82, 84); l.Accent = rgb(112, 84, 86); l.Bright = rgb(196, 192, 188);
+                    l.Contrast = 1.0; l.RustAmt = 0.7; l.BrightAmt = 0.2; l.CraterAmt = 0.6; l.RayAmt = 0.0; l.Mottle = 0.62; break;
+                case 1: // rust-orange with tan patches, dark-rayed crater
+                    l.Light = rgb(178, 112, 74); l.Dark = rgb(122, 80, 56); l.Accent = rgb(150, 88, 58); l.Bright = rgb(216, 168, 122);
+                    l.Contrast = 0.75; l.RustAmt = 0.4; l.BrightAmt = 0.6; l.CraterAmt = 0.7; l.RayAmt = -0.7; break;
+                case 2: // dark charcoal with rust patches
+                    l.Light = rgb(98, 86, 82); l.Dark = rgb(52, 44, 42); l.Accent = rgb(122, 58, 46); l.Bright = rgb(132, 120, 114);
+                    l.Contrast = 0.8; l.RustAmt = 0.9; l.BrightAmt = 0.3; l.CraterAmt = 0.5; l.RayAmt = 0.0; break;
+                case 3: // salmon-tan with grey-brown patches
+                    l.Light = rgb(206, 152, 114); l.Dark = rgb(150, 128, 108); l.Accent = rgb(124, 102, 86); l.Bright = rgb(224, 182, 142);
+                    l.Contrast = 0.6; l.RustAmt = 0.2; l.BrightAmt = 0.3; l.CraterAmt = 0.8; l.RayAmt = 0.0; break;
+                case 4: // dark olive-green with red-brown and yellow-green patches
+                    l.Light = rgb(82, 86, 64); l.Dark = rgb(44, 46, 36); l.Accent = rgb(98, 50, 46); l.Bright = rgb(142, 150, 72);
+                    l.Contrast = 0.7; l.RustAmt = 0.6; l.BrightAmt = 0.3; l.CraterAmt = 0.5; l.RayAmt = 0.0; break;
+                default: // tan-orange, crumpled
+                    l.Light = rgb(202, 142, 102); l.Dark = rgb(148, 102, 78); l.Accent = rgb(160, 112, 82); l.Bright = rgb(224, 178, 134);
+                    l.Contrast = 0.7; l.RustAmt = 0.3; l.BrightAmt = 0.4; l.CraterAmt = 0.9; l.RayAmt = -0.4; break;
+            }
+            double temp = detail.SurfaceTemperature;
+            if (temp > 0 && temp < 160) l.IceAmt = 0.25 + 0.30 * (((hash >> 9) % 100) / 100.0);   // frost cap on the coldest ones
+            return l;
+        }
+
+        // ---- GPU thick-atmosphere worlds (Shaders\AtmoWorld.fx) ----
+        // Non-landable High Metal Content bodies with no rings: a tinted surface seen through a haze,
+        // clouds and cyclones. Everything else (and any body with rings) keeps the CPU terrain scene.
+        public static bool IsAtmoWorld(BodyScanDetail detail, string iconCode) =>
+            (iconCode == "HMC" || iconCode == "ICY" || iconCode == "RIB" || iconCode == "WTR" || iconCode == "RBD") && !detail.Landable && detail.SurfacePressure > 0 &&
+            !detail.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0);
+
+        // Calibrated against 12 real in-game non-landable HMC screenshots matched to their journal
+        // scans (see the surface palettes below). Findings that drive this:
+        //  - surface colour is NOT set by composition (every body reads iron/nickel/sulphur ~22/17/16),
+        //    it varies per body - so it is picked from a curated palette by a stable hash of the name
+        //  - surface pressure sets how much haze hides the surface: ~14 MPa and ~650 kPa CO2 bodies
+        //    are a smooth pale blue-grey, bodies under ~400 kPa show the surface and storms
+        //  - ice caps appear on a minority of bodies, bigger on the very cold ones
+        public static AtmoWorldLook GetAtmoWorldLook(BodyScanDetail detail, string iconCode = "HMC")
+        {
+            int hash = StableHash(detail.BodyName);
+            Color rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
+
+            double logP = Math.Log10(Math.Max(detail.SurfacePressure, 1.0));
+            double haze = Math.Pow(Math.Clamp((logP - 5.1) / 0.8, 0.0, 1.0), 1.5);
+
+            int denseVariant = 0;
+            int pick = hash % 10;
+            Color s0, s1;
+            double contrast = 1.0;
+            bool icy = iconCode == "ICY";
+            bool rockyIce = iconCode == "RIB";
+            bool water = iconCode == "WTR";
+            bool rocky = iconCode == "RBD";
+            if (rocky && haze <= 0.80)
+            {
+                int rk = hash % 3;
+                if (rk == 0)      { s0 = rgb(118, 96, 72);  s1 = rgb(206, 180, 138); }   // tan
+                else if (rk == 1) { s0 = rgb(116, 108, 98); s1 = rgb(198, 190, 178); }   // grey-tan
+                else              { s0 = rgb(160, 162, 164); s1 = rgb(228, 230, 230); }   // pale grey-white
+                contrast = 0.7;
+            }
+            else if (water)
+            {
+                s0 = rgb(20, 34, 50); s1 = rgb(58, 86, 110); contrast = 0.5;   // deep ocean blue, slightly lighter in places
+            }
+            else if (rockyIce)
+            {
+                // Rocky ice worlds (real: XR-D c12-3 A 6/A 8/A 9, ZM-D c12-0 A 6 - all non-landable at tens to
+                // hundreds of MPa): a smooth pale blue-grey / aqua / lavender-white shell with fine cracks.
+                int rp = hash % 3;
+                if (rp == 0)      { s0 = rgb(150, 170, 178); s1 = rgb(196, 210, 214); }
+                else if (rp == 1) { s0 = rgb(140, 170, 172); s1 = rgb(186, 212, 210); }
+                else              { s0 = rgb(160, 172, 184); s1 = rgb(204, 212, 222); }
+                // Thinner atmospheres (real: DG-F b25-0 A 1, methane 305 kPa; A 2, helium 44 kPa) let the surface
+                // show: pale cream (methane) or mint-white ice, so blend from the dense smooth shell towards that.
+                bool methane = (detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase);
+                Color lowS0 = methane ? rgb(216, 210, 192) : rgb(204, 222, 216);
+                Color lowS1 = methane ? rgb(248, 244, 232) : rgb(240, 248, 244);
+                Color Blend(Color a, Color b, double t) => Color.FromRgb(
+                    (byte)(a.R + (b.R - a.R) * t), (byte)(a.G + (b.G - a.G) * t), (byte)(a.B + (b.B - a.B) * t));
+                s0 = Blend(lowS0, s0, haze);
+                s1 = Blend(lowS1, s1, haze);
+                contrast = 0.45;
+            }
+            else if (icy)
+            {
+                // Icy worlds with a real atmosphere: cool slate / teal-grey / lavender-grey ice under the haze.
+                // (Real example: XR-D c12-3 B 4, methane 562 kPa, 148 K - a pale blue-grey, cracked ice shell.)
+                int ip = hash % 3;
+                // Methane atmospheres tint the shell mint-aqua (real: PW-N d6-2 9, 1.3 GPa, and XR-D c12-3 B 4) - hypothesis.
+                bool icyMethane = (detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase);
+                if (icyMethane) ip = 1;
+                if (ip == 0)      { s0 = rgb(110, 128, 140); s1 = rgb(164, 184, 194); }
+                else if (ip == 1) { s0 = icyMethane ? rgb(150, 188, 180) : rgb(96, 130, 130); s1 = icyMethane ? rgb(204, 232, 224) : rgb(152, 188, 186); }
+                else              { s0 = rgb(118, 120, 140); s1 = rgb(170, 172, 192); }
+                contrast = 0.55;
+                // Argon-rich atmospheres tint the shell warm ivory (real: PW-N d6-2 9 a, 704 kPa, 103 K) - hypothesis.
+                if ((detail.AtmosphereType ?? "").Contains("Argon", StringComparison.OrdinalIgnoreCase))
+                { s0 = rgb(188, 184, 166); s1 = rgb(234, 232, 216); }
+            }
+            else if (haze > 0.80)
+            {
+                // Very dense atmospheres come in three real looks (PW-N d6-2 1/2/3, all 16-28 MPa CO2 and hot, yet orange-red,
+                // near-black and pale blue-grey; the 14 MPa UA-L d9-45 2 is pale blue-grey too), so a name hash picks one.
+                denseVariant = (hash >> 2) % 4;
+                if (denseVariant == 3) denseVariant = 5;   // 4 is reserved for the very-hot lava look
+                // Extremely hot bodies (real: RR-N d6-47 A 1, 2,154 K) are near-black with glowing red lava patches.
+                bool veryHot = detail.SurfaceTemperature >= 1500;
+                // Methane-rich: one real example (PW-N d6-2 8, 2.9 MPa, 372 K) was olive-green under a teal haze - a guess
+                // that methane tints the surface that way, to be confirmed with more methane bodies.
+                if ((detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase)) denseVariant = 3;
+                if (rocky) denseVariant = 0;   // real dense rocky bodies (RR-N d6-47 A 2 a, 3.3 MPa) were a pale blue-grey shell
+                if (veryHot)                { denseVariant = 4; s0 = rgb(14, 14, 17); s1 = rgb(34, 33, 38); contrast = 0.8; }
+                else if (denseVariant == 3) { s0 = rgb(74, 78, 44); s1 = rgb(132, 130, 78); contrast = 0.5; }   // olive-green
+                else if (denseVariant == 1) { s0 = rgb(150, 70, 40); s1 = rgb(206, 104, 58); contrast = 0.5; }   // orange-red
+                else if (denseVariant == 5) { s0 = rgb(150, 126, 70); s1 = rgb(236, 208, 128); contrast = 0.9; }   // pale blue-grey with a yellow wash (real: RR-N d6-47 B 3)
+                else if (denseVariant == 2) { s0 = rgb(24, 26, 32);  s1 = rgb(46, 50, 58);  contrast = 0.5; }   // near-black
+                else                        { s0 = rgb(112, 124, 140); s1 = rgb(162, 174, 188); contrast = 0.7; }   // slate
+            }
+            else if (pick <= 3)     { s0 = rgb(128, 88, 44);   s1 = rgb(196, 150, 84); }                     // ochre / orange
+            else if (pick == 4)     { s0 = rgb(92, 40, 30);    s1 = rgb(150, 72, 52); }                      // rust red
+            else if (pick <= 6)     { s0 = rgb(66, 52, 44);    s1 = rgb(118, 96, 80); }                      // brown
+            else if (pick == 7)     { s0 = rgb(74, 70, 40);    s1 = rgb(128, 120, 70); }                     // olive
+            else                    { s0 = rgb(30, 24, 26);    s1 = rgb(64, 60, 68); contrast = 1.2; }       // dark charcoal with a faint rust undertone (real: PW-N d6-2 6, 63 kPa, 242 K)
+
+            // Ice caps: ~40% of bodies, larger on the cold ones.
+            bool hasCap = ((hash >> 5) % 10) < 4;
+            double cold = detail.SurfaceTemperature > 0 ? Math.Clamp((330 - detail.SurfaceTemperature) / 200.0, 0, 1) : 0;
+            double cap = hasCap ? 0.35 + 0.40 * (((hash >> 9) % 100) / 100.0) + 0.20 * cold : 0.0;
+
+            var atmoLook = new AtmoWorldLook
+            {
+                Surf0 = s0, Surf1 = s1,
+                Haze = rgb(152, 168, 186), Cloud = rgb(238, 244, 250), Cap = rgb(238, 230, 214), Glow = rgb(150, 190, 230),
+                HazeAmt = haze,
+                SurfContrast = contrast,
+                CycloneAmt = haze > 0.8 ? 0.0 : 0.35 + 0.65 * (1.0 - haze),   // very dense atmospheres show no storms
+                CloudAmt = 0.55 + 0.35 * (1.0 - haze),
+                CapAmt = Math.Clamp(cap, 0, 0.95),
+                Tilt = (((hash >> 3) % 100) / 100.0 - 0.5) * 0.35,
+                Pitch = (((hash >> 12) % 9) - 4) * 0.08,
+                Seed = (hash % 5000) / 100.0 + 1.0,
+            };
+            if (!icy && !rockyIce && denseVariant == 5)
+            {
+                atmoLook.Haze = rgb(150, 170, 188); atmoLook.Glow = rgb(130, 170, 205);
+                atmoLook.Cloud = rgb(222, 224, 226); atmoLook.CycloneAmt = 0.0; atmoLook.CloudAmt = 0.2; atmoLook.CapAmt = 0;
+                atmoLook.HazeAmt = 0.80; atmoLook.FleckAmt = 1.0;   // small dark blotches show through the haze
+            }
+            else if (!icy && !rockyIce && denseVariant == 4)
+            {
+                atmoLook.Haze = rgb(34, 34, 40); atmoLook.Glow = rgb(70, 90, 112);
+                atmoLook.Cloud = rgb(120, 100, 82); atmoLook.CycloneAmt = 0.0; atmoLook.CloudAmt = 0.18; atmoLook.CapAmt = 0;
+                atmoLook.HazeAmt = 0.35;
+                atmoLook.HotAmt = Math.Clamp((detail.SurfaceTemperature - 1300.0) / 900.0, 0.45, 1.0);
+            }
+            else if (!icy && !rockyIce && denseVariant == 3)
+            {
+                atmoLook.Haze = rgb(118, 128, 96); atmoLook.Glow = rgb(96, 168, 176);
+                atmoLook.Cloud = rgb(200, 214, 214); atmoLook.CycloneAmt = 0.05; atmoLook.CloudAmt = 0.10;
+                atmoLook.HazeAmt = 0.55;
+                atmoLook.Cap = rgb(214, 228, 232); atmoLook.CapAmt = 0.45;
+            }
+            else             if (!icy && !rockyIce && denseVariant == 1)
+            {
+                atmoLook.Haze = rgb(196, 100, 58); atmoLook.Glow = rgb(210, 130, 90);
+                atmoLook.Cloud = rgb(170, 180, 205); atmoLook.CycloneAmt = 0.0; atmoLook.CloudAmt = 0.18; atmoLook.CapAmt = 0;
+                atmoLook.HazeAmt = 0.75;
+            }
+            else if (!icy && !rockyIce && denseVariant == 2)
+            {
+                atmoLook.Haze = rgb(40, 44, 52); atmoLook.Glow = rgb(70, 88, 110);
+                atmoLook.Cloud = rgb(150, 158, 190); atmoLook.CycloneAmt = 0.0; atmoLook.CloudAmt = 0.15; atmoLook.CapAmt = 0;
+                atmoLook.HazeAmt = 0.8;
+            }
+            if (rocky && haze <= 0.80)
+            {
+                // Rocky bodies with a thin-to-moderate atmosphere (real: PW-N d6-2 8 a, RR-N d6-47 A 2 b/c/d, 28-84 kPa): tan or grey-tan ground
+                // under puffy white cloud and cyclones; dense ones fall through to the pale blue-grey shell below.
+                atmoLook.Haze = rgb(160, 176, 192); atmoLook.Glow = rgb(130, 170, 205); atmoLook.Cloud = rgb(236, 242, 248);
+                atmoLook.HazeAmt = Math.Min(haze, 0.3);
+                atmoLook.CycloneAmt = 0.7; atmoLook.CloudAmt = 0.8; atmoLook.CrackAmt = 0.0;
+                atmoLook.Cap = rgb(232, 232, 230); atmoLook.CapAmt = ((hash >> 5) % 10) < 5 ? 0.25 + 0.2 * (((hash >> 9) % 100) / 100.0) : 0.0;
+                atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.40, 0.38, 0.84);
+            }
+            else if (water)
+            {
+                // Water worlds (real: PW-N d6-2 4/5/7, 64-77 kPa nitrogen, 223-290 K): a dark ocean under scattered puffy cloud,
+                // white cyclones with dark eyes and ice caps that grow with cold (the 223 K one has large caps at both poles).
+                atmoLook.Haze = rgb(70, 100, 126); atmoLook.Glow = rgb(120, 170, 205);
+                atmoLook.Cloud = rgb(226, 234, 242);
+                atmoLook.HazeAmt = Math.Min(haze, 0.25);
+                atmoLook.CycloneAmt = 0.85; atmoLook.CloudAmt = 0.70; atmoLook.CrackAmt = 0.0;
+                double wcold = detail.SurfaceTemperature > 0 ? 0.20 + (300.0 - detail.SurfaceTemperature) / 160.0 : 0.3;
+                atmoLook.Cap = rgb(226, 232, 236); atmoLook.CapAmt = Math.Clamp(wcold, 0.15, 0.85);
+                atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.40, 0.38, 0.84);
+            }
+            else if (rockyIce)
+            {
+                bool methaneAtm = (detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase);
+                Color BlendC(Color a, Color b, double t) => Color.FromRgb(
+                    (byte)(a.R + (b.R - a.R) * t), (byte)(a.G + (b.G - a.G) * t), (byte)(a.B + (b.B - a.B) * t));
+                atmoLook.Haze = BlendC(methaneAtm ? rgb(214, 206, 188) : rgb(196, 214, 208), rgb(176, 196, 204), haze);
+                atmoLook.Glow = rgb(140, 170, 195);
+                // Storm / geyser ovals: tan on methane worlds, blue-grey otherwise (real DG-F b25-0 A 1 and
+                // A 2); they fade out as the atmosphere thickens into the smooth shell of the very dense worlds.
+                atmoLook.Cloud = BlendC(methaneAtm ? rgb(206, 176, 134) : rgb(168, 184, 212), rgb(238, 244, 250), haze);
+                atmoLook.CycloneAmt = 0.95 * (1.0 - haze);
+                atmoLook.CloudAmt = 0.05;
+                atmoLook.FleckAmt = 0.9 * (1.0 - haze);
+                // Thin atmospheres barely tint the surface; only the very dense ones go fully into the haze.
+                double hz = haze * 0.45;
+                double smoothT = Math.Clamp((haze - 0.7) / 0.3, 0, 1);
+                smoothT = smoothT * smoothT * (3 - 2 * smoothT);
+                atmoLook.HazeAmt = hz + (0.88 - hz) * smoothT;
+                atmoLook.CrackAmt = 0.55 + 0.25 * (1.0 - haze);
+                atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.28, 0.28, 0.92);   // real rocky-ice shots are nearly full-lit
+                // Faint pinkish polar tint on some of the dense worlds.
+                atmoLook.Cap = rgb(214, 192, 190);
+                atmoLook.CapAmt = (((hash >> 5) % 10) < 6 ? 0.30 + 0.15 * (((hash >> 9) % 100) / 100.0) : 0.0) * haze;
+            }
+            else if (icy)
+            {
+                atmoLook.CrackAmt = 0.45;
+                atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.30, 0.30, 0.90);
+                // Real icy atmospheres show a cracked ice shell through a cool haze, with few storms.
+                // Pressure still decides how hidden the shell is; the haze/glow are cooler than HMC's.
+                atmoLook.Haze = ((detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase)) ? rgb(176, 208, 202)
+                              : ((detail.AtmosphereType ?? "").Contains("Argon", StringComparison.OrdinalIgnoreCase)) ? rgb(214, 210, 192) : rgb(146, 166, 176);
+                atmoLook.Glow = rgb(112, 160, 172);
+                atmoLook.CycloneAmt = 0.12 * (1.0 - haze);
+                atmoLook.CloudAmt = 0.30 * (1.0 - 0.6 * haze);
+                atmoLook.CapAmt = 0.0;
+                atmoLook.HazeAmt = Math.Clamp(haze * 0.80 + 0.12, 0, 1);
+            }
+            return atmoLook;
+        }
+
+        // Per-class look, tuned against real in-game screenshots of each Sudarsky class. Several
+        // classes genuinely vary in game (Class I is dark olive OR cream; Class IV pale beige OR
+        // maroon) so those pick a variant from the body name.
+        public static GasGiantLook GetGasGiantLook(BodyScanDetail detail, string iconCode)
+        {
+            int hash = StableHash(detail.BodyName);
+            double seed = (hash % 5000) / 100.0 + 1.0;
+            bool variantB = ((hash >> 8) & 1) == 1;
+            double tiltJitter = (((hash >> 4) % 100) / 100.0 - 0.5) * 0.30;
+            Color rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
+
+            var look = new GasGiantLook { Seed = seed, BandCount = 10, Turb = 1.0, StormAmt = 0.5, BigStorm = 0, Contrast = 1.0, Tilt = -0.35 + tiltJitter, Pitch = 0 };
+            switch (iconCode)
+            {
+                case "GG1":
+                    if (((hash >> 12) % 3) == 0)
+                    {   // dark red-brown belts between cream zones, many tiny oval storms (real: RR-N d6-47 B 5)
+                        look.C0 = rgb(0x2a, 0x0f, 0x08); look.C1 = rgb(0x5a, 0x24, 0x12); look.C2 = rgb(0xb8, 0xb0, 0xa2);
+                        look.C3 = rgb(0xdc, 0xd6, 0xc8); look.Band4 = rgb(0x18, 0x08, 0x04); look.Glow = rgb(0xc4, 0xb8, 0xa4);
+                        look.BandCount = 9; look.Turb = 0.30; look.StormAmt = 1.0; look.Contrast = 1.35;   // tilt left at the default diagonal (preferred by the user)
+                    }
+                    else if (!variantB)
+                    {   // dark olive / taupe
+                        look.C0 = rgb(0x3b, 0x2e, 0x24); look.C1 = rgb(0x7a, 0x6c, 0x58); look.C2 = rgb(0xb5, 0xa8, 0x8e);
+                        look.C3 = rgb(0xd8, 0xcf, 0xb8); look.Band4 = rgb(0x1e, 0x16, 0x10); look.Glow = rgb(0xc8, 0xb8, 0x98);
+                        look.BandCount = 11; look.Turb = 1.1; look.StormAmt = 0.9; look.Contrast = 1.0;
+                    }
+                    else
+                    {   // cream / tan
+                        look.C0 = rgb(0x9a, 0x80, 0x62); look.C1 = rgb(0xc8, 0xbb, 0xa6); look.C2 = rgb(0xee, 0xee, 0xec);
+                        look.C3 = rgb(0xdd, 0xd6, 0xc8); look.Band4 = rgb(0x7a, 0x62, 0x48); look.Glow = rgb(0xe8, 0xe4, 0xdc);
+                        look.BandCount = 11; look.Turb = 0.9; look.StormAmt = 0.55; look.Contrast = 0.85;
+                    }
+                    break;
+                case "GG2":
+                    look.C0 = rgb(0xb8, 0xa8, 0x94); look.C1 = rgb(0xd8, 0xd2, 0xca); look.C2 = rgb(0xf2, 0xf1, 0xef);
+                    look.C3 = rgb(0xe6, 0xdf, 0xd2); look.Band4 = rgb(0x9a, 0x86, 0x6e); look.Glow = rgb(0xf0, 0xee, 0xea);
+                    look.BandCount = 16; look.Turb = 0.6; look.StormAmt = 0.25; look.Contrast = 0.50;
+                    break;
+                case "GG3":
+                    look.C0 = rgb(0x4a, 0x70, 0xc8); look.C1 = rgb(0x52, 0x84, 0xee); look.C2 = rgb(0x6a, 0x9a, 0xf4);
+                    look.C3 = rgb(0x28, 0x86, 0xff); look.Band4 = rgb(0x48, 0x62, 0xa8); look.Glow = rgb(0xa8, 0xd0, 0xff);
+                    look.BandCount = 9; look.Turb = 0.9; look.StormAmt = 0.0; look.Contrast = 0.30; look.Tilt = 0.45 + tiltJitter;
+                    if (variantB)   // deep navy (real: a ringed Class III, game blue about 22,24,65 in shade and ~30,40,125 lit)
+                    {
+                        look.C0 = rgb(0x14, 0x1c, 0x6a); look.C1 = rgb(0x1c, 0x28, 0x86); look.C2 = rgb(0x26, 0x36, 0xa2);
+                        look.C3 = rgb(0x18, 0x34, 0xb4); look.Band4 = rgb(0x0e, 0x14, 0x52); look.Glow = rgb(0x5a, 0x7a, 0xd0);
+                        look.Contrast = 0.35;
+                    }
+                    break;
+                case "GG4":
+                    if (!variantB)
+                    {   // pale pink-beige with dark brown bands and big swirling storms
+                        look.C0 = rgb(0x5a, 0x3e, 0x38); look.C1 = rgb(0x9a, 0x7e, 0x74); look.C2 = rgb(0xe0, 0xd0, 0xc8);
+                        look.C3 = rgb(0xf0, 0xe4, 0xdc); look.Band4 = rgb(0x3a, 0x26, 0x24); look.Glow = rgb(0xf0, 0xe0, 0xd8);
+                        look.BandCount = 9; look.Turb = 1.3; look.StormAmt = 0.35; look.BigStorm = 1; look.Contrast = 1.15; look.Tilt = 0.03 + tiltJitter * 0.2;
+                    }
+                    else
+                    {   // dark maroon (checked against an earlier real screenshot)
+                        look.C0 = rgb(0x3a, 0x1c, 0x14); look.C1 = rgb(0x6a, 0x30, 0x22); look.C2 = rgb(0x8a, 0x48, 0x36);
+                        look.C3 = rgb(0x9a, 0x58, 0x44); look.Band4 = rgb(0x1a, 0x0c, 0x08); look.Glow = rgb(0x8a, 0x48, 0x36);
+                        look.BandCount = 10; look.Turb = 1.0; look.StormAmt = 0.4; look.Contrast = 0.7;
+                    }
+                    break;
+                case "GG5":
+                    look.C0 = rgb(0x8a, 0x94, 0x84); look.C1 = rgb(0xb8, 0xc4, 0xb4); look.C2 = rgb(0xe0, 0xe8, 0xdc);
+                    look.C3 = rgb(0xc8, 0xd4, 0xc4); look.Band4 = rgb(0x6a, 0x72, 0x68); look.Glow = rgb(0xd8, 0xe4, 0xd4);
+                    look.BandCount = 20; look.Turb = 0.35; look.StormAmt = 0.08; look.Contrast = 0.85; look.Tilt = -0.2 + tiltJitter * 0.3;
+                    break;
+                case "GGH":
+                    look.C0 = rgb(0x1c, 0x16, 0x10); look.C1 = rgb(0x44, 0x38, 0x28); look.C2 = rgb(0xa8, 0x98, 0x80);
+                    look.C3 = rgb(0xd0, 0xc4, 0xb0); look.Band4 = rgb(0x10, 0x0c, 0x08); look.Glow = rgb(0xa8, 0x98, 0x80);
+                    look.BandCount = 4; look.Turb = 1.7; look.StormAmt = 0.3; look.Contrast = 0.55;
+                    break;
+                case "GGA":
+                    look.C0 = rgb(0x08, 0x06, 0x04); look.C1 = rgb(0x1c, 0x16, 0x10); look.C2 = rgb(0x6a, 0x58, 0x3c);
+                    look.C3 = rgb(0x8a, 0x76, 0x52); look.Band4 = rgb(0x04, 0x03, 0x02); look.Glow = rgb(0x6a, 0x58, 0x3c);
+                    look.BandCount = 12; look.Turb = 1.1; look.StormAmt = 0.85; look.Contrast = 1.1; look.Tilt = -0.45 + tiltJitter * 0.3;   // real B6 shows many small dark and pale storms
+                    break;
+                case "GGW":
+                    // Two real looks: seen nearly pole-on (concentric rings, ~1 in 3), or - as in a later reference (A3,
+                    // 242 K) - a normal pale grey-white giant with tan belts and small pale/tan oval storms.
+                    bool ggwRinged = detail.Rings.Any(rg => rg.OuterRad > 0 && rg.InnerRad > 0 && !rg.Name.Contains("Belt", StringComparison.OrdinalIgnoreCase));
+                    if (!ggwRinged && ((hash >> 10) % 3) == 0)   // pole-on only without rings
+                    {
+                        look.C0 = rgb(0x24, 0x20, 0x1a); look.C1 = rgb(0x4a, 0x46, 0x3c); look.C2 = rgb(0x8a, 0x88, 0x78);
+                        look.C3 = rgb(0x9a, 0x98, 0x88); look.Band4 = rgb(0x16, 0x12, 0x0e); look.Glow = rgb(0x7a, 0x78, 0x68);
+                        look.BandCount = 14; look.Turb = 0.5; look.StormAmt = 0.8; look.Contrast = 0.6; look.Pitch = 1.40;
+                    }
+                    else
+                    {
+                        look.C0 = rgb(0x6e, 0x6e, 0x6a); look.C1 = rgb(0x96, 0x98, 0x94); look.C2 = rgb(0xc8, 0xca, 0xc6);
+                        look.C3 = rgb(0xd2, 0xac, 0x84); look.Band4 = rgb(0x78, 0x68, 0x58); look.Glow = rgb(0xbe, 0xc0, 0xbc);
+                        look.BandCount = 12; look.Turb = 0.9; look.StormAmt = 0.9; look.Contrast = 0.55; look.Pitch = 0.0; look.Tilt = 0.02;   // real A3 bands run dead horizontal
+                        if (variantB || ggwRinged)   // dark-brown / tan with dark belts (real: ringed A4, 176 K); ringed water-life giants are always brown
+                        {
+                            look.C0 = rgb(0x24, 0x16, 0x10); look.C1 = rgb(0x50, 0x34, 0x22); look.C2 = rgb(0x8c, 0x6a, 0x46);
+                            look.C3 = rgb(0xaa, 0x86, 0x5c); look.Band4 = rgb(0x14, 0x0a, 0x06); look.Glow = rgb(0x7a, 0x5c, 0x3c);
+                            look.Contrast = 0.85; look.Turb = 1.1;
+                        }
+                    }
+                    break;
+                case "WTG":
+                    look.C0 = rgb(0x04, 0x06, 0x18); look.C1 = rgb(0x0a, 0x12, 0x34); look.C2 = rgb(0x2a, 0x3a, 0x80);
+                    look.C3 = rgb(0x6a, 0x80, 0xc8); look.Band4 = rgb(0x02, 0x03, 0x0c); look.Glow = rgb(0x30, 0x40, 0x90);
+                    look.BandCount = 12; look.Turb = 0.8; look.StormAmt = 0.45; look.Contrast = 0.55; look.Tilt = 0.04;
+                    break;
+                default:
+                    var pal = GetPalette(iconCode);
+                    look.C0 = pal.c0; look.C1 = pal.c1; look.C2 = pal.c2; look.C3 = pal.c3; look.Band4 = pal.band4; look.Glow = pal.glow;
+                    break;
+            }
+            // A ringed giant's cloud bands run parallel to its rings (real: a ringed Class III), so the band tilt follows the
+            // ring tilt used by the ring renderer.
+            if (detail.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0 && !r.Name.Contains("Belt", StringComparison.OrdinalIgnoreCase)))
+            {
+                look.Tilt = RingTilt;
+                look.Pitch = 0;   // never pole-on with rings: concentric bands would contradict the ring plane
+            }
+            return look;
+        }
+
         private static double Seeded(double i)
         {
             var x = Math.Sin(i * 999.7) * 43758.5453;
@@ -96,8 +645,10 @@ namespace EliteBioRadar
             // Was 0xd4aa5c — a fairly saturated gold that read as "too yellow" against a real
             // MetalRich ring. Shifted to a more muted copper/tan, still warmer than plain
             // Rocky's tan but not a gold/amber tone.
-            "eRingClass_MetalRich" => Color.FromRgb(0xc2, 0x9a, 0x62),
-            "eRingClass_Rocky"     => Color.FromRgb(0xc9, 0xb2, 0x87),
+            // Real ringed giants (RR-N d6-47 A 2 and A 4, MetalRich inner + Rocky outer): the thin metal-rich band reads pale
+            // grey-tan and the wide rocky band dark brown, not copper / cream.
+            "eRingClass_MetalRich" => Color.FromRgb(0xb8, 0xaf, 0x98),
+            "eRingClass_Rocky"     => Color.FromRgb(0x6a, 0x4a, 0x32),
             _                      => Color.FromRgb(0xc9, 0xb2, 0x87),
         };
 
@@ -312,7 +863,7 @@ namespace EliteBioRadar
         // ---- static layer: ring back-pass + sphere base gradient only (no bands, no limb
         // darkening yet — limb darkening has to sit ON TOP of the animated cloud layer, so it
         // belongs in RenderGasGiantTop instead, drawn after that layer composites). ----
-        private static RenderTargetBitmap RenderGasGiantBase(BodyScanDetail detail, string iconCode, int width, int height)
+        private static RenderTargetBitmap RenderGasGiantBase(BodyScanDetail detail, string iconCode, int width, int height, bool includeSphere = true)
         {
             var (cx, cy, R, rings) = ComputeGeometry(detail, width, height);
             var pal = GetPalette(iconCode);
@@ -330,18 +881,21 @@ namespace EliteBioRadar
                 for (int i = 0; i < rings.Count; i++)
                     DrawRingBandTextured(dc, cx, cy, rings[i], TILT, SQUASH, ringSeed, i, R);
 
-                dc.PushClip(new EllipseGeometry(new Point(cx, cy), sphereR, sphereR));
-                var baseBrush = new RadialGradientBrush
+                if (includeSphere)
                 {
-                    GradientOrigin = new Point(0.32, 0.28), Center = new Point(0.5, 0.5),
-                    RadiusX = 0.75, RadiusY = 0.75,
-                };
-                baseBrush.GradientStops.Add(new GradientStop(pal.c2, 0.0));
-                baseBrush.GradientStops.Add(new GradientStop(pal.c1, 0.4));
-                baseBrush.GradientStops.Add(new GradientStop(pal.c0, 0.75));
-                baseBrush.GradientStops.Add(new GradientStop(Color.FromRgb(0x04, 0x08, 0x08), 1.0));
-                dc.DrawRectangle(baseBrush, null, new Rect(cx - sphereR, cy - sphereR, sphereR * 2, sphereR * 2));
-                dc.Pop();
+                    dc.PushClip(new EllipseGeometry(new Point(cx, cy), sphereR, sphereR));
+                    var baseBrush = new RadialGradientBrush
+                    {
+                        GradientOrigin = new Point(0.32, 0.28), Center = new Point(0.5, 0.5),
+                        RadiusX = 0.75, RadiusY = 0.75,
+                    };
+                    baseBrush.GradientStops.Add(new GradientStop(pal.c2, 0.0));
+                    baseBrush.GradientStops.Add(new GradientStop(pal.c1, 0.4));
+                    baseBrush.GradientStops.Add(new GradientStop(pal.c0, 0.75));
+                    baseBrush.GradientStops.Add(new GradientStop(Color.FromRgb(0x04, 0x08, 0x08), 1.0));
+                    dc.DrawRectangle(baseBrush, null, new Rect(cx - sphereR, cy - sphereR, sphereR * 2, sphereR * 2));
+                    dc.Pop();
+                }
             }
 
             var rtb = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
@@ -410,7 +964,7 @@ namespace EliteBioRadar
         // front-sliver, atmosphere glow — none of this depends on cloud phase either, so it
         // renders once and composites on top of both the base and cloud layers, staying rock
         // still regardless of the cross-fade animating underneath it. ----
-        private static RenderTargetBitmap RenderGasGiantTop(BodyScanDetail detail, string iconCode, int width, int height)
+        private static RenderTargetBitmap RenderGasGiantTop(BodyScanDetail detail, string iconCode, int width, int height, bool includeLimb = true)
         {
             var (cx, cy, R, rings) = ComputeGeometry(detail, width, height);
             var pal = GetPalette(iconCode);
@@ -424,12 +978,15 @@ namespace EliteBioRadar
             var visual = new DrawingVisual();
             using (var dc = visual.RenderOpen())
             {
-                dc.PushClip(new EllipseGeometry(new Point(cx, cy), sphereR, sphereR));
-                var limbBrush = new RadialGradientBrush { Center = new Point(0.5, 0.5), RadiusX = 0.5, RadiusY = 0.5 };
-                limbBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 4, 10, 14), 0.6));
-                limbBrush.GradientStops.Add(new GradientStop(Color.FromArgb(140, 4, 10, 14), 1.0));
-                dc.DrawRectangle(limbBrush, null, new Rect(cx - sphereR, cy - sphereR, sphereR * 2, sphereR * 2));
-                dc.Pop();
+                if (includeLimb)
+                {
+                    dc.PushClip(new EllipseGeometry(new Point(cx, cy), sphereR, sphereR));
+                    var limbBrush = new RadialGradientBrush { Center = new Point(0.5, 0.5), RadiusX = 0.5, RadiusY = 0.5 };
+                    limbBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 4, 10, 14), 0.6));
+                    limbBrush.GradientStops.Add(new GradientStop(Color.FromArgb(140, 4, 10, 14), 1.0));
+                    dc.DrawRectangle(limbBrush, null, new Rect(cx - sphereR, cy - sphereR, sphereR * 2, sphereR * 2));
+                    dc.Pop();
+                }
 
                 // ---- ring front sliver — same bands again, clipped to (planet circle) ∩
                 // (front half-plane), the classic ring-passes-in-front-of-the-near-limb
@@ -456,9 +1013,13 @@ namespace EliteBioRadar
                 }
 
                 // ---- atmosphere glow, drawn last so it sits over the ring too ----
+                // Shader path (includeLimb false): the shader draws its own rim, so keep this halo
+                // faint and tinted from the same per-class look instead of the old palette.
+                var glowColor = includeLimb ? pal.glow : GetGasGiantLook(detail, iconCode).Glow;
+                byte glowAlpha = includeLimb ? (byte)110 : (byte)38;
                 var glowBrush = new RadialGradientBrush { Center = new Point(0.5, 0.5), RadiusX = 0.5, RadiusY = 0.5 };
-                glowBrush.GradientStops.Add(new GradientStop(Color.FromArgb(110, pal.glow.R, pal.glow.G, pal.glow.B), 0.83));
-                glowBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0, pal.glow.R, pal.glow.G, pal.glow.B), 1.0));
+                glowBrush.GradientStops.Add(new GradientStop(Color.FromArgb(glowAlpha, glowColor.R, glowColor.G, glowColor.B), 0.83));
+                glowBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0, glowColor.R, glowColor.G, glowColor.B), 1.0));
                 dc.DrawEllipse(glowBrush, null, new Point(cx, cy), sphereR * 1.2, sphereR * 1.2);
             }
 

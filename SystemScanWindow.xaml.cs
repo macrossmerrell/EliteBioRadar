@@ -169,7 +169,7 @@ namespace EliteBioRadar
         private string BuildBodySignature() => string.Join("|",
             _watcher.GetCurrentSystemBodyDetails()
                 .OrderBy(b => b.BodyName, StringComparer.OrdinalIgnoreCase)
-                .Select(b => $"{b.BodyName}:{b.BioSignalCount}:{b.GeoSignalCount}:{b.MiningSignalCount}:{b.IsMapped}:{b.Materials.Count}:{b.WasDiscovered}:{b.WasMapped}"))
+                .Select(b => $"{b.BodyName}:{b.BioSignalCount}:{b.GeoSignalCount}:{b.MiningSignalCount}:{b.IsMapped}:{b.Materials.Count}:{b.WasDiscovered}:{b.WasMapped}:{b.WasFootfalled}"))
             // Version bumps when the discovery index finishes its startup pass (or a live
             // discovery lands), so the D badges appear/disappear without needing a body to change.
             + "#" + DiscoveryIndex.Version + "#" + MaterialInventory.Version;
@@ -793,11 +793,33 @@ namespace EliteBioRadar
             var head = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
             if (star != null)
             {
-                var (core, mid, _) = StarRenderer.GetStarColors(star.SurfaceTemperature > 0 ? star.SurfaceTemperature : 5700, star.StarType);
+                // A black hole has no surface temperature to look up — GetStarColors' fallback
+                // is a generic 5700K (G-star, yellow-white), which rendered this swatch dot as a
+                // plain yellow star instead of a black hole. Real report.
+                Brush swatchFill;
+                if (StarRenderer.IsBlackHole(star.StarType))
+                {
+                    // RadialGradientBrush(a, b) puts `a` at the CENTER and `b` at the edge — a
+                    // two-stop (amber, black) brush put amber in the center and black at the
+                    // rim, the opposite of a black hole (real report: still showed yellow).
+                    // Mostly black through most of the radius, with just a thin amber rim right
+                    // at the very edge, reads correctly even at this swatch's small 24px size.
+                    var bh = new RadialGradientBrush();
+                    bh.GradientStops.Add(new GradientStop(Colors.Black, 0.0));
+                    bh.GradientStops.Add(new GradientStop(Colors.Black, 0.72));
+                    bh.GradientStops.Add(new GradientStop(Color.FromRgb(0xff, 0xb3, 0x47), 0.88));
+                    bh.GradientStops.Add(new GradientStop(Color.FromRgb(0xff, 0x6a, 0x2e), 1.0));
+                    swatchFill = bh;
+                }
+                else
+                {
+                    var (core, mid, _) = StarRenderer.GetStarColors(star.SurfaceTemperature > 0 ? star.SurfaceTemperature : 5700, star.StarType);
+                    swatchFill = new RadialGradientBrush(mid, core);
+                }
                 head.Children.Add(new Ellipse
                 {
                     Width = 24, Height = 24, Margin = new Thickness(0, 0, 11, 0),
-                    Fill = new RadialGradientBrush(mid, core),
+                    Fill = swatchFill,
                 });
                 head.Children.Add(new TextBlock { Text = EliteWatcherService.GetShortBodyName(star.BodyName, _watcher.StarSystem).ToUpperInvariant(), Foreground = TextBright, FontWeight = FontWeights.Bold, FontSize = 18, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 11, 0) });
                 head.Children.Add(new TextBlock { Text = $"{star.StarType}-type · {star.StellarMass:F2} SM", Foreground = TextDim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, hz.HasValue ? 11 : 0, 0) });
@@ -911,11 +933,29 @@ namespace EliteBioRadar
 
             if (notable.Count > 0)
             {
-                var wrap = new WrapPanel { Orientation = Orientation.Horizontal };
+                // One WrapPanel per name-prefix group rather than one shared WrapPanel for the
+                // whole section. For a normal single-star section every body shares the same
+                // (empty) prefix, so this is still just one row-wrapping panel as before — but
+                // the BARYCENTER ORBIT/PARENT NOT YET SCANNED fallback sections bundle several
+                // unrelated hierarchical groups together (e.g. "AB 1"/"ABCD 1"/"CD 1"), and
+                // letting the WrapPanel fill a row across a prefix boundary made them run
+                // together visually with no indication they're actually separate orbital groups.
+                // notable is already sorted by BodyOrderKey (prefix first), so a prefix change
+                // here always means "start of the next group", never a group split in two.
+                WrapPanel? wrap = null;
+                string? currentPrefix = null;
                 var placed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var b in notable)
                 {
                     if (placed.Contains(b.BodyName)) continue;
+
+                    string prefix = BodyOrderKey(b).prefix;
+                    if (wrap == null || prefix != currentPrefix)
+                    {
+                        wrap = new WrapPanel { Orientation = Orientation.Horizontal };
+                        currentPrefix = prefix;
+                        section.Children.Add(wrap);
+                    }
 
                     // Attached star (see class comment) — its own compact star-styled card, not
                     // the planet-card pipeline below (PlanetClass/gravity/materials are all
@@ -945,7 +985,6 @@ namespace EliteBioRadar
                     unit.Children.Add(cards);
                     wrap.Children.Add(unit);
                 }
-                section.Children.Add(wrap);
             }
 
             if (minor.Count > 0)
@@ -1262,6 +1301,7 @@ namespace EliteBioRadar
             // 59px thumb) — a 17px badge here can't reach it.
             if (DiscoveredByOther(b)) thumbWrap.Children.Add(MakeDiscoveredBadge(17));
             if (MappedByOther(b)) thumbWrap.Children.Add(MakeMappedByOtherBadge(17));
+            if (FootfalledByOther(b)) thumbWrap.Children.Add(MakeFootfallBadge(17));
             Grid.SetColumn(thumbWrap, 0);
             top.Children.Add(thumbWrap);
 
@@ -1468,6 +1508,7 @@ namespace EliteBioRadar
             // overlap. Mapped-by-other sits bottom-left, the one corner still free.
             if (DiscoveredByOther(m)) thumbGrid.Children.Add(MakeDiscoveredBadge(12));
             if (MappedByOther(m)) thumbGrid.Children.Add(MakeMappedByOtherBadge(12));
+            if (FootfalledByOther(m)) thumbGrid.Children.Add(MakeFootfallBadge(12));
             DockPanel.SetDock(thumbGrid, Dock.Left);
             dock.Children.Add(thumbGrid);
 
@@ -1572,6 +1613,33 @@ namespace EliteBioRadar
         private static bool MappedByOther(BodyScanDetail b) =>
             !b.IsBelt && !b.IsStar && b.WasMapped == true &&
             DiscoveryIndex.IsReady && !DiscoveryIndex.IsMappedByMe(b.BodyName);
+
+        // True only when a scan says someone had already walked on this planet AND your own
+        // history says it wasn't you who got there first - see DiscoveryIndex.IsFootfalledByOther.
+        // Held back until the index finishes its startup pass, same as the other "by other" badges.
+        private static bool FootfalledByOther(BodyScanDetail b) =>
+            !b.IsBelt && !b.IsStar && b.WasFootfalled == true &&
+            DiscoveryIndex.IsReady && DiscoveryIndex.IsFootfalledByOther(b.BodyName);
+
+        // Same dark-disc / red-ring / bold-letter badge as the discovered and mapped-by-other ones,
+        // pinned to the upper-right corner of the thumbnail (the one corner they leave free).
+        private static FrameworkElement MakeFootfallBadge(double size)
+        {
+            var red = Brush("#ff5c66");
+            return new Border
+            {
+                Width = size, Height = size, CornerRadius = new CornerRadius(size / 2),
+                Background = Brush("#d9120a0c"), BorderBrush = red,
+                BorderThickness = new Thickness(Math.Max(1, size * 0.07)),
+                HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
+                ToolTip = "First footfall already taken by another commander",
+                Child = new TextBlock
+                {
+                    Text = "F", Foreground = red, FontWeight = FontWeights.Bold, FontSize = size * 0.62,
+                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+                },
+            };
+        }
 
         // Small red-ish "D" in a dark disc so it stays legible over any planet art (light icy
         // bodies and dark rocky ones alike).

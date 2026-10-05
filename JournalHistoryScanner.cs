@@ -359,9 +359,11 @@ namespace EliteBioRadar
 
             // Species_Localised often contains the full name e.g. "Bacterium Cerbrus" —
             // strip the genus prefix so DisplayName doesn't double it up.
-            var species = speciesLoc.StartsWith(genusLoc + " ", StringComparison.OrdinalIgnoreCase)
-                ? speciesLoc.Substring(genusLoc.Length + 1).Trim()
-                : speciesLoc;
+            var species = string.Equals(speciesLoc, genusLoc, StringComparison.OrdinalIgnoreCase)
+                ? ""   // single-species genus (e.g. "Bark Mounds" / "Bark Mounds"): nothing to add after the genus
+                : speciesLoc.StartsWith(genusLoc + " ", StringComparison.OrdinalIgnoreCase)
+                    ? speciesLoc.Substring(genusLoc.Length + 1).Trim()
+                    : speciesLoc;
 
             var lat = obj.Value<double?>("Latitude")  ?? activeLat;
             var lon = obj.Value<double?>("Longitude") ?? activeLon;

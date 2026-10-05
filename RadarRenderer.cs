@@ -23,7 +23,7 @@ namespace EliteBioRadar
         private static readonly Color ColDepartureDone = Color.FromArgb(0x28, 0x55, 0x88, 0xaa); // matches completed-scan grey
         private static readonly Color ColSrvAnchor = Color.FromRgb(0xcc, 0x66, 0xff);
 
-        // Pulse animation — one full sweep inner→outer every 1.25 seconds
+        // Pulse animation — one full expansion inner→outer every PulseCycleSecs (2.5 s)
         private readonly Stopwatch _pulse = Stopwatch.StartNew();
         private const double PulseCycleSecs = 2.5;
 
@@ -73,6 +73,10 @@ namespace EliteBioRadar
                 }
             }
 
+            // Rotating sweep — a dim leading line with a short fading trail behind it. Only with
+            // the radar animation on, drawn under the grid/contacts so it never hides anything.
+            if (radarAnimation) DrawSweep(cx, cy, r);
+
             // Range rings — peak brightness when wave front is AT the ring, fade after
             for (int i = 1; i <= 4; i++)
             {
@@ -96,7 +100,9 @@ namespace EliteBioRadar
                 double labelMetres = scaleMetres * i / 4.0;
                 string labelStr = labelMetres >= 1000
                     ? $"{labelMetres / 1000:F1}km" : $"{labelMetres:F0}m";
-                DrawText(cx + ringR - 28, cy - 8, labelStr, 9,
+                // On the lower-right diagonal just outside each ring (was on the horizontal axis,
+                // where the innermost label collided with the ship/heading text at the centre).
+                DrawText(cx + ringR * 0.707 + 3, cy + ringR * 0.707 - 6, labelStr, 9,
                     Color.FromArgb(0x88, 0x00, 0xe5, 0xff));
             }
 
@@ -108,6 +114,8 @@ namespace EliteBioRadar
 
             // Disc border
             DrawCircle(cx, cy, r, 1.5, ColGridRing);
+
+            DrawBezelTicks(cx, cy, r);
 
             // North indicator
             DrawText(cx - 5, cy - r - 18, "N", 11, ColNorthLine, bold: true);
@@ -373,6 +381,84 @@ namespace EliteBioRadar
             if (labelX >= -50 && labelX <= cx * 2 + 50 && labelY >= -20 && labelY <= cy * 2 + 20)
                 DrawText(labelX - 55, labelY - 8, "SHIP DEPARTURE RANGE", 10,
                     Color.FromArgb(0xcc, ringCol.R, ringCol.G, ringCol.B), bold: true);
+        }
+
+        // ---------------------------------------------------------------
+        private const double SweepCycleSecs = 8.0;
+        private const int    SweepSlices    = 24;
+        private const double SweepSliceDeg  = 2.2;
+
+        // The sweep is NOT redrawn with the rest of the radar: Draw() runs on a slow refresh tick,
+        // which made the arm step visibly. Instead it's one cached element (built pointing straight
+        // up) carrying a RotateTransform that a WPF animation spins on the compositor at the
+        // display's full frame rate; each Draw() just re-adds that same element after Children.Clear().
+        private readonly RotateTransform _sweepRotate = new RotateTransform();
+        private Canvas? _sweepHost;
+        private (double cx, double cy, double r) _sweepKey;
+
+        private void EnsureSweepAnimation()
+        {
+            if (_sweepRotate.HasAnimatedProperties) return;
+            _sweepRotate.BeginAnimation(RotateTransform.AngleProperty,
+                new System.Windows.Media.Animation.DoubleAnimation(0, 360, TimeSpan.FromSeconds(SweepCycleSecs))
+                { RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever });
+        }
+
+        // Faint radar sweep: a thin leading line plus a trail of narrow wedges that fade out.
+        private void DrawSweep(double cx, double cy, double r)
+        {
+            EnsureSweepAnimation();
+            if (_sweepHost == null || _sweepKey != (cx, cy, r))
+            {
+                Point At(double deg) => new Point(
+                    cx + r * Math.Sin(deg * Math.PI / 180.0),
+                    cy - r * Math.Cos(deg * Math.PI / 180.0));
+
+                var host = new Canvas { IsHitTestVisible = false, RenderTransform = _sweepRotate };
+                for (int k = SweepSlices - 1; k >= 0; k--)
+                {
+                    double a0 = -(k + 1) * SweepSliceDeg;
+                    double a1 = -k * SweepSliceDeg;
+                    double fade = 1.0 - (double)k / SweepSlices;
+                    byte alpha = (byte)(0x1c * fade * fade);
+                    if (alpha < 1) continue;
+                    host.Children.Add(new Polygon
+                    {
+                        Fill   = new SolidColorBrush(Color.FromArgb(alpha, 0x00, 0xe5, 0xff)),
+                        Points = new PointCollection { new Point(cx, cy), At(a0), At(a1) },
+                    });
+                }
+                var tip = At(0);
+                host.Children.Add(new Line
+                {
+                    X1 = cx, Y1 = cy, X2 = tip.X, Y2 = tip.Y,
+                    Stroke = new SolidColorBrush(Color.FromArgb(0x40, 0x00, 0xe5, 0xff)), StrokeThickness = 1,
+                });
+                _sweepHost = host;
+                _sweepKey = (cx, cy, r);
+                _sweepRotate.CenterX = cx;
+                _sweepRotate.CenterY = cy;
+            }
+            _canvas.Children.Add(_sweepHost);
+        }
+
+        // Degree ticks just inside the outer ring (small every 10°, longer every 30°) plus
+        // E/S/W letters to go with the existing N marker.
+        private void DrawBezelTicks(double cx, double cy, double r)
+        {
+            for (int deg = 0; deg < 360; deg += 10)
+            {
+                bool major = deg % 30 == 0;
+                double len = major ? 8 : 4;
+                double rad = deg * Math.PI / 180.0;
+                double s = Math.Sin(rad), c = -Math.Cos(rad);
+                DrawLine(cx + (r - len) * s, cy + (r - len) * c, cx + r * s, cy + r * c,
+                    major ? 1.2 : 0.8, Color.FromArgb(major ? (byte)0x88 : (byte)0x55, 0x00, 0xe5, 0xff));
+            }
+            var dim = Color.FromArgb(0x99, 0x00, 0xe5, 0xff);
+            DrawText(cx + r + 6,  cy - 7,  "E", 10, dim);
+            DrawText(cx - 4,      cy + r + 5, "S", 10, dim);
+            DrawText(cx - r - 14, cy - 7,  "W", 10, dim);
         }
 
         // ---------------------------------------------------------------

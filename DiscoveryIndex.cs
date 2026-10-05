@@ -36,6 +36,39 @@ namespace EliteBioRadar
         public static bool IsDiscoveredByMe(string bodyName) { lock (_lock) return _discoveredByMe.Contains(bodyName); }
         public static bool IsMappedByMe(string bodyName)     { lock (_lock) return _mappedByMe.Contains(bodyName); }
 
+        // Footfall: a Scan's WasFootfalled=true only says "someone had already walked here before
+        // this scan" - and once you walk there yourself, every later scan says true too. So, same
+        // idea as discovery: remember what the FIRST Scan of each body you ever made said, plus
+        // whether you have stepped onto it on foot since.
+        //   first scan said true                       -> another commander was there before you ever saw it
+        //   first scan said false, you never walked it -> someone else got there before your next scan
+        //   first scan said false, you did walk it     -> the footfall was yours
+        private static readonly Dictionary<string, bool> _firstScanFootfalled = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly HashSet<string> _walkedByMe = new(StringComparer.OrdinalIgnoreCase);
+
+        public static bool IsFootfalledByOther(string bodyName)
+        {
+            lock (_lock)
+            {
+                if (!_firstScanFootfalled.TryGetValue(bodyName, out var firstTrue)) return false;
+                return firstTrue || !_walkedByMe.Contains(bodyName);
+            }
+        }
+
+        // Called for every scan (history pass and live). Only the first one per body is kept.
+        public static void NoteScanFootfall(string bodyName, bool? wasFootfalled)
+        {
+            if (string.IsNullOrEmpty(bodyName) || !wasFootfalled.HasValue) return;
+            lock (_lock) { if (_firstScanFootfalled.TryAdd(bodyName, wasFootfalled.Value)) Version++; }
+        }
+
+        // An on-foot Disembark onto a planet (not SRV, not a taxi).
+        public static void MarkWalkedByMe(string bodyName)
+        {
+            if (string.IsNullOrEmpty(bodyName)) return;
+            lock (_lock) { if (_walkedByMe.Add(bodyName)) Version++; }
+        }
+
         public static void MarkDiscoveredByMe(string bodyName)
         {
             if (string.IsNullOrEmpty(bodyName)) return;
@@ -56,8 +89,11 @@ namespace EliteBioRadar
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 var discovered = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var mapped     = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var firstFoot  = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+                var walked     = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-                foreach (var file in Directory.GetFiles(journalDir, "Journal.*.log"))
+                // Oldest first, so "the first scan of each body" really is the first.
+                foreach (var file in Directory.GetFiles(journalDir, "Journal.*.log").OrderBy(File.GetLastWriteTimeUtc))
                 {
                     try
                     {
@@ -70,13 +106,25 @@ namespace EliteBioRadar
                             // Cheap substring filters first — the vast majority of journal lines
                             // are neither, and full JSON parsing every one of them is what would
                             // make a pass over ~700 files slow.
-                            bool isScan = line.Contains("\"event\":\"Scan\"") && line.Contains("\"WasDiscovered\":false");
+                            bool isScanEv = line.Contains("\"event\":\"Scan\"");
+                            bool isScan = isScanEv && line.Contains("\"WasDiscovered\":false");
                             bool isMap  = !isScan && line.Contains("\"event\":\"SAAScanComplete\"");
-                            if (!isScan && !isMap) continue;
+                            bool isFootScan = isScanEv && line.Contains("\"WasFootfalled\":");
+                            bool isWalk = !isScanEv && line.Contains("\"event\":\"Disembark\"") &&
+                                line.Contains("\"SRV\":false") && line.Contains("\"Taxi\":false") && line.Contains("\"OnPlanet\":true");
+                            if (!isScan && !isMap && !isFootScan && !isWalk) continue;
+
+                            if (isWalk)
+                            {
+                                string? walkBody = ExtractField(line, "\"Body\":\"");
+                                if (walkBody != null) walked.Add(walkBody);
+                                continue;
+                            }
 
                             string? name = ExtractBodyName(line);
                             if (name == null) continue;
-                            if (isScan) discovered.Add(name); else mapped.Add(name);
+                            if (isFootScan) firstFoot.TryAdd(name, line.Contains("\"WasFootfalled\":true"));
+                            if (isScan) discovered.Add(name); else if (isMap) mapped.Add(name);
                         }
                     }
                     catch (Exception ex) { Log.Write($"DiscoveryIndex: skipped {Path.GetFileName(file)} — {ex.Message}"); }
@@ -86,6 +134,10 @@ namespace EliteBioRadar
                 {
                     _discoveredByMe.UnionWith(discovered);
                     _mappedByMe.UnionWith(mapped);
+                    // The history pass is oldest-first and complete, so it is authoritative: it must overwrite anything the
+                    // live/backfill scan handler recorded while this pass was still running (those can be later scans).
+                    foreach (var kv in firstFoot) _firstScanFootfalled[kv.Key] = kv.Value;
+                    _walkedByMe.UnionWith(walked);
                     IsReady = true;
                     Version++;
                 }
@@ -97,6 +149,15 @@ namespace EliteBioRadar
         // Journal lines are one flat JSON object; pulling the one field we need with IndexOf is
         // far cheaper than parsing the whole thing, and BodyName never contains an escaped quote
         // in practice (body names are plain text like "Qiedea LF-G b30-1 2").
+        private static string? ExtractField(string line, string key)
+        {
+            int i = line.IndexOf(key, StringComparison.Ordinal);
+            if (i < 0) return null;
+            i += key.Length;
+            int j = line.IndexOf('"', i);
+            return j > i ? line.Substring(i, j - i) : null;
+        }
+
         private static string? ExtractBodyName(string line)
         {
             const string key = "\"BodyName\":\"";

@@ -49,10 +49,23 @@ namespace EliteBioRadar
         // in-game event fires (see StarScanUpdated/PlanetTargetUpdated/DestinationUpdated
         // subscriptions below), at which point automatic mode-selection takes back over.
         private InfoPanelMode? _manualMode;
+        // When this run of the app started. A destination target that was already sitting in the replayed
+        // journal at launch (last session ended right after targeting the next hop) must not pull the
+        // app onto the Destination tab on its own - only a target set after launch counts for auto mode.
+        private readonly DateTime _appLaunchedUtc = DateTime.UtcNow;
         private bool _wasHasPosition;
         private bool _wasGliding;
         private bool _wasFssActive;
         private BodyScanDetail? _lastRenderedStar;
+        // Drives the neutron star jets' live redraw (StarRenderer.RenderNeutronJets on a
+        // continuously advancing phase) — a DispatcherTimer, not a 2-frame opacity cross-fade
+        // like the granulation/flare layers use, because cross-fading between two sufficiently
+        // different static frames showed both overlapping mid-transition ("two tails" at the
+        // tips, where the wave amplitude — and so the gap between frames — is largest). Tracked
+        // here so UpdateStarPanel/the mode-switch handler can stop a previous one before a new
+        // star (or a non-Star mode) takes over; a DispatcherTimer isn't released just because
+        // the Image it was updating left the visual tree.
+        private DispatcherTimer? _neutronJetTimer;
         private BodyScanDetail? _lastRenderedPlanet;
         private string _lastRenderedSignalKey = "";
         // DEORBIT screen animation state — advanced by real elapsed time each tick, not a
@@ -472,6 +485,14 @@ namespace EliteBioRadar
                 // leftovers: an ascent opened on the old descent arc instead of INITIALIZING (real
                 // report). Reset on every entry to and exit from Deorbit instead.
                 if (mode == InfoPanelMode.Deorbit || _lastMode == InfoPanelMode.Deorbit) ResetDeorbitState();
+                // Same reasoning as the Deorbit reset above — UpdateStarPanel simply stops being
+                // called once the mode leaves Star, so a running neutron jet timer would
+                // otherwise keep redrawing an Image nobody's looking at indefinitely.
+                if (_lastMode == InfoPanelMode.Star && mode != InfoPanelMode.Star)
+                {
+                    _neutronJetTimer?.Stop();
+                    _neutronJetTimer = null;
+                }
                 _lastMode = mode;
                 ApplyInfoPanelMode(mode);
             }
@@ -709,7 +730,8 @@ namespace EliteBioRadar
             // The route data itself is untouched; this only gates the auto-switch.
             bool hasDestTarget = _watcher.CurrentDestination != null &&
                 !string.IsNullOrEmpty(_watcher.CurrentDestination.NextSystem) &&
-                _watcher.FsdTargetedAt >= _watcher.SystemArrivedAt;
+                _watcher.FsdTargetedAt >= _watcher.SystemArrivedAt &&
+                _watcher.FsdTargetedAt >= _appLaunchedUtc;
 
             if (hasInSystemTarget && hasDestTarget)
                 return _watcher.PlanetTargetedAt >= _watcher.FsdTargetedAt
@@ -810,6 +832,12 @@ namespace EliteBioRadar
             if (!force && ReferenceEquals(detail, _lastRenderedStar)) return;
             _lastRenderedStar = detail;
 
+            // The displayed star is genuinely changing (or re-rendering under `force`) — stop
+            // any neutron jet timer from whatever was shown before. RenderNeutronStarPanel
+            // starts a fresh one below if the new star needs it.
+            _neutronJetTimer?.Stop();
+            _neutronJetTimer = null;
+
             starPanelCanvas.Children.Clear();
             starPanelCanvas.Children.Add(MakeGridBackground(713, 580));
 
@@ -819,42 +847,40 @@ namespace EliteBioRadar
                 return;
             }
 
+            // Neutron stars AND white dwarfs share the same jet-and-core render (see
+            // StarRenderer's class-level comment / IsWhiteDwarf's own comment — direct request,
+            // "they are similar looking", not a claim that white dwarfs really have jets).
+            // Checked before IsProceduralStarFamily since neither "N" nor a "D"-prefixed class
+            // is part of that real-fusion family at all.
+            if (StarRenderer.IsNeutronStar(detail.StarType) || StarRenderer.IsWhiteDwarf(detail.StarType))
+            {
+                RenderNeutronStarPanel(detail);
+                return;
+            }
+
             // Real fusion stars (O through M, Wolf-Rayet, brown dwarfs) get the full
             // art-direction rework: a real granulated/flaring procedural sphere and the same
-            // no-leader-line stacked HUD the Planet tab already has. Degenerate remnants
-            // (white dwarf/neutron star/black hole) have no reference screenshot yet and a
-            // completely different visual language, so they stay on the old flat icon/callout
-            // layout below until their own phase lands.
+            // no-leader-line stacked HUD the Planet tab already has.
             if (StarRenderer.IsProceduralStarFamily(detail.StarType))
             {
                 RenderStarPanel(detail);
                 return;
             }
 
-            string iconCode = MapStarTypeToIconCode(detail.StarType);
-            starPanelCanvas.Children.Add(MakeImg($"StarIcons/png/star_{iconCode}.png", 217, 197, 186));
+            // Black hole — a deliberately modest animated render (the existing flat icon's own
+            // black-disc-plus-amber-glow-ring look, just alive via a cross-faded glow pulse)
+            // rather than the ambitious accretion-disk/lensing redesign attempted and explicitly
+            // abandoned earlier — that needs a real in-game reference before another attempt.
+            if (StarRenderer.IsBlackHole(detail.StarType))
+            {
+                RenderBlackHoleStarPanel(detail);
+                return;
+            }
 
-            AddCallout(starPanelCanvas, new (double, double)[] { (246, 213), (208, 180), (150, 180) }, 180, false,
-                "CLASS", $"{detail.StarType} ({StarClassNames.GetDisplayName(detail.StarType)})", InfoOrangeBrush);
-            AddCallout(starPanelCanvas, new (double, double)[] { (210, 290), (150, 290) }, 290, false,
-                "SOLAR MASS", detail.StellarMass > 0 ? $"{detail.StellarMass:F2}" : "—");
-            AddCallout(starPanelCanvas, new (double, double)[] { (246, 367), (208, 400), (150, 400) }, 400, false,
-                "AGE", detail.AgeMY > 0 ? $"{detail.AgeMY:N0} My" : "—");
-
-            AddCallout(starPanelCanvas, new (double, double)[] { (375, 213), (412, 180), (470, 180) }, 180, true,
-                "SURFACE TEMP", detail.SurfaceTemperature > 0 ? $"{detail.SurfaceTemperature:N0} K" : "—");
-            AddCallout(starPanelCanvas, new (double, double)[] { (410, 290), (470, 290) }, 290, true,
-                "RADIUS (SOL)", detail.Radius > 0 ? $"{detail.Radius / 6.957e8:F2}" : "—");
-            // Stars never have Saturn-style rings in-game — a star's "Rings" entry is always
-            // an asteroid belt (its Name contains "Belt", e.g. "Sol A Belt"), not a true ring,
-            // so exclude those here rather than mislabelling a belt as "the star has rings".
-            var trueStarRing = detail.Rings.FirstOrDefault(r => !r.Name.Contains("Belt", StringComparison.OrdinalIgnoreCase));
-            AddCallout(starPanelCanvas, new (double, double)[] { (375, 367), (412, 400), (470, 400) }, 400, true,
-                "RINGS", trueStarRing != null ? FormatRingClass(trueStarRing.RingClass) : "None");
-
-            bool isPrimary = _watcher != null && ReferenceEquals(detail, _watcher.CurrentStarDetail);
-            starPanelCanvas.Children.Add(MakeCenterLabel(detail.BodyName.ToUpperInvariant(), 356.5, 500, InfoValueBrush, 17));
-            starPanelCanvas.Children.Add(MakeCenterLabel(isPrimary ? "primary star" : "targeted star", 356.5, 522, InfoDimBrush, 13));
+            // Only reachable with a null/empty StarType (IsProceduralStarFamily covers every
+            // other value, known or not) — no art to show, just the stats. The old flat icon
+            // fallback and its star_*.png assets have been removed entirely.
+            AddStarHudStats(detail);
         }
 
         // Procedural star family — real granulation/flare sphere (StarRenderer) plus the same
@@ -877,6 +903,9 @@ namespace EliteBioRadar
                 starPanelCanvas.Children.Add(imgRingBack);
             }
 
+            bool starOnGpu = TryAddStarShaderScene(detail, sceneW, sceneH, sceneX, sceneY);
+            if (!starOnGpu)
+            {
             var (baseLayer, surfaceA, surfaceB, topLayer) = StarRenderer.GetStarLayers(detail, sceneW, sceneH);
             var imgBase = new Image { Width = sceneW, Height = sceneH, Source = baseLayer };
             var imgSurfaceA = new Image { Width = sceneW, Height = sceneH, Source = surfaceA };
@@ -924,6 +953,8 @@ namespace EliteBioRadar
                 });
             }
 
+            }
+
             // Front ring sliver, drawn last so it passes in front of the whole sphere/flare
             // stack — the classic ring-crosses-the-near-limb illusion.
             if (realStarRing != null)
@@ -934,6 +965,105 @@ namespace EliteBioRadar
                 starPanelCanvas.Children.Add(imgRingFront);
             }
 
+            AddStarHudStats(detail);
+        }
+
+        // GPU star: one Rectangle carrying StarShaderEffect draws the photosphere, sunspots, halo,
+        // coronal loops and mass ejections and animates itself from Time. Returns false (caller
+        // falls back to the CPU layers) on software-only rendering or any setup failure.
+        private bool TryAddStarShaderScene(BodyScanDetail detail, int sceneW, int sceneH, int sceneX, int sceneY)
+        {
+            if ((RenderCapability.Tier >> 16) == 0) return false;
+            try
+            {
+                var look = StarRenderer.GetStarLook(detail);
+                var (cx, cy, R) = StarRenderer.GetStarShaderDisc(detail, sceneW, sceneH);
+                var effect = StarShaderEffect.Create(look,
+                    new Point(cx / sceneW, cy / sceneH), new Point(R / sceneW, R / sceneH));
+                effect.BeginAnimation(StarShaderEffect.TimeProperty,
+                    new DoubleAnimation(0, 36000, TimeSpan.FromSeconds(36000)));
+                var surface = new System.Windows.Shapes.Rectangle { Width = sceneW, Height = sceneH, Fill = Brushes.Black, Effect = effect };
+                { var ssHost = Supersample(surface); Canvas.SetLeft(ssHost, sceneX); Canvas.SetTop(ssHost, sceneY);
+                starPanelCanvas.Children.Add(ssHost); }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Write($"Star shader setup failed, using CPU renderer: {ex.Message}");
+                return false;
+            }
+        }
+
+        // Neutron stars ("N") AND white dwarfs ("D"-prefixed) share this dedicated jet-and-core
+        // render instead of the granulated procedural-star pipeline — a degenerate remnant has
+        // no photosphere to granulate, and the two look similar enough to share one treatment
+        // (direct request). Same stacked HUD stats as every other star, just different art
+        // underneath.
+        //
+        // The jets are redrawn live on a timer (a continuously advancing phase, one fresh frame
+        // per tick) rather than cross-faded between two cached static frames — see
+        // StarRenderer.GetNeutronCore's comment for why the 2-frame approach broke down once the
+        // wave amplitude got large enough to look like real whip motion (real screenshot: it
+        // showed as two overlapping "tails" at the tips during the cross-fade transition).
+        private void RenderNeutronStarPanel(BodyScanDetail detail)
+        {
+            const int sceneW = 370, sceneH = 420, sceneX = 171, sceneY = 40;
+
+            var core = StarRenderer.GetNeutronCore(detail, sceneW, sceneH);
+            var imgCore = new Image { Width = sceneW, Height = sceneH, Source = core };
+            var imgJets = new Image { Width = sceneW, Height = sceneH, Source = StarRenderer.RenderNeutronJets(detail, sceneW, sceneH, 0.0) };
+            foreach (var img in new[] { imgJets, imgCore })
+            { Canvas.SetLeft(img, sceneX); Canvas.SetTop(img, sceneY); }
+            // Jets drawn first, core on top — it sits right where both arms converge, the same
+            // "glow behind, disc/core in front" layering the procedural star panel uses.
+            starPanelCanvas.Children.Add(imgJets);
+            starPanelCanvas.Children.Add(imgCore);
+
+            // ~20fps, a full phase cycle every ~8s — fast enough to read as a continuous sweep
+            // (matching the approved mockup's "cone shape as they spin" look), slow enough not
+            // to be frantic. _neutronJetTimer is stopped/replaced by UpdateStarPanel whenever
+            // the displayed star changes, and by the mode-switch handler on leaving Star mode.
+            double phase = 0;
+            _neutronJetTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+            _neutronJetTimer.Tick += (_, __) =>
+            {
+                phase += 0.0393;
+                imgJets.Source = StarRenderer.RenderNeutronJets(detail, sceneW, sceneH, phase);
+            };
+            _neutronJetTimer.Start();
+
+            AddStarHudStats(detail);
+        }
+
+        // Black hole — the existing flat icon's own look (black disc + amber glow ring), just
+        // alive via a 2-frame cross-fade of the glow (same opacity-DoubleAnimation idiom every
+        // other panel here uses) instead of a static PNG. See StarRenderer.GetBlackHoleLayers.
+        private void RenderBlackHoleStarPanel(BodyScanDetail detail)
+        {
+            const int sceneW = 370, sceneH = 420, sceneX = 171, sceneY = 40;
+
+            var (core, glowA, glowB) = StarRenderer.GetBlackHoleLayers(detail, sceneW, sceneH);
+            var imgGlowA = new Image { Width = sceneW, Height = sceneH, Source = glowA };
+            var imgGlowB = new Image { Width = sceneW, Height = sceneH, Source = glowB, Opacity = 0 };
+            var imgCore = new Image { Width = sceneW, Height = sceneH, Source = core };
+            foreach (var img in new[] { imgGlowA, imgGlowB, imgCore })
+            { Canvas.SetLeft(img, sceneX); Canvas.SetTop(img, sceneY); }
+            starPanelCanvas.Children.Add(imgGlowA);
+            starPanelCanvas.Children.Add(imgGlowB);
+            starPanelCanvas.Children.Add(imgCore);
+            imgGlowB.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation
+            {
+                From = 0, To = 1, Duration = TimeSpan.FromSeconds(3.2),
+                AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase(),
+            });
+
+            AddStarHudStats(detail);
+        }
+
+        // Shared by RenderStarPanel and RenderNeutronStarPanel — same six stats/positions
+        // regardless of which art renders underneath them.
+        private void AddStarHudStats(BodyScanDetail detail)
+        {
             double leftX = 164, rightX = 548, rowY = 78;
             const double sectionGap = 34;
 
@@ -988,6 +1118,7 @@ namespace EliteBioRadar
             var bottomLabel = EliteWatcherService.GetShortBodyName(detail.BodyName, _watcher?.StarSystem ?? "");
             starPanelCanvas.Children.Add(MakeHudCenterLabel(bottomLabel.ToUpperInvariant(), 356.5, 500, InfoBrightValueBrush, 16.5));
             starPanelCanvas.Children.Add(MakeHudCenterLabel(isPrimary ? "PRIMARY STAR" : "TARGETED STAR", 356.5, 522, InfoOrangeBrush, 14.5));
+            AddDiscoveryLine(starPanelCanvas, detail, 356.5, 544, 13);
         }
 
         private void UpdateInfoPlanetPanel(bool force = false)
@@ -1224,6 +1355,49 @@ namespace EliteBioRadar
         // instead), and the class title moved to the top instead of the bottom. Everything
         // else (rocky/icy/metal terrain, etc.) still uses the pre-rework layout below this
         // method until its own phase lands.
+        // Renders a shader scene at 2x and smooths it down. A pixel shader cannot antialias its own contours (band
+        // edges, storm outlines, cracks), which showed up as single-pixel stair-steps; a 2x bitmap cache with
+        // high-quality downscaling is a cheap supersample for these small panels.
+        private static FrameworkElement Supersample(FrameworkElement scene)
+        {
+            var host = new Canvas { Width = scene.Width, Height = scene.Height, CacheMode = new BitmapCache(2.0) };
+            RenderOptions.SetBitmapScalingMode(host, BitmapScalingMode.HighQuality);
+            host.Children.Add(scene);
+            return host;
+        }
+
+        // GPU gas giant: ring back-pass image, then a Rectangle carrying GasGiantShaderEffect (which
+        // draws the whole lit sphere and animates its own rotation from Time), then the
+        // front-sliver/atmosphere layer. Returns false (caller falls back to the CPU layers) on
+        // software-only rendering or any setup failure.
+        private bool TryAddGasGiantShaderScene(BodyScanDetail detail, string iconCode, int sceneW, int sceneH, int sceneX, int sceneY)
+        {
+            if ((RenderCapability.Tier >> 16) == 0) return false;
+            try
+            {
+                var (ringBack, top) = PlanetRenderer.GetGasGiantShaderStaticLayers(detail, iconCode, sceneW, sceneH);
+                var look = PlanetRenderer.GetGasGiantLook(detail, iconCode);
+                var (cx, cy, sphereR) = PlanetRenderer.GetGasGiantSphere(detail, sceneW, sceneH);
+                var effect = GasGiantShaderEffect.Create(look,
+                    new Point(cx / sceneW, cy / sceneH), new Point(sphereR / sceneW, sphereR / sceneH));
+                // Linear, effectively endless (10h) - the shader treats Time as seconds of rotation.
+                effect.BeginAnimation(GasGiantShaderEffect.TimeProperty,
+                    new DoubleAnimation(0, 36000, TimeSpan.FromSeconds(36000)));
+
+                var imgRing = new Image { Width = sceneW, Height = sceneH, Source = ringBack };
+                var surface = new System.Windows.Shapes.Rectangle { Width = sceneW, Height = sceneH, Fill = Brushes.Black, Effect = effect };
+                var imgTop = new Image { Width = sceneW, Height = sceneH, Source = top };
+                foreach (var el in new FrameworkElement[] { imgRing, Supersample(surface), imgTop })
+                { Canvas.SetLeft(el, sceneX); Canvas.SetTop(el, sceneY); planetPanelCanvas.Children.Add(el); }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Write($"Gas giant shader setup failed, using CPU renderer: {ex.Message}");
+                return false;
+            }
+        }
+
         private void RenderGasGiantPanel(BodyScanDetail detail, string iconCode)
         {
             bool hasBio = detail.BioSignalCount > 0, hasGeo = detail.GeoSignalCount > 0;
@@ -1273,6 +1447,10 @@ namespace EliteBioRadar
             // math), so the rings/glow/limb all visibly "breathed" over the cycle even though
             // none of them ever actually changed. Splitting the bake so only the cloud bands
             // sit in the cross-fade fixes that at the source instead of just hiding it.
+            // GPU shader path first (rotating, turbulent bands - see GasGiantShaderEffect); the
+            // original CPU layers below remain as the fallback for software-rendering machines.
+            if (!TryAddGasGiantShaderScene(detail, iconCode, sceneW, sceneH, sceneX, sceneY))
+            {
             var (baseLayer, cloudA, cloudB, topLayer) = PlanetRenderer.GetGasGiantLayers(detail, iconCode, sceneW, sceneH);
             var imgBase = new Image { Width = sceneW, Height = sceneH, Source = baseLayer };
             var imgCloudA = new Image { Width = sceneW, Height = sceneH, Source = cloudA };
@@ -1294,6 +1472,7 @@ namespace EliteBioRadar
                 From = 0, To = 1, Duration = TimeSpan.FromSeconds(3),
                 AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase(),
             });
+            }
 
             // Bio/Geo/Mining/Ring-Mining badges — carried over from the pre-rework layout
             // (dropped by mistake in the first pass of this rework). Mining badge stays a
@@ -1390,6 +1569,62 @@ namespace EliteBioRadar
         // font/spacing machinery — only the stat rows themselves differ (Planet Class's trait
         // chip is conditional on TidalLock here, not always present; Geo Signals gets a real
         // Volcanism sub-line the same way Ring Mining gets a materials sub-line).
+        // GPU landable world (landable HMC): one Rectangle carrying LandableWorldShaderEffect draws the
+        // lit sphere with terrain patches, craters, rust streaks, frost and glowing flecks, and animates
+        // itself from Time. Returns false (caller uses the CPU terrain scene) for any other body, on
+        // software-only rendering, or on any setup failure.
+        private bool TryAddLandableWorldScene(BodyScanDetail detail, string iconCode, int sceneW, int sceneH, int sceneX, int sceneY)
+        {
+            if (!PlanetRenderer.IsLandableWorld(detail, iconCode)) return false;
+            if ((RenderCapability.Tier >> 16) == 0) return false;
+            try
+            {
+                var look = PlanetRenderer.GetLandableWorldLook(detail, iconCode);
+                var (cx, cy, R) = PlanetRenderer.GetTerrainGeometry(sceneW, sceneH, detail);
+                var effect = LandableWorldShaderEffect.Create(look,
+                    new Point(cx / sceneW, cy / sceneH), new Point(R / sceneW, R / sceneH));
+                effect.BeginAnimation(LandableWorldShaderEffect.TimeProperty,
+                    new DoubleAnimation(0, 36000, TimeSpan.FromSeconds(36000)));
+                var surface = new System.Windows.Shapes.Rectangle { Width = sceneW, Height = sceneH, Fill = Brushes.Black, Effect = effect };
+                { var ssHost = Supersample(surface); Canvas.SetLeft(ssHost, sceneX); Canvas.SetTop(ssHost, sceneY);
+                planetPanelCanvas.Children.Add(ssHost); }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Write($"Landable world shader setup failed, using CPU renderer: {ex.Message}");
+                return false;
+            }
+        }
+
+        // GPU thick-atmosphere world (non-landable HMC): one Rectangle carrying AtmoWorldShaderEffect
+        // draws the lit sphere, haze, clouds, cyclones and caps and animates itself from Time.
+        // Returns false (caller uses the CPU terrain scene) when the body isn't one of those, on
+        // software-only rendering, or on any setup failure.
+        private bool TryAddAtmoWorldScene(BodyScanDetail detail, string iconCode, int sceneW, int sceneH, int sceneX, int sceneY)
+        {
+            if (!PlanetRenderer.IsAtmoWorld(detail, iconCode)) return false;
+            if ((RenderCapability.Tier >> 16) == 0) return false;
+            try
+            {
+                var look = PlanetRenderer.GetAtmoWorldLook(detail, iconCode);
+                var (cx, cy, R) = PlanetRenderer.GetTerrainGeometry(sceneW, sceneH, detail);
+                var effect = AtmoWorldShaderEffect.Create(look,
+                    new Point(cx / sceneW, cy / sceneH), new Point(R / sceneW, R / sceneH));
+                effect.BeginAnimation(AtmoWorldShaderEffect.TimeProperty,
+                    new DoubleAnimation(0, 36000, TimeSpan.FromSeconds(36000)));
+                var surface = new System.Windows.Shapes.Rectangle { Width = sceneW, Height = sceneH, Fill = Brushes.Black, Effect = effect };
+                { var ssHost = Supersample(surface); Canvas.SetLeft(ssHost, sceneX); Canvas.SetTop(ssHost, sceneY);
+                planetPanelCanvas.Children.Add(ssHost); }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Write($"Atmosphere world shader setup failed, using CPU renderer: {ex.Message}");
+                return false;
+            }
+        }
+
         private void RenderTerrainPanel(BodyScanDetail detail, string iconCode)
         {
             bool hasBio = detail.BioSignalCount > 0, hasGeo = detail.GeoSignalCount > 0;
@@ -1403,10 +1638,14 @@ namespace EliteBioRadar
             int ringHotspotTotal = ringHotspots.Sum(s => s.Count);
 
             const int sceneW = 370, sceneH = 420, sceneX = 171, sceneY = 40;
-            var frame = PlanetRenderer.GetTerrainSceneFrame(detail, iconCode, sceneW, sceneH, _watcher?.SystemPopulation ?? 0);
-            var img = new Image { Width = sceneW, Height = sceneH, Source = frame };
-            Canvas.SetLeft(img, sceneX); Canvas.SetTop(img, sceneY);
-            planetPanelCanvas.Children.Add(img);
+            if (!TryAddAtmoWorldScene(detail, iconCode, sceneW, sceneH, sceneX, sceneY) &&
+                !TryAddLandableWorldScene(detail, iconCode, sceneW, sceneH, sceneX, sceneY))
+            {
+                var frame = PlanetRenderer.GetTerrainSceneFrame(detail, iconCode, sceneW, sceneH, _watcher?.SystemPopulation ?? 0);
+                var img = new Image { Width = sceneW, Height = sceneH, Source = frame };
+                Canvas.SetLeft(img, sceneX); Canvas.SetTop(img, sceneY);
+                planetPanelCanvas.Children.Add(img);
+            }
 
             // Badges anchor to the SPHERE's own actual center/radius, not a fixed offset from
             // the scene box's corner — this scene's sphere doesn't fill nearly as much of its
@@ -1469,6 +1708,14 @@ namespace EliteBioRadar
             // exactly where the Mining badge now sits on this HUD. A gold chip matching Tidally
             // Locked's own style sidesteps that conflict entirely instead of hunting for a new
             // free corner on the sphere.
+            if (detail.Landable)
+            {
+                // Same coral as the System Scan window's "landable" chip.
+                var landableChip = MakeTraitChip("LANDABLE", leftX, classBottomY + 4, StatColWidth, rightAlign: false,
+                    solidColor: Color.FromRgb(0xff, 0x9f, 0x6b), solidFill: Color.FromRgb(0x2a, 0x18, 0x0f));
+                planetPanelCanvas.Children.Add(landableChip);
+                classBottomY = classBottomY + 4 + landableChip.DesiredSize.Height;
+            }
             if (detail.TidalLock)
             {
                 var tidalChip = MakeTraitChip("TIDALLY LOCKED", leftX, classBottomY + 4, StatColWidth, rightAlign: false);
@@ -1974,7 +2221,14 @@ namespace EliteBioRadar
             // remaining-only view if the cache hasn't populated yet (e.g. very first tick).
             var fullRoute = dest.FullRouteHops.Count > 0 ? dest.FullRouteHops : dest.Hops;
             // 0-based index of "where we are right now" — everything before this is history.
-            int hereIndex = hopIndex > 0 ? hopIndex - 1 : -1;
+            // hopIndex counts the whole journey (TotalRouteJumps includes hops flown in EARLIER
+            // legs before a mid-route re-plot), but the list below only holds the CURRENT leg — so
+            // the carried-over hops have to come off before using it as a list position. Without
+            // that, a route re-plotted after 3 completed hops dimmed the next three upcoming rows
+            // as if they'd already been passed (real report: rows 8 and 9 grayed out ahead of the
+            // "next" row 7).
+            int carriedHops = dest.FullRouteHops.Count > 0 ? Math.Max(0, dest.TotalRouteJumps - dest.FullRouteHops.Count) : 0;
+            int hereIndex = hopIndex > 0 ? Math.Max(-1, hopIndex - 1 - carriedHops) : -1;
 
             Border? currentRow = null;
             // Fallback scroll target for when no row matches NextSystem at all (e.g. NextSystem
@@ -3209,8 +3463,10 @@ namespace EliteBioRadar
                 else                                                  parts.Add(("DISCOVERED BY OTHER CMDR", InfoOtherCmdrBrush));
             }
 
-            if (detail.IsMapped || DiscoveryIndex.IsMappedByMe(detail.BodyName)) parts.Add(("MAPPED BY YOU", InfoLabelGreenBrush));
-            else if (detail.WasMapped == true)                                   parts.Add(("MAPPED BY OTHER CMDR", InfoOtherCmdrBrush));
+            // Stars can't be DSS-mapped, so the mapped half only applies to planets and moons.
+            if (detail.IsStar) { }
+            else if (detail.IsMapped || DiscoveryIndex.IsMappedByMe(detail.BodyName)) parts.Add(("MAPPED BY YOU", InfoLabelGreenBrush));
+            else if (detail.WasMapped == true)                                  parts.Add(("MAPPED BY OTHER CMDR", InfoOtherCmdrBrush));
             else if (detail.WasMapped == false)                                  parts.Add(("NOT MAPPED", InfoLabelGreenBrush));
 
             if (parts.Count == 0) return;
@@ -3333,24 +3589,6 @@ namespace EliteBioRadar
             double valX = centered ? textX - calloutWidth / 2 : rightSide ? textX : textX - calloutWidth;
             Canvas.SetLeft(valTb, valX); Canvas.SetTop(valTb, rowY + 12);
             canvas.Children.Add(valTb);
-        }
-
-        private static string MapStarTypeToIconCode(string starType)
-        {
-            if (string.IsNullOrEmpty(starType)) return "G";
-            switch (starType)
-            {
-                case "O": case "B": case "A": case "F": case "G": case "K": case "M":
-                case "W": case "WC": case "WN": case "WNC": case "WO":
-                    return starType;
-                case "L": return "BrownDwarf_L";
-                case "T": return "BrownDwarf_T";
-                case "Y": return "BrownDwarf_Y";
-                case "N": return "NeutronStar";
-                case "H": case "SupermassiveBlackHole": return "BlackHole";
-                default:
-                    return starType.StartsWith("D", StringComparison.OrdinalIgnoreCase) ? "WhiteDwarf" : "G";
-            }
         }
 
         // internal (not private) so SystemScanWindow can pick the same real terrain/gas-giant
@@ -3634,7 +3872,7 @@ namespace EliteBioRadar
                 int  dotCount = snap.Count(o => string.Equals(o.Genus, genus, StringComparison.OrdinalIgnoreCase));
                 bool isDone   = completedOrg != null;
                 var  species  = scanned?.Species ?? completedOrg?.Species ?? "";
-                var  fullName = !string.IsNullOrEmpty(species) ? $"{genus} {species}".Trim() : genus;
+                var  fullName = !string.IsNullOrEmpty(DedupSpecies(genus, species)) ? $"{genus} {DedupSpecies(genus, species)}".Trim() : genus;
                 var  payout   = PayoutData.GetValue(fullName, ff);
                 // Only add to total once the organism is fully scanned
                 if (isDone && payout > 0) sidebarTotal += payout;
@@ -3656,7 +3894,7 @@ namespace EliteBioRadar
                 bool isActive  = string.Equals(org.Genus, _activeGenus, StringComparison.OrdinalIgnoreCase);
                 int  dotCount  = snap.Count(o => string.Equals(o.Genus, org.Genus, StringComparison.OrdinalIgnoreCase));
                 bool isDoneOrg = completed.Any(c => string.Equals(c.Genus, org.Genus, StringComparison.OrdinalIgnoreCase));
-                var  fullName  = !string.IsNullOrEmpty(org.Species) ? $"{org.Genus} {org.Species}".Trim() : org.Genus;
+                var  fullName  = !string.IsNullOrEmpty(DedupSpecies(org.Genus, org.Species)) ? $"{org.Genus} {DedupSpecies(org.Genus, org.Species)}".Trim() : org.Genus;
                 var  payout    = PayoutData.GetValue(fullName, ff);
                 // Only add to total once the organism is fully scanned
                 if (isDoneOrg && payout > 0) sidebarTotal += payout;
@@ -3681,7 +3919,7 @@ namespace EliteBioRadar
             foreach (var comp in completed.Where(c => !shown.Contains(c.Genus)))
             {
                 shown.Add(comp.Genus);
-                var fullName = !string.IsNullOrEmpty(comp.Species) ? $"{comp.Genus} {comp.Species}".Trim() : comp.Genus;
+                var fullName = !string.IsNullOrEmpty(DedupSpecies(comp.Genus, comp.Species)) ? $"{comp.Genus} {DedupSpecies(comp.Genus, comp.Species)}".Trim() : comp.Genus;
                 var payout   = PayoutData.GetValue(fullName, ff);
                 if (payout > 0) sidebarTotal += payout;
                 sidebarStack.Children.Add(MakeSidebarEntry(
@@ -3812,9 +4050,15 @@ namespace EliteBioRadar
             } // end if (_showGeo)
         }
 
+        // Single-species genera (e.g. "Bark Mounds" / "Bark Mounds") carry the genus name as their species - older saved
+        // scans still hold it that way, so drop the repeat wherever a name is shown.
+        private static string DedupSpecies(string genus, string? species) =>
+            string.IsNullOrEmpty(species) || string.Equals(species, genus, StringComparison.OrdinalIgnoreCase) ? "" : species;
+
         private UIElement MakeSidebarEntry(string genus, string species,
                                            int scanCount, Color nameColor, bool isActive, long payout = 0, bool ff = false)
         {
+            species = DedupSpecies(genus, species);
             var panel = new StackPanel { Margin = new Thickness(0, 4, 0, 4) };
 
             // Wiki URL uses genus name only

@@ -10,13 +10,12 @@ using System.Windows.Media.Imaging;
 namespace EliteBioRadar
 {
     // Procedural star art — same architecture as PlanetRenderer (baked RenderTargetBitmap
-    // layers, cross-faded for motion, cached per body). First pass covers the real-fusion
-    // main sequence (O/B/A/F/G/K/M, Wolf-Rayet W*) and the brown dwarfs (L/T/Y) with an
-    // actual surface: seeded granulation "bubbling" texture, looping prominence/flare arcs
-    // at the limb, and a soft corona. Explicitly NOT sunspots — confirmed with the user that
-    // Elite doesn't normally show them. White dwarfs / neutron stars / black holes stay on
-    // the old flat icon for now (no real screenshot reference yet for those); they're routed
-    // around IsProceduralStarFamily below rather than guessed at.
+    // layers, cross-faded for motion, cached per body): seeded granulation "bubbling" texture,
+    // looping prominence/flare arcs at the limb, and a soft corona. Explicitly NOT sunspots —
+    // confirmed with the user that Elite doesn't normally show them. Every star type now gets
+    // either this pipeline or one of the three dedicated remnant renders below (neutron star/
+    // white dwarf jets, black hole glow) — there is no remaining path to a flat icon asset for
+    // any star type, real or exotic; the old star_*.png assets have been removed.
     public static class StarRenderer
     {
         private static readonly Dictionary<string, RenderTargetBitmap> _cache =
@@ -24,23 +23,16 @@ namespace EliteBioRadar
 
         public static void ClearCache() => _cache.Clear();
 
-        // Real fusion stars only — degenerate/exotic remnants (white dwarf "D*", neutron "N",
-        // black hole "H"/supermassive) have a completely different visual language (accretion
-        // disk, lensing, pulsar beams, not a granulated photosphere) and no reference screenshot
-        // yet, so they're left on the legacy flat icon rather than forced through this pipeline.
-        public static bool IsProceduralStarFamily(string starType)
-        {
-            if (string.IsNullOrEmpty(starType)) return false;
-            switch (starType)
-            {
-                case "O": case "B": case "A": case "F": case "G": case "K": case "M":
-                case "W": case "WC": case "WN": case "WNC": case "WO":
-                case "L": case "T": case "Y":
-                    return true;
-                default:
-                    return false;
-            }
-        }
+        // Everything except the three degenerate-remnant types that have their own dedicated
+        // procedural render (neutron star/white dwarf jets, black hole glow — a different visual
+        // language entirely, not a granulated photosphere). This deliberately covers rare/exotic
+        // types with no specific tuning too (protostars, carbon stars, "X"/Exotic, anything
+        // future) — GetStarColors/GetActivity already fall back to a plausible generic value for
+        // anything unrecognized, so there's no need to enumerate every known class here; the
+        // alternative (a flat icon) no longer exists to fall back to.
+        public static bool IsProceduralStarFamily(string starType) =>
+            !string.IsNullOrEmpty(starType) &&
+            !IsNeutronStar(starType) && !IsWhiteDwarf(starType) && !IsBlackHole(starType);
 
         private static double Seeded(double i)
         {
@@ -156,10 +148,16 @@ namespace EliteBioRadar
                     // Real M dwarfs run cool (down to ~2300K) but bright — same vivid tone the
                     // 3700K anchor below already uses, just extended down to a real floor
                     // instead of ever touching the brown-dwarf branch above.
-                    (2300,  Color.FromRgb(0xff,0xae,0x5a), Color.FromRgb(0xff,0x8a,0x3a), Color.FromRgb(0xc8,0x5a,0x24)), // M (cool)
-                    (3700,  Color.FromRgb(0xff,0xae,0x5a), Color.FromRgb(0xff,0x8a,0x3a), Color.FromRgb(0xc8,0x5a,0x24)), // M (warm)
-                    (5200,  Color.FromRgb(0xff,0xd8,0x92), Color.FromRgb(0xff,0xb6,0x5c), Color.FromRgb(0xd8,0x82,0x38)), // K
-                    (6000,  Color.FromRgb(0xff,0xf3,0xd6), Color.FromRgb(0xf5,0xd2,0x8a), Color.FromRgb(0xc8,0x96,0x4a)), // G
+                    // Retuned against real in-game screenshots (a K star at ~4,035 K sampled at about
+                    // (249,204,104) - a bright golden yellow - where the old stops gave a deeper
+                    // (254,180,87) orange). M dwarfs stay soft peach-orange; K runs golden.
+                    // A real M8 (2,186 K) renders coral red in game (smooth body about (235,122,92)), so the
+                    // coolest anchor is that, ramping up to the peach of a warmer M by 3,700 K.
+                    (2300,  Color.FromRgb(0xf4,0x8c,0x66), Color.FromRgb(0xe8,0x72,0x58), Color.FromRgb(0xac,0x48,0x34)), // M (cool)
+                    (3700,  Color.FromRgb(0xff,0xcc,0x8c), Color.FromRgb(0xf2,0xa4,0x70), Color.FromRgb(0xc4,0x6c,0x42)), // M (warm)
+                    (4100,  Color.FromRgb(0xff,0xda,0x76), Color.FromRgb(0xf6,0xbc,0x60), Color.FromRgb(0xd6,0x8a,0x3c)), // K (cool)
+                    (5200,  Color.FromRgb(0xff,0xe2,0x8c), Color.FromRgb(0xf8,0xc4,0x68), Color.FromRgb(0xda,0x96,0x44)), // K
+                    (6000,  Color.FromRgb(0xff,0xf6,0xdc), Color.FromRgb(0xf4,0xe4,0xb6), Color.FromRgb(0xd4,0xb0,0x68)), // G/F (real F8 6,184 K samples a pale cream, about 244,235,209)
                     (7500,  Color.FromRgb(0xff,0xfb,0xf2), Color.FromRgb(0xf0,0xec,0xd8), Color.FromRgb(0xc8,0xc0,0xa0)), // F
                     (10000, Color.FromRgb(0xff,0xff,0xff), Color.FromRgb(0xe4,0xea,0xff), Color.FromRgb(0xb0,0xbe,0xe0)), // A
                     (30000, Color.FromRgb(0xe8,0xf0,0xff), Color.FromRgb(0xb8,0xd0,0xff), Color.FromRgb(0x6c,0x8c,0xd8)), // B
@@ -205,6 +203,11 @@ namespace EliteBioRadar
                 "A" => 0.25, "B" => 0.22, "O" => 0.2,
                 "W" or "WC" or "WN" or "WNC" or "WO" => 0.75,
                 "L" => 0.3, "T" => 0.18, "Y" => 0.12,
+                // Herbig Ae/Be — young pre-main-sequence stars, still accreting and
+                // magnetically violent (real astrophysics, not invented) — per direct feedback
+                // against a real screenshot, they should show noticeably more flare filaments
+                // ("hairs of light") than even an M dwarf, GetActivity's previous ceiling.
+                "AeBe" => 0.95,
                 _ => 0.4,
             };
             if (detail.AgeMY > 0)
@@ -213,6 +216,49 @@ namespace EliteBioRadar
                 else if (detail.AgeMY > 8000) baseActivity -= 0.15;
             }
             return Math.Clamp(baseActivity, 0.1, 1.0);
+        }
+
+        // GPU star path (Shaders\Star.fx): the disc radius the shader should draw (same 0.85 shrink
+        // as the CPU path when a real ring needs clearance) and the per-star look parameters.
+        public static (double cx, double cy, double R) GetStarShaderDisc(BodyScanDetail detail, int width, int height)
+        {
+            var (cx, cy, R) = GetStarGeometry(width, height);
+            if (HasRealRing(detail)) R *= 0.85;
+            return (cx, cy, R);
+        }
+
+        public static StarLook GetStarLook(BodyScanDetail detail)
+        {
+            var (core, mid, edge) = GetStarColors(detail.SurfaceTemperature, detail.StarType);
+            double activity = GetActivity(detail);
+            static Color Mix(Color a, Color b, double t) => Color.FromRgb(
+                (byte)(a.R + (b.R - a.R) * t), (byte)(a.G + (b.G - a.G) * t), (byte)(a.B + (b.B - a.B) * t));
+            double seed = BodySeed(detail.BodyName) % 97 / 10.0 + 0.5;
+            bool hot = detail.StarType is "O" or "B" or "A" or "W" or "WC" or "WN" or "WNC" or "WO";
+            bool brownDwarf = detail.StarType is "L" or "T" or "Y";
+            // 0 at the coolest M dwarfs (about 2,300 K), 1 from about 4,100 K up. Cool dwarfs render
+            // redder, smoother and with far fewer bright plasma patches than K/G stars.
+            double coolT = detail.SurfaceTemperature > 0 ? Math.Clamp((detail.SurfaceTemperature - 2300) / (4100 - 2300), 0, 1) : 1.0;
+            return new StarLook
+            {
+                Core = core, Mid = mid, Edge = edge,
+                // Bright plasma patches: the core tone pushed toward warm white.
+                // Bright plasma patches stay in the star's own hue: golden for the K/M/G family,
+                // but whiter for hot stars and brown dwarfs (yellow patches on blue or magenta read wrong).
+                Hot = hot || detail.SurfaceTemperature > 7500 ? Mix(core, Colors.White, 0.45)
+                    : detail.StarType is "L" or "T" or "Y" ? Mix(core, Colors.White, 0.30)
+                    : detail.SurfaceTemperature >= 5600 ? Mix(core, Color.FromRgb(0xff, 0xf0, 0xc8), 0.55)   // G/F: patches stay pale cream
+                    : Mix(core, Mix(Color.FromRgb(0xff, 0xe6, 0x82), Color.FromRgb(0xff, 0xdc, 0x48), coolT), 0.60 + 0.25 * (1 - coolT)),
+                PatchCover = hot ? 1.0 : brownDwarf ? 0.5 : 0.2 + 0.8 * coolT,
+                Seed = seed,
+                Activity = activity,
+                Contrast = (0.55 + 0.55 * activity) * (!hot && detail.SurfaceTemperature >= 5600 ? 0.65 : 1.0),
+                SpotAmt = hot ? 0.2 : Math.Clamp(activity * 1.1, 0.25, 1.0),
+                LoopAmt = Math.Clamp(activity, 0.2, 1.0),
+                FlareAmt = Math.Clamp(activity * 0.8, 0.15, 0.85),
+                HaloAmt = string.Equals(detail.StarType, "AeBe", StringComparison.OrdinalIgnoreCase) ? 0.62 : 0.46,
+                Tilt = (BodySeed(detail.BodyName) % 7 - 3) * 0.08,
+            };
         }
 
         public static (BitmapSource baseLayer, BitmapSource surfaceA, BitmapSource surfaceB, BitmapSource topLayer) GetStarLayers(
@@ -338,14 +384,373 @@ namespace EliteBioRadar
             return (back, front);
         }
 
+        // Neutron stars ("N") get a dedicated jet-and-core render instead of either the
+        // granulated procedural-star pipeline (that photosphere language doesn't apply to a
+        // degenerate remnant) or the old flat icon. Built from a real reference — a
+        // user-supplied YouTube clip of actual in-game Elite Dangerous neutron star footage,
+        // paused on several frames — rather than photographs of real astrophysical jets (which
+        // run vastly longer/thinner than anything legible at this canvas size): a single
+        // gently undulating ribbon of light per pole, equal length both directions, crossing
+        // ONE soft horizontal light streak through the core. Confirmed against the reference
+        // that the "cross" look is just the jet crossing that one streak, not a separate
+        // multi-point starburst/diffraction-spike element — an earlier mockup pass that added
+        // one was explicitly rejected.
+        public static bool IsNeutronStar(string starType) =>
+            string.Equals(starType, "N", StringComparison.OrdinalIgnoreCase);
+
+        // White dwarfs ("D", "DA", "DAB", ... any "D"-prefixed class) share the jet-and-core
+        // render with neutron stars by direct request — "they are similar looking" — not a
+        // scientific claim that white dwarfs actually have relativistic jets, just a reuse of
+        // the same visual language for another small, dense stellar remnant. Every call site
+        // that checks IsNeutronStar to route to the jet renderer checks this too.
+        public static bool IsWhiteDwarf(string starType) =>
+            !string.IsNullOrEmpty(starType) && starType.StartsWith("D", StringComparison.OrdinalIgnoreCase);
+
+        // Black holes ("H", "SupermassiveBlackHole") aren't in GetStarColors' temperature-anchor
+        // table at all — a black hole has no surface temperature to look up, so it fell through
+        // to that table's generic 5700K (G-star, yellow-white) fallback, rendering as a plain
+        // yellow sphere in System Scan's thumbnail. Real report: "System Scan shows a yellow
+        // star instead of a black hole."
+        public static bool IsBlackHole(string starType) =>
+            string.Equals(starType, "H", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(starType, "SupermassiveBlackHole", StringComparison.OrdinalIgnoreCase);
+
+        // Jet axis angle, measured from horizontal. Matches the final approved mockup: an
+        // initial ~82° (near-vertical, matching the reference clip's own framing) rotated 20°
+        // further per direct feedback ("angle the main arms 20 degrees to the right").
+        private const double NeutronJetAngleDeg = 62.0;
+
+        // Static core layer only — cached, since unlike the jets it never changes. The jets
+        // used to be two cross-faded static phase frames here too (same opacity-DoubleAnimation
+        // technique RenderStarSurface's granulation uses), but that technique fundamentally
+        // doesn't work once the wave's amplitude is big enough to look like real motion: cross-
+        // fading between two sufficiently different static raster frames shows BOTH overlapping
+        // during the transition, which is exactly the "two tails" ghosting a real screenshot
+        // showed at the tips (where the amplitude — and so the gap between the two frames — is
+        // largest). MainWindow now redraws RenderNeutronJets live on a timer instead, a single
+        // always-correct frame per tick rather than a blend of two, matching how the approved
+        // mockup's own animation worked (a continuously advancing phase, not a two-state blend).
+        public static BitmapSource GetNeutronCore(BodyScanDetail detail, int width = 370, int height = 420)
+        {
+            var key = detail.BodyName + "|neutroncore|" + width + "x" + height;
+            if (_cache.TryGetValue(key, out var cached)) return cached;
+            var core = RenderNeutronCore(detail, width, height);
+            _cache[key] = core;
+            return core;
+        }
+
+        // Static single-frame version (core + jets baked into one bitmap, phase frozen at 0) for
+        // a small card thumbnail — same geometry as the animated tab render, just no cross-fade,
+        // matching GetStarThumbFrame's own "no animation at thumbnail size" convention.
+        public static BitmapSource GetNeutronStarThumbFrame(BodyScanDetail detail, int width, int height)
+        {
+            var key = detail.BodyName + "|neutronthumb|" + width + "x" + height;
+            if (_cache.TryGetValue(key, out var cached)) return cached;
+
+            var jets = RenderNeutronJets(detail, width, height, 0.0);
+            var core = RenderNeutronCore(detail, width, height);
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen())
+            {
+                dc.DrawImage(jets, new Rect(0, 0, width, height));
+                dc.DrawImage(core, new Rect(0, 0, width, height));
+            }
+            var rtb = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            rtb.Render(visual);
+            rtb.Freeze();
+            _cache[key] = rtb;
+            return rtb;
+        }
+
+        // Core glow + the single horizontal light streak — static (no cross-fade needed; the
+        // jets below carry all the motion).
+        private static RenderTargetBitmap RenderNeutronCore(BodyScanDetail detail, int width, int height)
+        {
+            var (cx, cy, R) = GetStarGeometry(width, height);
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen())
+            {
+                // Both this bloom and the streak below used to reach ~2.2R — comfortably past
+                // the 370x420 scene box's own edge with no margin, which is exactly what read
+                // as the glow "crossing the frame" in a real screenshot. Pulled in well inside
+                // the box instead.
+                double bloomR = R * 1.6;
+                var bloom = new RadialGradientBrush
+                {
+                    MappingMode = BrushMappingMode.Absolute,
+                    Center = new Point(cx, cy), GradientOrigin = new Point(cx, cy), RadiusX = bloomR, RadiusY = bloomR,
+                    GradientStops = new GradientStopCollection
+                    {
+                        new GradientStop(Color.FromArgb(90, 0xa9, 0xc3, 0xff), 0.0),
+                        new GradientStop(Color.FromArgb(0, 0x7a, 0x94, 0xe8), 1.0),
+                    },
+                };
+                dc.DrawEllipse(bloom, null, new Point(cx, cy), bloomR, bloomR);
+
+                // Thinner and a little wider, per direct feedback.
+                double streakHalfLen = R * 1.1, streakH = R * 0.045;
+                var streak = new LinearGradientBrush
+                {
+                    MappingMode = BrushMappingMode.Absolute,
+                    StartPoint = new Point(cx - streakHalfLen, cy), EndPoint = new Point(cx + streakHalfLen, cy),
+                    GradientStops = new GradientStopCollection
+                    {
+                        new GradientStop(Color.FromArgb(0, 0xdf, 0xea, 0xff), 0.0),
+                        new GradientStop(Color.FromArgb(220, 0xee, 0xf3, 0xff), 0.5),
+                        new GradientStop(Color.FromArgb(0, 0xdf, 0xea, 0xff), 1.0),
+                    },
+                };
+                // An ellipse, not a rectangle — real feedback: the old rectangle (fading alpha
+                // but constant HEIGHT) read as a flat bar, not a tapering lens-flare line. An
+                // ellipse's own curved silhouette tapers height to a true point at both left/
+                // right tips on its own, which a rectangle's straight edges never do regardless
+                // of how the fill's alpha is gradiented.
+                dc.DrawEllipse(streak, null, new Point(cx, cy), streakHalfLen, streakH / 2);
+
+                double glowR = R * 0.8;
+                var glow = new RadialGradientBrush
+                {
+                    MappingMode = BrushMappingMode.Absolute,
+                    Center = new Point(cx, cy), GradientOrigin = new Point(cx, cy), RadiusX = glowR, RadiusY = glowR,
+                    GradientStops = new GradientStopCollection
+                    {
+                        new GradientStop(Colors.White, 0.0),
+                        new GradientStop(Color.FromArgb(220, 0xee, 0xf3, 0xff), 0.2),
+                        new GradientStop(Color.FromArgb(120, 0xa9, 0xc3, 0xff), 0.45),
+                        new GradientStop(Color.FromArgb(0, 0x7a, 0x94, 0xe8), 1.0),
+                    },
+                };
+                dc.DrawEllipse(glow, null, new Point(cx, cy), glowR, glowR);
+                dc.DrawEllipse(Brushes.White, null, new Point(cx, cy), R * 0.14, R * 0.14);
+            }
+            var bmp = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            bmp.Render(visual);
+            bmp.Freeze();
+            return ToBlurred(bmp, width, height, R * 0.015);
+        }
+
+        private static Color NeutronLerpColor(Color a, Color b, double t)
+        {
+            t = Math.Clamp(t, 0, 1);
+            return Color.FromRgb(
+                (byte)(a.R + (b.R - a.R) * t), (byte)(a.G + (b.G - a.G) * t), (byte)(a.B + (b.B - a.B) * t));
+        }
+
+        // White-blue right at the core, cooling to mid blue, then a deeper blue-violet toward
+        // the tip — same anchor colors as the approved mockup.
+        private static Color NeutronJetColor(double absT)
+        {
+            var white = Color.FromRgb(0xee, 0xf3, 0xff);
+            var midBlue = Color.FromRgb(0x9f, 0xc3, 0xff);
+            var deepBlue = Color.FromRgb(0x6a, 0x86, 0xe0);
+            var violet = Color.FromRgb(0x5a, 0x68, 0xc8);
+            if (absT < 0.15) return NeutronLerpColor(white, midBlue, absT / 0.15);
+            if (absT < 0.6) return NeutronLerpColor(midBlue, deepBlue, (absT - 0.15) / 0.45);
+            return NeutronLerpColor(deepBlue, violet, (absT - 0.6) / 0.4);
+        }
+
+        // Both jet arms, equal length, each built as a dense chain of small radial-gradient
+        // "dabs" (bright center fading to transparent) along a sine-wave-offset centerline —
+        // the same technique the approved SVG mockup used, NOT a filled ribbon polygon. A flat
+        // ribbon shape can only ever have one uniform color straight across its own width, which
+        // is exactly what read as a solid pipe with a hard edge in a real screenshot; stacking
+        // overlapping soft-edged dabs is what actually produces per-dab radial falloff (bright
+        // center, soft edge) ACROSS the beam, not just color change along its length.
+        //
+        // Public and deliberately UNCACHED, unlike every other render in this file — MainWindow
+        // calls this directly on a live timer with a continuously advancing `phase`, redrawing
+        // one fresh, always-correct frame per tick rather than blending between two cached
+        // static ones (see GetNeutronCore's own comment for why the old 2-frame cross-fade
+        // approach broke down once the wave amplitude got big enough to look like real motion).
+        // Caching by phase would just mean an ever-growing dictionary of frames that are each
+        // only ever rendered once.
+        public static RenderTargetBitmap RenderNeutronJets(BodyScanDetail detail, int width, int height, double phase)
+        {
+            var (cx, cy, R) = GetStarGeometry(width, height);
+            double rad = NeutronJetAngleDeg * Math.PI / 180.0;
+            double axX = Math.Cos(rad), axY = -Math.Sin(rad);
+            double perpX = -axY, perpY = axX;
+            // Kept well inside the scene box rather than right up to its edge — real
+            // screenshot feedback: at R*1.9 the jet tips and the core layer's horizontal
+            // streak were visibly crossing the frame boundary into the surrounding HUD.
+            double halfLen = R * 1.7;
+            // Grown from 0.1 — the old amplitude envelope reused the same shrinking tipFactor
+            // the WIDTH taper uses, so motion collapsed to near-zero right where the beam was
+            // also fading to near-invisible, and the only clearly visible swing sat in a narrow
+            // mid-arm band. Real feedback: the tip should sweep the WIDEST arc, like a whip or
+            // a jump rope's free end tracing a cone, with the near-core end staying almost
+            // straight. See the amp formula below for how that's now decoupled from width.
+            double maxAmp = R * 0.24;
+            double maxRadius = R * 0.075;
+            // A visible-width beam drawing more than about half a sine cycle reads as a
+            // braided double helix even with correct geometry, simply because adjacent lobes of
+            // the SAME continuous beam end up sitting close together — confirmed against a real
+            // screenshot. The approved mockup and the reference footage both show exactly one
+            // gentle S-bend per arm, not a repeating wiggle.
+            const double waveCycles = 0.5;
+            const int stepsPerArm = 90;
+
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen())
+            {
+                foreach (int sign in new[] { 1, -1 })
+                {
+                    for (int k = 1; k <= stepsPerArm; k++)
+                    {
+                        double t = (double)k / stepsPerArm;
+                        double coreRamp = Math.Min(1.0, t / 0.1);
+                        // Grows with t instead of shrinking — the swing is smallest right at the
+                        // core (anchored, like a whip's handle) and largest at the very tip,
+                        // not the other way around.
+                        double amp = maxAmp * coreRamp * t;
+                        double wave = Math.Sin(t * waveCycles * Math.PI * 2 - phase * sign) * amp;
+                        double bx = cx + axX * t * halfLen * sign;
+                        double by = cy + axY * t * halfLen * sign;
+                        double px = bx + perpX * wave, py = by + perpY * wave;
+
+                        double widthRamp = Math.Min(1.0, t / 0.12);
+                        double tipTaper = Math.Pow(Math.Max(0.0, 1.0 - t), 0.6);
+                        double radius = maxRadius * widthRamp * (0.3 + 0.7 * tipTaper);
+                        if (radius < 0.4) continue;
+
+                        var color = NeutronJetColor(t);
+                        double opacity = 0.95 * Math.Max(0.15, tipTaper) * Math.Max(0.35, widthRamp);
+                        byte alpha = (byte)(255 * opacity);
+
+                        var dab = new RadialGradientBrush
+                        {
+                            GradientStops = new GradientStopCollection
+                            {
+                                new GradientStop(Color.FromArgb(alpha, color.R, color.G, color.B), 0.0),
+                                new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 1.0),
+                            },
+                        };
+                        dc.DrawEllipse(dab, null, new Point(px, py), radius, radius);
+                    }
+                }
+            }
+            var bmp = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            bmp.Render(visual);
+            bmp.Freeze();
+            return ToBlurred(bmp, width, height, R * 0.02);
+        }
+
+        // Animated STAR-tab render for a black hole — deliberately modest: the same black-disc-
+        // plus-amber-glow-ring look as the existing flat icon and GetBlackHoleThumbFrame, just
+        // as a live two-frame cross-fade (same technique RenderStarSurface's own glow wobble
+        // uses) so the ring gently breathes instead of sitting static. NOT the ambitious
+        // accretion-disk/lensing redesign attempted earlier and explicitly abandoned — that
+        // needs a real in-game reference before another attempt, this is just "make the current
+        // look alive" with no risk of relitigating the actual design.
+        public static (BitmapSource core, BitmapSource glowA, BitmapSource glowB) GetBlackHoleLayers(
+            BodyScanDetail detail, int width = 370, int height = 420)
+        {
+            var baseKey = detail.BodyName + "|blackhole|" + width + "x" + height;
+            if (_cache.TryGetValue(baseKey + "|core", out var core) &&
+                _cache.TryGetValue(baseKey + "|glowA", out var glowA) &&
+                _cache.TryGetValue(baseKey + "|glowB", out var glowB))
+                return (core, glowA, glowB);
+
+            core = RenderBlackHoleCore(width, height);
+            glowA = RenderBlackHoleGlow(width, height, 0.0);
+            glowB = RenderBlackHoleGlow(width, height, Math.PI);
+
+            _cache[baseKey + "|core"] = core;
+            _cache[baseKey + "|glowA"] = glowA;
+            _cache[baseKey + "|glowB"] = glowB;
+            return (core, glowA, glowB);
+        }
+
+        private static RenderTargetBitmap RenderBlackHoleCore(int width, int height)
+        {
+            var (cx, cy, R) = GetStarGeometry(width, height);
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen())
+                dc.DrawEllipse(Brushes.Black, null, new Point(cx, cy), R, R);
+            var bmp = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            bmp.Render(visual);
+            bmp.Freeze();
+            return bmp;
+        }
+
+        // Same 4-stop (black-through-most-of-the-radius, thin amber rim) gradient
+        // GetBlackHoleThumbFrame/the System Scan header swatch use, just breathing a little
+        // between the two cross-faded frames via `phase` — same wobble idea as the procedural
+        // star's own corona glow.
+        private static RenderTargetBitmap RenderBlackHoleGlow(int width, int height, double phase)
+        {
+            var (cx, cy, R) = GetStarGeometry(width, height);
+            double wobble = Math.Sin(phase);
+            double glowR = R * (1.35 + wobble * 0.08);
+            byte rimAlpha = (byte)Math.Clamp(210 + wobble * 35, 160, 255);
+
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen())
+            {
+                var glow = new RadialGradientBrush
+                {
+                    MappingMode = BrushMappingMode.Absolute,
+                    Center = new Point(cx, cy), GradientOrigin = new Point(cx, cy), RadiusX = glowR, RadiusY = glowR,
+                    GradientStops = new GradientStopCollection
+                    {
+                        new GradientStop(Color.FromArgb(0, 0xff, 0x9a, 0x44), 0.55),
+                        new GradientStop(Color.FromArgb(rimAlpha, 0xff, 0xb3, 0x47), 0.78),
+                        new GradientStop(Color.FromArgb(0, 0xff, 0x6a, 0x2e), 1.0),
+                    },
+                };
+                dc.DrawEllipse(glow, null, new Point(cx, cy), glowR, glowR);
+            }
+            var bmp = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            bmp.Render(visual);
+            bmp.Freeze();
+            return ToBlurred(bmp, width, height, R * 0.02);
+        }
+
         // Compact static render for a small card thumbnail (System Scan's attached-star card,
         // BuildAttachedStarCard) — sphere + rings baked into one bitmap, no granulation/flare
         // animation. Same back-pass/sphere/front-sliver layering as GetStarRingLayers and the
         // same gas-giant-style "shrink the sphere a touch when rings are present" convention
         // (ComputeGeometry) so there's real clearance between the sphere and the ring's inner
         // edge, matching how a ringed gas giant's own thumbnail looks.
+        // Simple static black-hole thumbnail — a black disc with a soft amber glow ring, same
+        // idea as the flat star_BlackHole icon but procedural so it's cached/sized consistently
+        // with every other star thumbnail here, not a separate asset-loading path.
+        public static BitmapSource GetBlackHoleThumbFrame(BodyScanDetail detail, int width, int height)
+        {
+            var key = detail.BodyName + "|blackholethumb|" + width + "x" + height;
+            if (_cache.TryGetValue(key, out var cached)) return cached;
+
+            var (cx, cy, R) = GetStarGeometry(width, height);
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen())
+            {
+                var glow = new RadialGradientBrush
+                {
+                    MappingMode = BrushMappingMode.Absolute,
+                    Center = new Point(cx, cy), GradientOrigin = new Point(cx, cy), RadiusX = R * 1.35, RadiusY = R * 1.35,
+                    GradientStops = new GradientStopCollection
+                    {
+                        new GradientStop(Color.FromArgb(0, 0xff, 0x9a, 0x44), 0.55),
+                        new GradientStop(Color.FromArgb(220, 0xff, 0xb3, 0x47), 0.78),
+                        new GradientStop(Color.FromArgb(0, 0xff, 0x6a, 0x2e), 1.0),
+                    },
+                };
+                dc.DrawEllipse(glow, null, new Point(cx, cy), R * 1.35, R * 1.35);
+                dc.DrawEllipse(Brushes.Black, null, new Point(cx, cy), R, R);
+            }
+            var bmp = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            bmp.Render(visual);
+            bmp.Freeze();
+            var blurred = ToBlurred(bmp, width, height, R * 0.02);
+            _cache[key] = blurred;
+            return blurred;
+        }
+
         public static BitmapSource GetStarThumbFrame(BodyScanDetail detail, int width, int height)
         {
+            if (IsNeutronStar(detail.StarType) || IsWhiteDwarf(detail.StarType)) return GetNeutronStarThumbFrame(detail, width, height);
+            if (IsBlackHole(detail.StarType)) return GetBlackHoleThumbFrame(detail, width, height);
+
             var key = detail.BodyName + "|starthumb|" + width + "x" + height;
             if (_cache.TryGetValue(key, out var cached)) return cached;
 
@@ -531,9 +936,15 @@ namespace EliteBioRadar
                 // corona layer) — with that second glow gone, this alone has to cover the same
                 // overall halo size the two together used to, or the star reads as having
                 // shrunk a glow ring rather than having one ring removed.
+                // Herbig Ae/Be — real screenshot feedback: "much bigger and brighter halo"
+                // than an ordinary star, on top of the extra flare filaments activity alone
+                // already buys it. A dedicated multiplier rather than scaling off activity
+                // generally, since M dwarfs share AeBe's high activity but not its halo size.
+                // Was 1.5 — real screenshot feedback: too big. Dialed back to a more modest bump.
+                double haloSizeMul = string.Equals(detail.StarType, "AeBe", StringComparison.OrdinalIgnoreCase) ? 1.15 : 1.0;
                 double wobble = Math.Sin(phase + seedBase * 0.017);
-                double glowR = R * (1.65 + wobble * 0.15);
-                byte glowAlpha = (byte)Math.Clamp(65 + wobble * 30 + activity * 20, 25, 140);
+                double glowR = R * (1.65 + wobble * 0.15) * haloSizeMul;
+                byte glowAlpha = (byte)Math.Clamp((65 + wobble * 30 + activity * 20) * (haloSizeMul > 1 ? 1.1 : 1.0), 25, 160);
                 // Stops pulled inward (was 0.42/0.62, i.e. the glow didn't reach peak brightness
                 // until ~1.0R) — that left a real brightness DIP between where the disc's own
                 // feathered edge (FeatherDiscEdge's mask starts fading around 0.76R) had already

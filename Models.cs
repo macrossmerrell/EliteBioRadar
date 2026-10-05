@@ -75,7 +75,7 @@ namespace EliteBioRadar
         public DateTime LastSeen { get; set; } = DateTime.UtcNow;
 
         public string DisplayName =>
-            string.IsNullOrEmpty(Species) ? Genus : $"{Genus} {Species}";
+            string.IsNullOrEmpty(Species) || string.Equals(Species, Genus, StringComparison.OrdinalIgnoreCase) ? Genus : $"{Genus} {Species}";
 
         public int ColonyRange => ColonyRanges.GetRange(Genus, Species);
 
@@ -268,6 +268,10 @@ namespace EliteBioRadar
         // real, meaningful "nobody had" rather than "unknown".
         public bool? WasDiscovered { get; set; }
         public bool? WasMapped     { get; set; }
+        // From the Scan event's own "WasFootfalled" - whether anyone had already walked on this
+        // body before the scan (planets only; null when the event lacks the field). Like the two
+        // above, "anyone" includes you - see DiscoveryIndex.IsFootfalledByOther for telling them apart.
+        public bool? WasFootfalled { get; set; }
         // Real per-body surface materials (only present when Landable), ordered as the game
         // reports them (descending %) — drives the terrain renderer's surface tint (e.g. High
         // Metal Content's rust/ochre comes from its own real iron/nickel/sulphur mix, not a

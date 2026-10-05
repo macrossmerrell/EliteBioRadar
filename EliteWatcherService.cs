@@ -46,6 +46,10 @@ namespace EliteBioRadar
         public DestinationInfo? CurrentDestination    { get; private set; }
         public DateTime         PlanetTargetedAt      { get; private set; }
         public DateTime         FsdTargetedAt         { get; private set; }
+        // When the current game session finished loading (the journal's LoadGame event). Elite re-announces
+        // the active route target (NavRoute + FSDTarget) about a minute after loading, which looks exactly like
+        // the player just targeting a jump - see the FSDTarget handler for why that must not count.
+        private DateTime _lastLoadGameAt;
         // Bumped on every real system change. A destination route that was only queued BEFORE
         // this arrival (the common auto-route case: the next hop's FSDTarget fires mid-flight,
         // before the FSDJump that confirms arrival) shouldn't keep forcing DESTINATION mode
@@ -1366,6 +1370,7 @@ namespace EliteBioRadar
                 BodyID             = obj.Value<int?>("BodyID") ?? -1,
                 WasDiscovered      = obj.Value<bool?>("WasDiscovered"),
                 WasMapped          = obj.Value<bool?>("WasMapped"),
+                WasFootfalled      = obj.Value<bool?>("WasFootfalled"),
             };
 
             // Parents[0] is USUALLY the immediate parent — {"Star":N} for a planet orbiting the
@@ -1501,6 +1506,7 @@ namespace EliteBioRadar
                 DestinationInfo? dest = null;
                 DateTime fsdTargetedAt = default;
                 DateTime systemArrivedAt = default;
+                DateTime lastLoadGameAt = default;   // see _lastLoadGameAt: the post-load route re-announcement must not count as a new target
                 bool charging = false;
                 // Bio/geo signal counts, keyed per body — SystemBioPlanets/SystemGeoPlanets
                 // aren't populated yet at this point (BackfillSystemPlanets runs afterwards),
@@ -1667,13 +1673,22 @@ namespace EliteBioRadar
                         continue;
                     }
 
+                    if (ev == "LoadGame")
+                    {
+                        lastLoadGameAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
+                        continue;
+                    }
+
                     if (ev == "FSDTarget")
                     {
                         dest ??= new DestinationInfo();
                         dest.NextSystem            = obj.Value<string>("Name") ?? "";
                         dest.StarClass             = obj.Value<string>("StarClass") ?? "";
                         dest.RemainingJumpsInRoute = obj.Value<int?>("RemainingJumpsInRoute") ?? 0;
-                        fsdTargetedAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
+                        var replayTargetTs = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
+                        bool replayStartupAnnouncement = lastLoadGameAt != default &&
+                            (replayTargetTs - lastLoadGameAt).TotalSeconds is >= 0 and < 120;
+                        if (!replayStartupAnnouncement) fsdTargetedAt = replayTargetTs;
                         continue;
                     }
 
@@ -2306,9 +2321,14 @@ namespace EliteBioRadar
                                 TargetedBody         = target;
                                 TargetedBodyBioCount = tp.BioCount;
                                 BiologyCount         = tp.BioCount;
-                                Log.Write($"BackfillSystemPlanets: firing BodyChanged for '{target}' bio={tp.BioCount}");
+                                // A body with BOTH bio and geo signals used to lose its geo count here (only the geo-only branch
+                                // below set it), so the Geo Survey showed just the scanned site and no "? Unknown" slots.
+                                var tgp = SystemGeoPlanets.FirstOrDefault(p =>
+                                    string.Equals(p.FullBodyName, target, StringComparison.OrdinalIgnoreCase));
+                                if (tgp != null) GeologyCount = tgp.GeoCount;
+                                Log.Write($"BackfillSystemPlanets: firing BodyChanged for '{target}' bio={tp.BioCount} geo={GeologyCount}");
                                 BodyChanged?.Invoke(this, new BodyChangedEventArgs
-                                    { BodyName = target, BioCount = tp.BioCount });
+                                    { BodyName = target, BioCount = tp.BioCount, GeoCount = GeologyCount });
                             }
                             else
                             {
@@ -3091,6 +3111,8 @@ namespace EliteBioRadar
                         // WasDiscovered == true, same as for another commander's find) can still
                         // tell your own discovery apart — see DiscoveryIndex.
                         if (detail.WasDiscovered == false) DiscoveryIndex.MarkDiscoveredByMe(bodyName);
+                        // Footfall bookkeeping - only the FIRST scan of a body is kept (see DiscoveryIndex).
+                        DiscoveryIndex.NoteScanFootfall(bodyName, detail.WasFootfalled);
                         _bodyScanDetails[bodyName] = detail;
                         _sessionBodyDetails[bodyName] = detail;
                         // Trip total — live scans only (matches the EDSM upload hook's own
@@ -3165,6 +3187,8 @@ namespace EliteBioRadar
                     if (!backfill)
                     {
                         var disembarkBody = obj.Value<string>("Body") ?? obj.Value<string>("BodyName") ?? CurrentBody;
+                        if (obj.Value<bool?>("SRV") == false && obj.Value<bool?>("Taxi") == false && obj.Value<bool?>("OnPlanet") == true)
+                            DiscoveryIndex.MarkWalkedByMe(disembarkBody);
 
                         // If we were waiting for a location fix, Disembark gives us the body —
                         // clear the flag and trigger a targeted backfill to recover any
@@ -3609,9 +3633,11 @@ namespace EliteBioRadar
                     // Species_Localised often contains the full name e.g. "Bacterium Cerbrus"
                     // Strip the genus prefix if present to avoid "Bacterium Bacterium Cerbrus"
                     var speciesFull = !string.IsNullOrEmpty(speciesLoc) ? speciesLoc : CleanInternalName(speciesRaw);
-                    var species = speciesFull.StartsWith(genus + " ", StringComparison.OrdinalIgnoreCase)
-                        ? speciesFull.Substring(genus.Length + 1).Trim()
-                        : speciesFull;
+                    var species = string.Equals(speciesFull, genus, StringComparison.OrdinalIgnoreCase)
+                        ? ""   // single-species genus (e.g. "Bark Mounds" / "Bark Mounds"): nothing to add after the genus
+                        : speciesFull.StartsWith(genus + " ", StringComparison.OrdinalIgnoreCase)
+                            ? speciesFull.Substring(genus.Length + 1).Trim()
+                            : speciesFull;
 
                     // Scan sequence: Log=1st, Sample=2nd OR 3rd, Analyse=completion (no new dot)
                     // existingCount = non-complete dots only (completed ones don't count toward sequence)
@@ -4212,6 +4238,11 @@ namespace EliteBioRadar
                     break;
                 }
 
+                // Session (re)load - see _lastLoadGameAt for why the post-load route re-announcement must not count as a new target.
+                case "LoadGame":
+                    _lastLoadGameAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
+                    break;
+
                 // Fires the moment a jump point is targeted in the system/galaxy map —
                 // this is the DESTINATION-mode trigger, distinct from TargetedBody (which
                 // is the in-system nav-panel planet target, read from Status.json above).
@@ -4255,7 +4286,13 @@ namespace EliteBioRadar
                     // every single FSDTarget — i.e. every real hop — not just when the file
                     // happens to change.
                     CurrentDestination.RemainingJumpsInRoute = obj.Value<int?>("RemainingJumpsInRoute") ?? 0;
-                    FsdTargetedAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
+                    // The game re-announces the active route target a short while after loading a session;
+                    // that is not the player targeting a jump, so it must not bump FsdTargetedAt (which
+                    // is what flips the app onto the Destination tab). The route data above still updates.
+                    var fsdTargetTs = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
+                    bool startupAnnouncement = _lastLoadGameAt != default &&
+                        (fsdTargetTs - _lastLoadGameAt).TotalSeconds is >= 0 and < 120;
+                    if (!startupAnnouncement) FsdTargetedAt = fsdTargetTs;
                     // TotalRouteJumps/TotalRouteLy are (re)derived from the persisted route
                     // cache inside LoadNavRoute -> EnsureRouteState, not tracked here.
                     LoadNavRoute();
