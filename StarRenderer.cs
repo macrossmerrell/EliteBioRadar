@@ -103,6 +103,10 @@ namespace EliteBioRadar
         // of sync with the actual Star tab render over time.
         internal static (Color core, Color mid, Color edge) GetStarColors(double tempK, string starType)
         {
+            // T Tauri (TTS): young, active - a saturated orange body (real: NC-D b26-1, 3,002 K, sampled about 238,171,87) with bright
+            // yellow-white plasma patches, nothing like a pale cool M dwarf of the same temperature.
+            if (starType == "TTS")
+                return (Color.FromRgb(0xff, 0xc0, 0x5e), Color.FromRgb(0xee, 0x9a, 0x46), Color.FromRgb(0xbc, 0x64, 0x26));
             if (tempK <= 0)
             {
                 // Fallback anchors per class (roughly the class's real mean temperature).
@@ -208,6 +212,7 @@ namespace EliteBioRadar
                 // against a real screenshot, they should show noticeably more flare filaments
                 // ("hairs of light") than even an M dwarf, GetActivity's previous ceiling.
                 "AeBe" => 0.95,
+                "TTS" => 0.9,   // young T Tauri stars are violently active
                 _ => 0.4,
             };
             if (detail.AgeMY > 0)
@@ -249,11 +254,11 @@ namespace EliteBioRadar
                     : detail.StarType is "L" or "T" or "Y" ? Mix(core, Colors.White, 0.30)
                     : detail.SurfaceTemperature >= 5600 ? Mix(core, Color.FromRgb(0xff, 0xf0, 0xc8), 0.55)   // G/F: patches stay pale cream
                     : Mix(core, Mix(Color.FromRgb(0xff, 0xe6, 0x82), Color.FromRgb(0xff, 0xdc, 0x48), coolT), 0.60 + 0.25 * (1 - coolT)),
-                PatchCover = hot ? 1.0 : brownDwarf ? 0.5 : 0.2 + 0.8 * coolT,
+                PatchCover = hot ? 1.0 : brownDwarf ? 0.5 : detail.StarType == "TTS" ? 1.0 : 0.2 + 0.8 * coolT,
                 Seed = seed,
                 Activity = activity,
                 Contrast = (0.55 + 0.55 * activity) * (!hot && detail.SurfaceTemperature >= 5600 ? 0.65 : 1.0),
-                SpotAmt = hot ? 0.2 : Math.Clamp(activity * 1.1, 0.25, 1.0),
+                SpotAmt = hot ? 0.08 : Math.Clamp(activity * 1.1, 0.25, 1.0),
                 LoopAmt = Math.Clamp(activity, 0.2, 1.0),
                 FlareAmt = Math.Clamp(activity * 0.8, 0.15, 0.85),
                 HaloAmt = string.Equals(detail.StarType, "AeBe", StringComparison.OrdinalIgnoreCase) ? 0.62 : 0.46,

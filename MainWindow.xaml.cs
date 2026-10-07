@@ -1509,7 +1509,7 @@ namespace EliteBioRadar
             // Shifted down from the previous 58 start — the whole block (scene + text) was
             // sitting high in the panel, well clear of the bottom SCAN/body-name labels.
             double leftX = 164, rightX = 548, rowY = 78;
-            const double sectionGap = 34;
+            const double sectionGap = 24;   // columns flow independently
 
             // Planet Class shows the broad type ("Gas Giant") as its value, with the specific
             // trait (a Sudarsky class, or a life/composition variant) as a chip underneath —
@@ -1534,23 +1534,23 @@ namespace EliteBioRadar
                 detail.SurfaceGravity > 0 ? $"{gasGiantGravityG:F2} G" : "—", InfoLabelGreenBrush, sizeBump: 1.5,
                 valueBrush: gasGiantHighGravity ? InfoGravityWarnBrush : null,
                 chipAbove: gasGiantHighGravity ? MakeSmallChip("HIGH GRAVITY", InfoGravityWarnBrush.Color) : null);
-            rowY = Math.Max(chipBottomY, gravBottomY) + sectionGap;
+            double leftY = chipBottomY + sectionGap, rightY = gravBottomY + sectionGap;
 
-            double tempBottomY = AddStackedStat(planetPanelCanvas, leftX, rowY, false, "SURFACE TEMP", detail.SurfaceTemperature > 0 ? $"{detail.SurfaceTemperature:N0} K" : "—", InfoLabelGreenBrush, sizeBump: 1.5);
-            double atmoBottomY = AddStackedStat(planetPanelCanvas, rightX, rowY, true, "ATMOSPHERE", FormatGasGiantAtmosphere(detail), InfoLabelGreenBrush, sizeBump: 1.5);
-            rowY = Math.Max(tempBottomY, atmoBottomY) + sectionGap;
+            double tempBottomY = AddStackedStat(planetPanelCanvas, leftX, leftY, false, "SURFACE TEMP", detail.SurfaceTemperature > 0 ? $"{detail.SurfaceTemperature:N0} K" : "—", InfoLabelGreenBrush, sizeBump: 1.5);
+            double atmoBottomY = AddStackedStat(planetPanelCanvas, rightX, rightY, true, "ATMOSPHERE", FormatGasGiantAtmosphere(detail), InfoLabelGreenBrush, sizeBump: 1.5);
+            leftY = tempBottomY + sectionGap; rightY = atmoBottomY + sectionGap;
 
-            double geoBottomY = AddStackedStat(planetPanelCanvas, leftX, rowY, false, "GEO SIGNALS", hasGeo ? $"{detail.GeoSignalCount} found" : "None", InfoOrangeBrush, sizeBump: 1.5);
-            double bioBottomY = AddStackedStat(planetPanelCanvas, rightX, rowY, true, "BIO SIGNALS", hasBio ? $"{detail.BioSignalCount} found" : "None", InfoValueBrush, sizeBump: 1.5);
-            rowY = Math.Max(geoBottomY, bioBottomY) + sectionGap;
+            double geoBottomY = AddStackedStat(planetPanelCanvas, leftX, leftY, false, "GEO SIGNALS", hasGeo ? $"{detail.GeoSignalCount} found" : "None", InfoOrangeBrush, sizeBump: 1.5);
+            double bioBottomY = AddStackedStat(planetPanelCanvas, rightX, rightY, true, "BIO SIGNALS", hasBio ? $"{detail.BioSignalCount} found" : "None", InfoValueBrush, sizeBump: 1.5);
+            leftY = geoBottomY + sectionGap; rightY = bioBottomY + sectionGap;
 
             if (ringHotspotTotal > 0)
             {
                 var materials = string.Join(", ", ringHotspots.OrderByDescending(h => h.Count).Select(h => $"{h.Material} ×{h.Count}"));
-                AddStackedStat(planetPanelCanvas, leftX, rowY, false, "RING MINING", $"{ringHotspotTotal} found", InfoRingMiningBrush, materials, sizeBump: 1.5);
+                AddStackedStat(planetPanelCanvas, leftX, leftY, false, "RING MINING", $"{ringHotspotTotal} found", InfoRingMiningBrush, materials, sizeBump: 1.5);
             }
             if (hasMining)
-                AddStackedStat(planetPanelCanvas, rightX, rowY, true, "MINING SITES", $"{detail.MiningSignalCount} found", InfoMiningBrush, sizeBump: 1.5);
+                AddStackedStat(planetPanelCanvas, rightX, rightY, true, "MINING SITES", $"{detail.MiningSignalCount} found", InfoMiningBrush, sizeBump: 1.5);
 
             // Recentered for the widened canvas: 713/2 = 356.5.
             var bottomLabel = EliteWatcherService.GetShortBodyName(detail.BodyName, _watcher?.StarSystem ?? "");
@@ -1730,11 +1730,12 @@ namespace EliteBioRadar
                 planetPanelCanvas.Children.Add(terraformChip);
                 classBottomY = classBottomY + 4 + terraformChip.DesiredSize.Height;
             }
-            rowY = Math.Max(classBottomY, gravBottomY) + sectionGap;
+            // Left and right columns now stack independently (a tall left item no longer pushes the right column down).
+            double leftY = classBottomY + sectionGap, rightY = gravBottomY + sectionGap;
 
-            double tempBottomY = AddStackedStat(planetPanelCanvas, leftX, rowY, false, "SURFACE TEMP", detail.SurfaceTemperature > 0 ? $"{detail.SurfaceTemperature:N0} K" : "—", InfoLabelGreenBrush, sizeBump: 1.5);
-            double atmoBottomY = AddStackedStat(planetPanelCanvas, rightX, rowY, true, "ATMOSPHERE", FormatAtmosphere(detail.AtmosphereType), InfoLabelGreenBrush, sizeBump: 1.5);
-            rowY = Math.Max(tempBottomY, atmoBottomY) + sectionGap;
+            double tempBottomY = AddStackedStat(planetPanelCanvas, leftX, leftY, false, "SURFACE TEMP", detail.SurfaceTemperature > 0 ? $"{detail.SurfaceTemperature:N0} K" : "—", InfoLabelGreenBrush, sizeBump: 1.5);
+            double atmoBottomY = AddStackedStat(planetPanelCanvas, rightX, rightY, true, "ATMOSPHERE", FormatAtmosphere(detail.AtmosphereType), InfoLabelGreenBrush, sizeBump: 1.5);
+            leftY = tempBottomY + sectionGap; rightY = atmoBottomY + sectionGap;
 
             // Geo Signals gets a real-Volcanism sub-line — a confirmed physical trait from the
             // orbital scan itself (same tier of information as Landable/TidalLock), not pinned
@@ -1743,19 +1744,19 @@ namespace EliteBioRadar
             bool hasVolcanism = !string.IsNullOrWhiteSpace(detail.Volcanism)
                 && !detail.Volcanism.Equals("No volcanism", StringComparison.OrdinalIgnoreCase);
             string? volcanismSub = hasVolcanism ? FormatVolcanism(detail.Volcanism) : null;
-            double geoBottomY = AddStackedStat(planetPanelCanvas, leftX, rowY, false, "GEO SIGNALS", hasGeo ? $"{detail.GeoSignalCount} found" : "None", InfoOrangeBrush, volcanismSub, sizeBump: 1.5);
-            double bioBottomY = AddStackedStat(planetPanelCanvas, rightX, rowY, true, "BIO SIGNALS", hasBio ? $"{detail.BioSignalCount} found" : "None", InfoValueBrush, sizeBump: 1.5);
-            rowY = Math.Max(geoBottomY, bioBottomY) + sectionGap;
+            double geoBottomY = AddStackedStat(planetPanelCanvas, leftX, leftY, false, "GEO SIGNALS", hasGeo ? $"{detail.GeoSignalCount} found" : "None", InfoOrangeBrush, volcanismSub, sizeBump: 1.5);
+            double bioBottomY = AddStackedStat(planetPanelCanvas, rightX, rightY, true, "BIO SIGNALS", hasBio ? $"{detail.BioSignalCount} found" : "None", InfoValueBrush, sizeBump: 1.5);
+            leftY = geoBottomY + sectionGap; rightY = bioBottomY + sectionGap;
 
-            double ringBottomY = rowY, miningBottomY = rowY;
+            double ringBottomY = leftY - sectionGap, miningBottomY = rightY - sectionGap;
             if (ringHotspotTotal > 0)
             {
                 var materials = string.Join(", ", ringHotspots.OrderByDescending(h => h.Count).Select(h => $"{h.Material} ×{h.Count}"));
-                ringBottomY = AddStackedStat(planetPanelCanvas, leftX, rowY, false, "RING MINING", $"{ringHotspotTotal} found", InfoRingMiningBrush, materials, sizeBump: 1.5);
+                ringBottomY = AddStackedStat(planetPanelCanvas, leftX, leftY, false, "RING MINING", $"{ringHotspotTotal} found", InfoRingMiningBrush, materials, sizeBump: 1.5);
             }
             if (hasMining)
-                miningBottomY = AddStackedStat(planetPanelCanvas, rightX, rowY, true, "MINING SITES", $"{detail.MiningSignalCount} found", InfoMiningBrush, sizeBump: 1.5);
-            rowY = Math.Max(ringBottomY, miningBottomY) + sectionGap;
+                miningBottomY = AddStackedStat(planetPanelCanvas, rightX, rightY, true, "MINING SITES", $"{detail.MiningSignalCount} found", InfoMiningBrush, sizeBump: 1.5);
+            leftY = ringBottomY + sectionGap; rightY = miningBottomY + sectionGap;
 
             // Composition — the real Ice/Rock/Metal split. Previously gated on DSS mapping
             // (IsMapped) on the assumption it was a mapping-only reward, but the Scan journal
@@ -1769,7 +1770,7 @@ namespace EliteBioRadar
             {
                 var compValue = $"Ice {detail.IceComposition * 100:F0}%\nRock {detail.RockComposition * 100:F0}%\nMetal {detail.MetalComposition * 100:F0}%";
                 int before = planetPanelCanvas.Children.Count;
-                double compBottomY = AddStackedStat(planetPanelCanvas, rightX, rowY, true, "COMPOSITION", compValue, InfoLabelGreenBrush, sizeBump: 1.5);
+                double compBottomY = AddStackedStat(planetPanelCanvas, rightX, rightY, true, "COMPOSITION", compValue, InfoLabelGreenBrush, sizeBump: 1.5);
                 // Real report: with Mining Sites (or other stacked rows) present, this 3-line
                 // block ran down into the "MAPPED BY OTHER CMDR" discovery line at y≈544. Keep its
                 // bottom clear of that line by lifting the whole block (label + value) if needed.
@@ -1918,10 +1919,15 @@ namespace EliteBioRadar
         {
             const int sceneW = 370, sceneH = 420, sceneX = 171, sceneY = 40;
             string? rawRingClass = _watcher?.GetBeltRingClass(detail.BodyName);
-            var frame = AsteroidFieldRenderer.GetAsteroidFieldFrame(detail.BodyName, rawRingClass, sceneW, sceneH);
-            var img = new Image { Width = sceneW, Height = sceneH, Source = frame };
-            Canvas.SetLeft(img, sceneX); Canvas.SetTop(img, sceneY);
-            planetPanelCanvas.Children.Add(img);
+            FrameworkElement field;
+            try { field = AsteroidFieldRenderer.CreateAnimatedField(detail.BodyName, rawRingClass, sceneW, sceneH); }
+            catch (Exception ex)
+            {
+                Log.Write($"Animated asteroid field failed, using static frame: {ex.Message}");
+                field = new Image { Width = sceneW, Height = sceneH, Source = AsteroidFieldRenderer.GetAsteroidFieldFrame(detail.BodyName, rawRingClass, sceneW, sceneH) };
+            }
+            Canvas.SetLeft(field, sceneX); Canvas.SetTop(field, sceneY);
+            planetPanelCanvas.Children.Add(field);
 
             double leftX = 164, rightX = 548, rowY = 78;
             const double sectionGap = 34;

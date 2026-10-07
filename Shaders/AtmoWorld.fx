@@ -31,6 +31,10 @@ float3 LightDir     : register(c17);  // normalized, view space
 float  CrackAmt     : register(c18);  // 0..1 fine fracture lines in an ice shell (0 = none)
 float  FleckAmt     : register(c19);  // 0..1 clusters of small dark flecks on the ice (0 = none)
 float  HotAmt       : register(c20);  // 0..1 glowing red-hot lava patches (very hot bodies; 0 = none)
+float  LandAmt      : register(c21);  // 0..1 continent coverage over an ocean (Earth-like worlds; 0 = none)
+float4 LandCol0     : register(c22);  // lowland (green)
+float4 LandCol1     : register(c23);  // coast / dry highland (tan)
+float  GlintAmt     : register(c24);  // 0..1 sun glint on the ocean
 
 static const float PI  = 3.14159265;
 static const float TAU = 6.28318531;
@@ -70,6 +74,24 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     float basin = smoothstep(0.62, 0.34, Tex(ps * 1.4 + 0.77 + Seed * 0.05).z);
     surf = lerp(surf, Surf0.rgb * 0.70, basin * 0.50 * SurfContrast);
     surf *= 0.94 + 0.12 * fine;
+
+    // ---------------- continents (Earth-like worlds) ----------------
+    // Integer x-scales keep the noise seamless around the longitude wrap; the warp breaks up grid alignment.
+    float2 cw = ps + (Tex(ps * float2(1.0, 1.0) + 0.41).xy - 0.5) * 0.30;
+    float cn = Tex(cw * float2(1.0, 1.0) + Seed * 0.11).x * 0.44 + Tex(cw * float2(2.0, 2.0) + 0.23).y * 0.28
+             + Tex(cw * float2(4.0, 4.0) + 0.61).z * 0.18 + Tex(cw * float2(8.0, 8.0) + 0.37).x * 0.10;
+    float thr  = 0.5 + (0.40 - LandAmt) * 0.35;
+    float hasL = step(0.001, LandAmt);
+    float land = smoothstep(thr - 0.010, thr + 0.010, cn) * hasL;
+    float shallow = smoothstep(thr - 0.080, thr - 0.004, cn) * (1.0 - land) * hasL;
+    surf = lerp(surf, Surf1.rgb * 1.25 + float3(0.0, 0.03, 0.03), shallow * 0.40);
+    float lt  = Tex(cw * float2(2.0, 2.0) + 0.80).y * 0.6 + Tex(cw * float2(8.0, 8.0) + 0.30).z * 0.4;
+    float3 lcol = lerp(LandCol0.rgb, LandCol1.rgb, smoothstep(0.58, 0.85, lt) * 0.55);
+    float coastB = land * (1.0 - smoothstep(thr + 0.004, thr + 0.050, cn));
+    lcol = lerp(lcol, LandCol1.rgb * 1.08, coastB * 0.55);
+    lcol = lerp(lcol, LandCol0.rgb * 0.72, smoothstep(thr + 0.07, thr + 0.17, cn) * 0.45);
+    lcol *= 0.86 + 0.28 * Tex(cw * float2(16.0, 16.0) + 0.5).z;
+    surf = lerp(surf, lcol, land * (1.0 - polar * 0.5));
 
     // Dense atmosphere: contrast washes out toward the mean tone, then the haze tint takes over.
     float3 meanSurf = 0.5 * (Surf0.rgb + Surf1.rgb);
@@ -143,6 +165,12 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     float lit  = lerp(0.10, 1.0, smoothstep(-0.28, 0.80, ndl));
     float limb = 0.70 + 0.30 * pow(z, 0.5);
     col *= lit * limb;
+
+    // Sun glint on open water: a broad soft sheen plus a tighter core, hidden by land and cloud.
+    float3 Hh = normalize(normalize(LightDir) + float3(0.0, 0.0, 1.0));
+    float nh = saturate(dot(P, Hh));
+    float glint = (pow(nh, 12.0) * 0.28 + pow(nh, 80.0) * 0.50) * GlintAmt * (1.0 - land) * (1.0 - saturate(cloudTotal * 1.2)) * (1.0 - cap);
+    col += float3(0.82, 0.90, 1.0) * glint * (0.85 + 0.30 * fine);
 
     // Bright blue-white limb haze, stronger the denser the atmosphere.
     float rimGlow = pow(1.0 - z, 2.4) * saturate(ndl * 0.8 + 0.45) * (0.45 + 0.55 * HazeAmt);

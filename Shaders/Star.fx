@@ -71,11 +71,16 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
 
     // Plasma patches: two advected copies of a fine field, dissolved into each other by a
     // slowly varying per-region phase, so patches boil instead of just sliding sideways.
-    float f1 = Tex(p * 6.0 + float2( Time * 0.0045, 0.0) + 0.17).y;
-    float f2 = Tex(p * 6.0 + float2(-Time * 0.0040, Time * 0.0030) + 0.61).y;
+    // Sample the patch noise in a rotated, domain-warped frame: value noise lines up with the texture axes, which showed up as
+    // vertical streaks (a "pumpkin ribs" look) on active stars.
+    float2 pw = p + (float2(big, big2) - 0.5) * 0.35;
+    float2 pr = float2(pw.x * 0.80 - pw.y * 0.60, pw.x * 0.60 + pw.y * 0.80);
+    float2 pr2 = float2(pw.x * 0.42 + pw.y * 0.91, -pw.x * 0.91 + pw.y * 0.42);
+    float f1 = Tex(pr * 6.0 + float2( Time * 0.0045, 0.0) + 0.17).y;
+    float f2 = Tex(pr2 * 6.0 + float2(-Time * 0.0040, Time * 0.0030) + 0.61).y;
     float mixT = 0.5 + 0.5 * sin(Time * 0.30 + big2 * 9.0);
     float f = lerp(f1, f2, mixT);
-    float fine = Tex(p * 13.0 + 0.9).x;
+    float fine = Tex(pr * 13.0 + 0.9).x;
     float field = f * 0.60 + fine * 0.40;
     // Cool dwarfs: patches come in a few big clumps (the rest of the disc stays smooth), made of
     // larger chunks rather than a fine even scatter.
@@ -108,7 +113,7 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
         // Scatter groups over a wide latitude range (either hemisphere) and across all longitudes.
         float sLat = (frac(h.x * 3.7 + j * 0.31) - 0.5) * 1.5;
         float sLon = frac(h.y * 2.3 + j * 0.211) * TAU;
-        float size = 0.075 + frac(h.z * 9.1) * 0.085;
+        float size = 0.045 + frac(h.z * 9.1) * 0.055;   // smaller spots (was 0.075-0.16)
         // Companion: random direction and distance, so groups never line up.
         float cAng = frac(h.x * 5.9) * TAU;
         float cDist = size * (1.8 + frac(h.y * 4.3) * 2.2);

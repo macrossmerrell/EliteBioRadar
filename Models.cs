@@ -50,6 +50,11 @@ namespace EliteBioRadar
             { "Cactoida",   300 }, { "Clypeus",   150 }, { "Osseus",     800 },
             { "Fungoida",   300 }, { "Recepta",   150 }, { "Aleoida",    150 },
             { "Fonticulua", 500 },
+            // Genera that were missing (they fell through to the 150 m default, so e.g. an Electricae ring
+            // looked 7x too small): Electricae need a full 1 km between samples, the small plants 100 m.
+            { "Electricae", 1000 },
+            { "Amphora Plant", 100 }, { "Anemone", 100 }, { "Bioluminescent Anemone", 100 }, { "Bark Mounds", 100 }, { "Brain Tree", 100 },
+            { "Crystalline Shards", 100 }, { "Fumerola", 100 }, { "Sinuous Tubers", 100 },
         };
 
         public static int GetRange(string genus, string species)

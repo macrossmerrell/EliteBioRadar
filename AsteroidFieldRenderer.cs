@@ -1,32 +1,36 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 
 namespace EliteBioRadar
 {
-    // Procedural asteroid-field backdrop for the Planet tab's Belt Cluster view — replaces the
-    // old flat "belt_N.png" icon (one of five fixed pieces of art, unrelated to the real body)
-    // with a scene built from real in-cockpit reference screenshots and whatever real ring-class
-    // data the parent ring's own Scan event carries (see EliteWatcherService.GetBeltRingClass —
-    // a belt cluster's OWN Scan event has almost no data at all; the real composition lives on
-    // the ring it belongs to).
+    // Procedural asteroid-field scene for the Planet tab's Belt Cluster view (and the System Scan
+    // thumbnails). The belt is a lane of lumpy, cauliflower-textured rocks (real in-cockpit
+    // references: pale grey-white icy rocks on a dark navy sky, warm tan-brown pitted rocks on a
+    // dark violet sky, thousands of fine pebbles in a dense river) with a soft depth of field:
+    // far rocks are small, dim and blurred, mid rocks are crisp, a few near ones are bigger.
     //
-    // Second pass, after direct feedback against a real reference photo: real asteroids are
-    // rounded/lumpy (cauliflower-like clusters of soft bumps), NOT faceted low-poly gems — the
-    // first pass's flat-shaded triangle facets were exactly backwards. Also real belts show a
-    // dense LANE/band structure (a river of rock and fine dust trailing off into sparse
-    // scattered chunks above/below), not a uniform scatter, and real depth-of-field: distant
-    // chunks read soft/hazy, only the close ones are crisp.
+    // The Planet tab version is ANIMATED: every rock is a pre-baked sprite that drifts along the
+    // lane at its own depth-dependent speed (parallax), wrapping around off-screen, while it
+    // slowly tumbles a few degrees back and forth (a full spin would rotate the baked lighting
+    // with it, so the tumble is kept small). The fine dust is a seamless tile that scrolls.
+    // Everything is plain WPF transform animation - no per-frame code.
+    //
+    // Colours follow the belt's real ring class (see EliteWatcherService.GetBeltRingClass).
     public static class AsteroidFieldRenderer
     {
-        private static readonly Dictionary<string, RenderTargetBitmap> _cache =
-            new Dictionary<string, RenderTargetBitmap>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, BitmapSource> _frameCache =
+            new Dictionary<string, BitmapSource>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, BitmapSource[]> _spriteCache =
+            new Dictionary<string, BitmapSource[]>(StringComparer.OrdinalIgnoreCase);
 
-        public static void ClearCache() => _cache.Clear();
+        public static void ClearCache() { _frameCache.Clear(); _spriteCache.Clear(); }
 
         private static double Seeded(double i)
         {
@@ -34,16 +38,8 @@ namespace EliteBioRadar
             return x - Math.Floor(x);
         }
 
-        // Real bug found from direct feedback ("all asteroid belts show the same image"): the
-        // old version accumulated the hash in a `double` (`h = h*31 + c`). For a body name this
-        // long (a real belt cluster name like "...A Belt Cluster 1" runs 30+ characters), 31^n
-        // blows past a double's ~15-17 significant digits of exact-integer precision well
-        // before the string ends — the LAST few characters (exactly where "Cluster 1" vs
-        // "Cluster 2" differ) were being silently swallowed by floating-point rounding, so
-        // every cluster belonging to the same ring hashed to the same seed. FNV-1a accumulated
-        // in a `uint` (proper mod-2^32 wraparound, no precision loss regardless of string
-        // length) fixes it — and has a real avalanche property, so even a one-character
-        // difference anywhere in the name scrambles the whole hash.
+        // FNV-1a in a uint: every character of a long belt name ("... A Belt Cluster 1" vs "... 2")
+        // affects the seed (the old double-accumulating hash silently dropped the last characters).
         private static double BodySeed(string bodyName)
         {
             unchecked
@@ -61,364 +57,491 @@ namespace EliteBioRadar
         private static Color Lerp(Color a, Color b, double t) => Color.FromRgb(
             (byte)(a.R + (b.R - a.R) * t), (byte)(a.G + (b.G - a.G) * t), (byte)(a.B + (b.B - a.B) * t));
 
-        // rockLight/rockMid/rockDark: the chunk's own lit-face/mid-tone/shadow-face palette.
-        // hazeColor: the soft colored dust glow behind everything. glintChance: how often a
-        // chunk gets a small bright ore-glint fleck (rocky/metallic fields show these; the icy
-        // reference didn't). craterChance: rocky/metal-rich fields show visible impact craters
-        // on the bigger chunks — the real ice reference instead shows thin fracture veins.
-        private static (Color rockLight, Color rockMid, Color rockDark, Color haze, double glintChance, double craterChance) GetPalette(string? rawRingClass)
+        private static Color Scale(Color c, double f) => Color.FromRgb(
+            (byte)Math.Clamp(c.R * f, 0, 255), (byte)Math.Clamp(c.G * f, 0, 255), (byte)Math.Clamp(c.B * f, 0, 255));
+
+        private sealed class Pal
         {
-            var mapped = rawRingClass switch
-            {
-                "eRingClass_Icy" => "Icy",
-                "eRingClass_MetalRich" => "MetalRich",
-                "eRingClass_Metalic" => "Metalic",
-                "eRingClass_Rocky" => "Rocky",
-                _ => "Unknown",
-            };
-            return mapped switch
-            {
-                // Haze brightened — confirmed this IS already tied to ring class (the rocky
-                // haze you liked came from this same table), but the old blue-grey read closer
-                // to "dark navy" than the pale, almost-white icy mist the reference photos show.
-                "Icy" => (Color.FromRgb(0xe8, 0xee, 0xf2), Color.FromRgb(0xa8, 0xba, 0xc8), Color.FromRgb(0x3e, 0x4c, 0x5c),
-                          Color.FromRgb(0xc4, 0xd6, 0xe6), 0.0, 0.0),
-                "Rocky" => (Color.FromRgb(0xd8, 0xc4, 0x9c), Color.FromRgb(0xa8, 0x8e, 0x66), Color.FromRgb(0x3a, 0x2e, 0x1e),
-                            Color.FromRgb(0x8a, 0x5a, 0x2e), 0.12, 0.7),
-                "MetalRich" => (Color.FromRgb(0xc8, 0xb4, 0x9c), Color.FromRgb(0x8a, 0x72, 0x5a), Color.FromRgb(0x2e, 0x24, 0x1a),
-                                 Color.FromRgb(0x6a, 0x46, 0x2a), 0.22, 0.75),
-                "Metalic" => (Color.FromRgb(0xd0, 0xd4, 0xda), Color.FromRgb(0x94, 0x9a, 0xa2), Color.FromRgb(0x2c, 0x2e, 0x32),
-                              Color.FromRgb(0x50, 0x58, 0x66), 0.3, 0.6),
-                _ => (Color.FromRgb(0xc8, 0xc2, 0xb6), Color.FromRgb(0x96, 0x90, 0x84), Color.FromRgb(0x36, 0x32, 0x2c),
-                      Color.FromRgb(0x50, 0x50, 0x50), 0.05, 0.4),
-            };
+            public string Key = "";
+            public Color Light, Mid, Dark, Haze, BgIn, BgOut;
+            public Color? DustLight, DustMid;      // fine pebbles when they should differ from the rock palette (backlit dark rocks)
+            public double FarOpacity = 0.80, HazeAlpha = 120;
+            public double Glint, Crater;
+            public int Dust;
+            public bool Ice;
         }
 
-        public static BitmapSource GetAsteroidFieldFrame(string bodyName, string? rawRingClass, int width = 370, int height = 420)
+        private static Pal GetPal(string? rawRingClass)
         {
-            var key = bodyName + "|belt2|" + (rawRingClass ?? "?") + "|" + width + "x" + height;
-            if (!_cache.TryGetValue(key, out var bmp)) { bmp = RenderField(bodyName, rawRingClass, width, height); _cache[key] = bmp; }
-            return bmp;
-        }
-
-        private static RenderTargetBitmap RenderField(string bodyName, string? rawRingClass, int width, int height)
-        {
-            double seedBase = BodySeed(bodyName);
-            var (rockLight, rockMid, rockDark, haze, glintChance, craterChance) = GetPalette(rawRingClass);
-            var lightAngle = 0.6 + Seeded(seedBase + 6500) * 0.6;
-            var lightDir = new Vector(Math.Cos(lightAngle), Math.Sin(lightAngle));
-
-            // The real "lane" structure — every real belt photo shows a dense band of rock and
-            // fine dust with sparse stragglers above/below it, not a uniform scatter. Band
-            // center/tilt/thickness are all seeded per body so different belts read as genuinely
-            // different structures, not just reshuffled dots in the same generic cloud.
-            double bandCenter = 0.42 + Seeded(seedBase + 7000) * 0.16;
-            double bandTilt = -0.22 + Seeded(seedBase + 7001) * 0.44;
-            double bandThickness = 0.16 + Seeded(seedBase + 7002) * 0.1;
-
-            double BandY(double xFrac, double spread)
+            Color c(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
+            switch (rawRingClass)
             {
-                double centerAtX = bandCenter + (xFrac - 0.5) * bandTilt;
-                // Two averaged uniforms approximate a soft (Gaussian-ish) falloff away from the
-                // band center instead of a hard-edged stripe.
-                double n = (Seeded(seedBase + xFrac * 977 + spread * 311) + Seeded(seedBase + xFrac * 613 + spread * 197 + 40)) / 2 - 0.5;
-                return Math.Clamp(centerAtX + n * bandThickness, 0.02, 0.98);
+                case "eRingClass_Icy":      // pale grey-white rocks, blue-grey shadows, navy sky
+                    return new Pal { Key = "Icy", Ice = true, Light = c(238, 240, 243), Mid = c(172, 182, 196), Dark = c(66, 76, 96),
+                        Haze = c(74, 92, 128), BgIn = c(30, 36, 50), BgOut = c(9, 11, 18), Glint = 0.0, Crater = 0.0, Dust = 280 };
+                case "eRingClass_Rocky":    // warm tan-brown, deeply pitted, violet-black sky
+                    return new Pal { Key = "Rocky", Light = c(224, 178, 134), Mid = c(158, 112, 86), Dark = c(48, 34, 32),
+                        Haze = c(66, 46, 72), BgIn = c(26, 21, 36), BgOut = c(8, 7, 16), Glint = 0.10, Crater = 0.85, Dust = 820 };
+                case "eRingClass_MetalRich":
+                    return new Pal { Key = "MetalRich", Light = c(104, 88, 76), Mid = c(48, 41, 37), Dark = c(14, 12, 12),
+                        Haze = c(176, 118, 68), BgIn = c(132, 88, 54), BgOut = c(38, 25, 18), Glint = 0.10, Crater = 0.70, Dust = 700,
+                        DustLight = c(204, 158, 110), DustMid = c(152, 108, 72), FarOpacity = 0.42, HazeAlpha = 190 };
+                case "eRingClass_Metalic":
+                    return new Pal { Key = "Metalic", Light = c(216, 222, 230), Mid = c(128, 136, 148), Dark = c(34, 38, 46),
+                        Haze = c(60, 72, 94), BgIn = c(25, 29, 37), BgOut = c(8, 10, 14), Glint = 0.35, Crater = 0.50, Dust = 420 };
+                default:
+                    return new Pal { Key = "Unknown", Light = c(212, 206, 196), Mid = c(142, 136, 126), Dark = c(44, 40, 36),
+                        Haze = c(72, 72, 78), BgIn = c(25, 27, 31), BgOut = c(8, 9, 11), Glint = 0.05, Crater = 0.40, Dust = 400 };
             }
+        }
 
-            // Background (space + stars + haze) — static, sharp, shared by every layer.
-            var bgVisual = new DrawingVisual();
-            using (var dc = bgVisual.RenderOpen())
+        // ---------------------------------------------------------------- sprites
+
+        // One lumpy rock: a cluster of overlapping soft-lit lobes (shadow-side lobes first, so the
+        // lit ones overlap them and the seams read as creases), then terminator shading, speckle,
+        // pits (rocky/metal) or cracks (ice) and the occasional bright ore glint.
+        private static BitmapSource BakeSprite(Pal pal, double seed, int size, double blur, Vector toLight)
+        {
+            double c = size / 2.0, R = size * 0.38;
+            // One smooth, lumpy silhouette: a rounded polygon whose radius varies by a few low-frequency
+            // waves (so it is never a circle) and is stretched along a random axis.
+            double layoutRot = Seeded(seed + 2) * Math.PI * 2;
+            double elong = 1.0 + Seeded(seed + 3) * 0.35;
+            double p1 = Seeded(seed + 4) * 6.28, p2 = Seeded(seed + 5) * 6.28, p3 = Seeded(seed + 6) * 6.28;
+            double a1 = 0.10 + Seeded(seed + 7) * 0.10, a2 = 0.06 + Seeded(seed + 8) * 0.09, a3 = 0.03 + Seeded(seed + 9) * 0.06;
+            const int nv = 20;
+            var pts = new Point[nv];
+            for (int i = 0; i < nv; i++)
             {
-                var spaceBrush = new RadialGradientBrush
+                double th = i * Math.PI * 2 / nv;
+                double rr = R * (0.88 + a1 * Math.Sin(2 * th + p1) + a2 * Math.Sin(3 * th + p2) + a3 * Math.Sin(5 * th + p3)
+                                 + (Seeded(seed + 20 + i * 1.7) - 0.5) * 0.07);
+                double lx = Math.Cos(th) * rr * elong, ly = Math.Sin(th) * rr / elong;
+                pts[i] = new Point(c + lx * Math.Cos(layoutRot) - ly * Math.Sin(layoutRot),
+                                   c + lx * Math.Sin(layoutRot) + ly * Math.Cos(layoutRot));
+            }
+            Point Mid(Point a, Point b) => new Point((a.X + b.X) / 2, (a.Y + b.Y) / 2);
+            var union = new StreamGeometry();
+            using (var gc = union.Open())
+            {
+                gc.BeginFigure(Mid(pts[nv - 1], pts[0]), true, true);
+                for (int i = 0; i < nv; i++)
+                    gc.QuadraticBezierTo(pts[i], Mid(pts[i], pts[(i + 1) % nv]), true, false);
+            }
+            union.Freeze();
+
+            var vis = new DrawingVisual();
+            using (var dc = vis.RenderOpen())
+            {
+                // Body: one volume lit from the sun side (matte - no hot highlight).
+                var body = new RadialGradientBrush
                 {
-                    GradientOrigin = new Point(0.5, 0.42), Center = new Point(0.5, 0.42), RadiusX = 0.9, RadiusY = 0.75,
+                    Center = new Point(0.5, 0.5),
+                    GradientOrigin = new Point(0.5 + toLight.X * 0.22, 0.5 + toLight.Y * 0.22),
+                    RadiusX = 0.58, RadiusY = 0.58,
                     GradientStops = new GradientStopCollection
                     {
-                        new GradientStop(Color.FromRgb(0x14, 0x16, 0x1a), 0.0),
-                        new GradientStop(Color.FromRgb(0x06, 0x07, 0x09), 1.0),
+                        new GradientStop(Lerp(pal.Mid, pal.Light, 0.80), 0.0),
+                        new GradientStop(pal.Mid, 0.50),
+                        new GradientStop(Lerp(pal.Mid, pal.Dark, 0.55), 1.0),
                     },
                 };
-                dc.DrawRectangle(spaceBrush, null, new Rect(0, 0, width, height));
-                for (int i = 0; i < 40; i++)
+                dc.DrawGeometry(body, null, union);
+
+                dc.PushClip(union);
+
+                // Cauliflower bumps: many small soft lobes, each lit on its sun side and shadowed opposite.
+                int bumps = 16 + (int)(Seeded(seed + 60) * 12);
+                for (int i = 0; i < bumps; i++)
                 {
-                    double s = seedBase + i * 3.7 + 5000;
-                    double sx = Seeded(s) * width, sy = Seeded(s + 1) * height;
-                    double sr = 0.4 + Seeded(s + 2) * 0.9;
-                    dc.DrawEllipse(new SolidColorBrush(Color.FromArgb((byte)(90 + Seeded(s + 3) * 120), 255, 255, 255)), null, new Point(sx, sy), sr, sr);
+                    double s = seed + 300 + i * 3.3;
+                    double ang = Seeded(s) * Math.PI * 2, d = Math.Sqrt(Seeded(s + 1)) * R * 1.05;
+                    var bp = new Point(c + Math.Cos(ang) * d, c + Math.Sin(ang) * d);
+                    double br = R * (0.12 + Seeded(s + 2) * 0.17);
+                    var bb = new RadialGradientBrush
+                    {
+                        Center = new Point(0.5, 0.5),
+                        GradientOrigin = new Point(0.5 + toLight.X * 0.30, 0.5 + toLight.Y * 0.30),
+                        RadiusX = 0.55, RadiusY = 0.55,
+                        GradientStops = new GradientStopCollection
+                        {
+                            new GradientStop(Color.FromArgb(90, pal.Light.R, pal.Light.G, pal.Light.B), 0.0),
+                            new GradientStop(Color.FromArgb(28, pal.Mid.R, pal.Mid.G, pal.Mid.B), 0.6),
+                            new GradientStop(Color.FromArgb(105, pal.Dark.R, pal.Dark.G, pal.Dark.B), 1.0),
+                        },
+                    };
+                    dc.DrawEllipse(bb, null, bp, br, br);
                 }
-                // Haze concentrated along the same lane the rocks follow, not a separate
-                // independent diagonal band.
-                var hazeBrush = new LinearGradientBrush
+
+                // Terminator: the side facing away from the sun falls into shadow.
+                var shade = new LinearGradientBrush
                 {
-                    StartPoint = new Point(0, bandCenter - bandTilt * 0.5 - 0.22), EndPoint = new Point(1, bandCenter + bandTilt * 0.5 + 0.22),
+                    StartPoint = new Point(0.5 + toLight.X * 0.5, 0.5 + toLight.Y * 0.5),
+                    EndPoint = new Point(0.5 - toLight.X * 0.5, 0.5 - toLight.Y * 0.5),
                     GradientStops = new GradientStopCollection
                     {
-                        new GradientStop(Color.FromArgb(0, haze.R, haze.G, haze.B), 0.0),
-                        new GradientStop(Color.FromArgb(130, haze.R, haze.G, haze.B), 0.42),
-                        new GradientStop(Color.FromArgb(90, haze.R, haze.G, haze.B), 0.58),
-                        new GradientStop(Color.FromArgb(0, haze.R, haze.G, haze.B), 1.0),
+                        new GradientStop(Color.FromArgb(0, 0, 0, 0), 0.22),
+                        new GradientStop(Color.FromArgb(165, pal.Dark.R, pal.Dark.G, pal.Dark.B), 1.0),
                     },
                 };
-                dc.DrawRectangle(hazeBrush, null, new Rect(0, 0, width, height));
+                dc.DrawRectangle(shade, null, new Rect(0, 0, size, size));
 
-                // Dense fine dust trailing along the lane — hundreds of tiny specks, the sandy
-                // "river" texture real belt photos show threading between the bigger chunks.
-                for (int i = 0; i < 420; i++)
+                // Fine speckle (grain / small bumps).
+                double dotScale = size / 96.0;
+                for (int i = 0; i < 90; i++)
                 {
-                    double s = seedBase + i * 7.13 + 8000;
-                    double xFrac = Seeded(s);
-                    double yFrac = BandY(xFrac, 0.6);
-                    double dr = 0.4 + Seeded(s + 2) * 0.9;
-                    byte da = (byte)(60 + Seeded(s + 3) * 110);
-                    var c = Seeded(s + 4) > 0.5 ? rockLight : rockMid;
-                    dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(da, c.R, c.G, c.B)), null, new Point(xFrac * width, yFrac * height), dr, dr);
+                    double s = seed + 200 + i * 2.3;
+                    double ang = Seeded(s) * Math.PI * 2, d = Math.Sqrt(Seeded(s + 1)) * R * 1.15;
+                    var p = new Point(c + Math.Cos(ang) * d, c + Math.Sin(ang) * d);
+                    bool light = Seeded(s + 2) > 0.55;
+                    var col = light ? pal.Light : pal.Dark;
+                    dc.DrawEllipse(new SolidColorBrush(Color.FromArgb((byte)(40 + Seeded(s + 3) * 70), col.R, col.G, col.B)), null,
+                        p, (0.4 + Seeded(s + 4) * 1.0) * dotScale, (0.4 + Seeded(s + 4) * 1.0) * dotScale);
                 }
-            }
-            var bgBmp = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
-            bgBmp.Render(bgVisual);
-            bgBmp.Freeze();
 
-            // Two depth layers now — the old third "front" layer (big, crisp, edge-crowding
-            // chunks meant to read as passing close by camera) is gone entirely per direct
-            // feedback: keep everything at middle-to-far distance, nothing looming up close.
-            // Mid's own max size nudged up a little (was 0.062, now 0.075) so the field still
-            // has some visual weight/variety without that removed layer.
-            var back = BakeLayer(seedBase, 1000, width, height, count: 34, minR: 0.014, maxR: 0.03, alpha: 165,
-                rockLight, rockMid, rockDark, lightDir, glintChance, craterChance, BandY, spreadTag: 1.1, blurRadius: 3.2);
-            var mid = BakeLayer(seedBase, 2000, width, height, count: 18, minR: 0.032, maxR: 0.075, alpha: 220,
-                rockLight, rockMid, rockDark, lightDir, glintChance, craterChance, BandY, spreadTag: 2.1, blurRadius: 1.1);
-
-            var composite = new DrawingVisual();
-            using (var dc = composite.RenderOpen())
-            {
-                dc.DrawImage(bgBmp, new Rect(0, 0, width, height));
-                dc.DrawImage(back, new Rect(0, 0, width, height));
-                dc.DrawImage(mid, new Rect(0, 0, width, height));
-            }
-            var bmp = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
-            bmp.Render(composite);
-            bmp.Freeze();
-            return bmp;
-        }
-
-        // edgeBias pulls the front layer's chunks toward the frame's edges/corners (real
-        // reference: the biggest, closest rocks crowd the top/bottom/side edges of the canopy
-        // view rather than sitting in the open middle).
-        private static RenderTargetBitmap BakeLayer(double seedBase, double layerSeed, int width, int height,
-            int count, double minR, double maxR, byte alpha,
-            Color rockLight, Color rockMid, Color rockDark, Vector lightDir, double glintChance, double craterChance,
-            Func<double, double, double> bandY, double spreadTag, double blurRadius, bool edgeBias = false)
-        {
-            double diag = Math.Sqrt(width * width + height * height);
-            var visual = new DrawingVisual();
-            using (var dc = visual.RenderOpen())
-            {
-                for (int i = 0; i < count; i++)
+                // Pits on rocky / metal-rich rocks: shadow on the sun-facing wall, lighter floor.
+                if (size >= 90 && Seeded(seed + 80) < pal.Crater)
                 {
-                    double s = seedBase + layerSeed + i * 13.7;
-                    double cxFrac = Seeded(s);
-                    // Most chunks follow the lane; a minority (~15%) stray further from it for
-                    // organic variety, same as scattered outliers in the real photo. edgeBias
-                    // layer chunks skip the lane entirely — they're meant to loom at the frame
-                    // edges regardless of where the lane itself falls.
-                    double cyFrac;
-                    if (edgeBias)
-                        cyFrac = Seeded(s + 1) < 0.5 ? Seeded(s + 1) * 0.32 : 1 - Seeded(s + 1) * 0.32;
-                    else if (Seeded(s + 5) < 0.15)
-                        cyFrac = Seeded(s + 1);
-                    else
-                        cyFrac = bandY(cxFrac, spreadTag + i * 0.01);
-                    double cx = cxFrac * width, cy = cyFrac * height;
-                    double r = (minR + Seeded(s + 2) * (maxR - minR)) * diag;
-
-                    DrawSoftChunk(dc, cx, cy, r, s, lightDir, alpha, rockLight, rockMid, rockDark, craterChance);
-
-                    if (glintChance > 0 && Seeded(s + 9) < glintChance)
+                    int pits = 2 + (int)(Seeded(seed + 81) * 3);
+                    for (int i = 0; i < pits; i++)
                     {
-                        double ga = Seeded(s + 10) * Math.PI * 2, gd = Seeded(s + 11) * r * 0.5;
-                        var gp = new Point(cx + Math.Cos(ga) * gd, cy + Math.Sin(ga) * gd);
-                        double gr = Math.Max(0.8, r * 0.12);
-                        var glint = new RadialGradientBrush
+                        double ang = Seeded(seed + 82 + i * 7.3) * Math.PI * 2, d = Seeded(seed + 83 + i * 7.3) * R * 0.65;
+                        var p = new Point(c + Math.Cos(ang) * d, c + Math.Sin(ang) * d);
+                        double pr = R * (0.10 + Seeded(seed + 84 + i * 7.3) * 0.14);
+                        dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(125, pal.Dark.R, pal.Dark.G, pal.Dark.B)), null, p, pr, pr * 0.9);
+                        var floor = new Point(p.X - toLight.X * pr * 0.42, p.Y - toLight.Y * pr * 0.42);
+                        var fb = new RadialGradientBrush
                         {
                             GradientStops = new GradientStopCollection
                             {
-                                new GradientStop(Color.FromArgb(230, 255, 250, 220), 0),
-                                new GradientStop(Color.FromArgb(0, 255, 250, 220), 1),
+                                new GradientStop(Color.FromArgb(200, pal.Mid.R, pal.Mid.G, pal.Mid.B), 0.0),
+                                new GradientStop(Color.FromArgb(0, pal.Mid.R, pal.Mid.G, pal.Mid.B), 1.0),
                             },
                         };
-                        dc.DrawEllipse(glint, null, gp, gr, gr);
+                        dc.DrawEllipse(fb, null, floor, pr * 0.85, pr * 0.78);
                     }
                 }
-            }
-            var bmp = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
-            bmp.Render(visual);
-            bmp.Freeze();
-            return blurRadius > 0 ? ToBlurred(bmp, width, height, blurRadius) : bmp;
-        }
-
-        // Irregular, asymmetric outer silhouette — varied vertex count, per-vertex radius
-        // jitter, and elongation/rotation, so no two chunks (even at the same size) share the
-        // same shape. Vertices are joined with a slight quadratic curve instead of a dead-
-        // straight line so the outline itself is never a hard geometric edge either.
-        private static Geometry BuildIrregularSilhouette(double cx, double cy, double r, double seed)
-        {
-            int vertCount = 7 + (int)(Seeded(seed + 20) * 5); // 7-11
-            double jitterMin = 0.55 + Seeded(seed + 21) * 0.2;
-            double jitterSpread = 0.35 + Seeded(seed + 22) * 0.4;
-            double elongX = 0.8 + Seeded(seed + 23) * 0.5;
-            double elongY = 0.8 + Seeded(seed + 24) * 0.5;
-            double rotation = Seeded(seed + 25) * Math.PI * 2;
-
-            var pts = new Point[vertCount];
-            for (int k = 0; k < vertCount; k++)
-            {
-                double ang = k * Math.PI * 2 / vertCount + (Seeded(seed + 30 + k * 4.1) - 0.5) * 0.3;
-                double rr = r * (jitterMin + Seeded(seed + 31 + k * 3.3) * jitterSpread);
-                double lx = Math.Cos(ang) * rr * elongX, ly = Math.Sin(ang) * rr * elongY;
-                pts[k] = new Point(
-                    cx + lx * Math.Cos(rotation) - ly * Math.Sin(rotation),
-                    cy + lx * Math.Sin(rotation) + ly * Math.Cos(rotation));
-            }
-
-            var geo = new StreamGeometry();
-            using (var gc = geo.Open())
-            {
-                gc.BeginFigure(pts[0], true, true);
-                for (int k = 0; k < vertCount; k++)
+                else if (pal.Ice && size >= 90)
                 {
-                    var next = pts[(k + 1) % vertCount];
-                    // Bow the segment's own midpoint slightly off the straight line between the
-                    // two vertices — a small quadratic curve instead of a perfectly flat edge.
-                    var mid = new Point((pts[k].X + next.X) / 2, (pts[k].Y + next.Y) / 2);
-                    var toNext = next - pts[k];
-                    var normal = new Vector(-toNext.Y, toNext.X);
-                    if (normal.Length > 0.0001) normal.Normalize();
-                    double bow = (Seeded(seed + 35 + k * 2.9) - 0.5) * r * 0.18;
-                    var control = mid + normal * bow;
-                    gc.QuadraticBezierTo(control, next, true, false);
+                    // Thin dark fracture veins.
+                    var pen = new Pen(new SolidColorBrush(Color.FromArgb(70, pal.Dark.R, pal.Dark.G, pal.Dark.B)), Math.Max(0.6, size / 140.0));
+                    for (int k = 0; k < 2; k++)
+                    {
+                        double ang = Seeded(seed + 90 + k * 5.1) * Math.PI * 2;
+                        var cur = new Point(c + Math.Cos(ang) * R * 0.2, c + Math.Sin(ang) * R * 0.2);
+                        var geo = new StreamGeometry();
+                        using (var gc = geo.Open())
+                        {
+                            gc.BeginFigure(cur, false, false);
+                            for (int st = 0; st < 4; st++)
+                            {
+                                ang += (Seeded(seed + 91 + k * 5.1 + st * 2.2) - 0.5) * 1.2;
+                                double len = R * (0.18 + Seeded(seed + 92 + k * 5.1 + st * 2.2) * 0.14);
+                                cur = new Point(cur.X + Math.Cos(ang) * len, cur.Y + Math.Sin(ang) * len);
+                                gc.LineTo(cur, true, false);
+                            }
+                        }
+                        dc.DrawGeometry(null, pen, geo);
+                    }
                 }
-            }
-            geo.Freeze();
-            return geo;
-        }
 
-        // Third pass. Round soft lobes (previous version) over-corrected — real feedback was
-        // "way too round, they look like bowling balls." A real asteroid IS irregular and
-        // asymmetric (different chunks read as genuinely different shapes/sizes, with visible
-        // facet-like tonal variation across the surface) — what was actually wrong in the
-        // FIRST version wasn't the irregular silhouette, it was drawing each facet as a flat
-        // hard-edged triangle with its own stroked border. This keeps the irregular jittered
-        // silhouette (asymmetric, no two chunks the same shape) but paints the facet variation
-        // as soft blended tonal patches within it — no stroke between them, no straight
-        // boundary anywhere, each patch's color pulled from the same rock palette so it reads
-        // as one rock's own surface variation, not a separate outlined piece.
-        private static void DrawSoftChunk(DrawingContext dc, double cx, double cy, double r, double seed,
-            Vector lightDir, byte alpha, Color rockLight, Color rockMid, Color rockDark, double craterChance)
-        {
-            var silhouette = BuildIrregularSilhouette(cx, cy, r, seed);
-            dc.PushClip(silhouette);
-
-            // Base directional wash — the overall lit-side/shadow-side tone before any facet
-            // texture on top of it.
-            var baseBrush = new LinearGradientBrush
-            {
-                StartPoint = new Point(0.5 - lightDir.X * 0.5, 0.5 - lightDir.Y * 0.5),
-                EndPoint = new Point(0.5 + lightDir.X * 0.5, 0.5 + lightDir.Y * 0.5),
-                GradientStops = new GradientStopCollection
+                // Ore glint on the sun side.
+                if (pal.Glint > 0 && Seeded(seed + 95) < pal.Glint * 2.2)
                 {
-                    new GradientStop(Color.FromArgb(alpha, rockLight.R, rockLight.G, rockLight.B), 0.0),
-                    new GradientStop(Color.FromArgb(alpha, rockMid.R, rockMid.G, rockMid.B), 0.55),
-                    new GradientStop(Color.FromArgb(alpha, rockDark.R, rockDark.G, rockDark.B), 1.0),
-                },
-            };
-            dc.DrawRectangle(baseBrush, null, new Rect(cx - r * 1.3, cy - r * 1.3, r * 2.6, r * 2.6));
-
-            // Soft "facet" patches — a handful of irregular soft-edged tonal patches, each
-            // either a bit lighter or a bit darker than the base wash at that point, giving the
-            // surface visible plane-to-plane variation without ever drawing a border between
-            // planes. Every patch's color still comes from the same three-tone palette, so it
-            // never introduces a color outside the rock's own.
-            int patchCount = 4 + (int)(Seeded(seed + 40) * 4); // 4-7
-            for (int i = 0; i < patchCount; i++)
-            {
-                double pa = Seeded(seed + 41 + i * 3.7) * Math.PI * 2;
-                double pd = Seeded(seed + 42 + i * 3.7) * r * 0.7;
-                double pr = r * (0.35 + Seeded(seed + 43 + i * 3.7) * 0.45);
-                var pp = new Point(cx + Math.Cos(pa) * pd, cy + Math.Sin(pa) * pd);
-                bool lighter = Seeded(seed + 44 + i * 3.7) > 0.5;
-                var patchColor = lighter ? Lerp(rockMid, rockLight, 0.6) : Lerp(rockMid, rockDark, 0.6);
-                byte patchAlpha = (byte)(50 + Seeded(seed + 45 + i * 3.7) * 60);
-                var patchBrush = new RadialGradientBrush
-                {
-                    GradientStops = new GradientStopCollection
+                    var gp = new Point(c + toLight.X * R * 0.35 + (Seeded(seed + 96) - 0.5) * R * 0.5,
+                                       c + toLight.Y * R * 0.35 + (Seeded(seed + 97) - 0.5) * R * 0.5);
+                    double gr = Math.Max(1.0, R * 0.11);
+                    var gb = new RadialGradientBrush
                     {
-                        new GradientStop(Color.FromArgb(patchAlpha, patchColor.R, patchColor.G, patchColor.B), 0.0),
-                        new GradientStop(Color.FromArgb(0, patchColor.R, patchColor.G, patchColor.B), 1.0),
-                    },
-                };
-                dc.DrawEllipse(patchBrush, null, pp, pr, pr * (0.7 + Seeded(seed + 46 + i * 3.7) * 0.5));
-            }
-            dc.Pop();
-
-            // A thin, low-alpha outer edge in the rock's own dark tone (never a stark black
-            // outline) — just enough definition to read against the star field behind it.
-            var edgePen = new Pen(new SolidColorBrush(Color.FromArgb((byte)(alpha * 0.4), rockDark.R, rockDark.G, rockDark.B)), Math.Max(0.6, r * 0.025));
-            dc.DrawGeometry(null, edgePen, silhouette);
-
-            // Fine surface detail — real ice asteroids show thin fracture veins, rocky/metal
-            // ones show impact craters; which one (if either) depends on the real ring class.
-            if (r > 12 && Seeded(seed + 80) < craterChance)
-            {
-                int craterCount = 1 + (int)(Seeded(seed + 81) * 2);
-                for (int p = 0; p < craterCount; p++)
-                {
-                    double pa = Seeded(seed + 82 + p * 7.3) * Math.PI * 2;
-                    double pd = Seeded(seed + 83 + p * 7.3) * r * 0.5;
-                    var pp = new Point(cx + Math.Cos(pa) * pd, cy + Math.Sin(pa) * pd);
-                    double pr = r * (0.08 + Seeded(seed + 84 + p * 7.3) * 0.1);
-                    var pitBrush = new RadialGradientBrush
-                    {
-                        GradientOrigin = new Point(0.35, 0.35), Center = new Point(0.35, 0.35), RadiusX = 1, RadiusY = 1,
                         GradientStops = new GradientStopCollection
                         {
-                            new GradientStop(Color.FromArgb((byte)(alpha * 0.7), rockDark.R, rockDark.G, rockDark.B), 0.0),
-                            new GradientStop(Color.FromArgb(0, rockDark.R, rockDark.G, rockDark.B), 1.0),
+                            new GradientStop(Color.FromArgb(235, 255, 248, 224), 0),
+                            new GradientStop(Color.FromArgb(0, 255, 248, 224), 1),
                         },
                     };
-                    dc.DrawEllipse(pitBrush, null, pp, pr, pr * 0.85);
+                    dc.DrawEllipse(gb, null, gp, gr, gr);
                 }
+                dc.Pop();
             }
-            else if (r > 12 && craterChance < 0.5)
-            {
-                // Thin fracture veins (ice) — a couple of soft jagged cracks following the
-                // surface curvature, faint enough to read as texture, not damage.
-                int crackCount = 1 + (int)(Seeded(seed + 85) * 2);
-                for (int cIdx = 0; cIdx < crackCount; cIdx++)
-                {
-                    double startAng = Seeded(seed + 86 + cIdx * 5.1) * Math.PI * 2;
-                    var p0 = new Point(cx + Math.Cos(startAng) * r * 0.15, cy + Math.Sin(startAng) * r * 0.15);
-                    var pen = new Pen(new SolidColorBrush(Color.FromArgb((byte)(alpha * 0.3), rockDark.R, rockDark.G, rockDark.B)), Math.Max(0.5, r * 0.02));
-                    var geo = new StreamGeometry();
-                    using (var gc = geo.Open())
-                    {
-                        gc.BeginFigure(p0, false, false);
-                        var cur = p0;
-                        double ang = startAng + (Seeded(seed + 87 + cIdx * 5.1) - 0.5) * 1.2;
-                        for (int step = 0; step < 4; step++)
-                        {
-                            ang += (Seeded(seed + 88 + cIdx * 5.1 + step * 2.2) - 0.5) * 1.1;
-                            double len = r * (0.16 + Seeded(seed + 89 + cIdx * 5.1 + step * 2.2) * 0.12);
-                            cur = new Point(cur.X + Math.Cos(ang) * len, cur.Y + Math.Sin(ang) * len);
-                            gc.LineTo(cur, true, false);
-                        }
-                    }
-                    dc.DrawGeometry(null, pen, geo);
-                }
-            }
+
+            var bmp = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+            bmp.Render(vis);
+            bmp.Freeze();
+            return blur > 0 ? ToBlurred(bmp, size, size, blur) : bmp;
         }
 
-        // Real Gaussian blur (same technique used throughout the app's other procedural
-        // renderers) — the actual mechanism behind the back/mid layers' depth-of-field softness.
+        // layer 0 far (small, dim, soft), 1 mid (crisp), 2 near (bigger).
+        private static BitmapSource[] GetSprites(Pal pal, double seedBase, int layer, Vector toLight)
+        {
+            string key = pal.Key + "|" + seedBase + "|" + layer;
+            if (_spriteCache.TryGetValue(key, out var set)) return set;
+            int count = layer == 0 ? 6 : layer == 1 ? 8 : 5;
+            int size = layer == 0 ? 48 : layer == 1 ? 96 : 128;
+            double blur = layer == 0 ? 4.0 : layer == 1 ? 1.0 : 0.0;
+            set = new BitmapSource[count];
+            for (int i = 0; i < count; i++)
+                set[i] = BakeSprite(pal, seedBase + layer * 1000 + i * 71.3, size, blur, toLight);
+            _spriteCache[key] = set;
+            return set;
+        }
+
+        // ---------------------------------------------------------------- scene model
+        //
+        // The whole field flows along one direction (angle A, random per body): rocks enter at one
+        // side of the view and leave at another. Everything is laid out in the lane's own frame:
+        // u runs along the flow, v across it (perpendicular), both measured from the view centre.
+
+        private sealed class Rock
+        {
+            public BitmapSource Sprite = null!;
+            public double D, V, Speed, Phase, Rot0, RotAmp, RotPeriod, RotPhase, Opacity;
+        }
+
+        private sealed class Scene
+        {
+            public int W, H;
+            public Pal Pal = null!;
+            public BitmapSource Background = null!, Dust = null!;
+            public List<Rock> Rocks = new List<Rock>();
+            public double Angle, Diag, DustSpeed;      // flow direction (radians), view diagonal, dust scroll px/s
+            public Vector Dir => new Vector(Math.Cos(Angle), Math.Sin(Angle));
+            public Vector Perp => new Vector(-Math.Sin(Angle), Math.Cos(Angle));
+        }
+
+        private static Scene BuildScene(string bodyName, string? rawRingClass, int w, int h)
+        {
+            double seedBase = BodySeed(bodyName);
+            var pal = GetPal(rawRingClass);
+            double k = w / 370.0;                               // sizes/speeds are designed for the 370px panel
+            double lightAngle = 0.6 + Seeded(seedBase + 6500) * 0.6;
+            var toLight = new Vector(-Math.Cos(lightAngle), -Math.Sin(lightAngle));
+
+            double diag = Math.Sqrt((double)w * w + (double)h * h);
+            var sc = new Scene { W = w, H = h, Pal = pal, Diag = diag, DustSpeed = 7 * k };
+            sc.Angle = Seeded(seedBase + 7001) * Math.PI * 2;                     // any side to any side
+            double laneOffset = (Seeded(seedBase + 7000) - 0.5) * 0.24 * Math.Min(w, h);
+            double thickness = (0.30 + Seeded(seedBase + 7002) * 0.16) * Math.Min(w, h) * 1.1;
+            double cx = w / 2.0, cy = h / 2.0;
+
+            double Lane(double s, int i) =>
+                (Seeded(s + i * 1.7) + Seeded(s + i * 2.9 + 40)) / 2 - 0.5;
+
+            // ----- background: sky, stars, haze along the lane -----
+            var bg = new DrawingVisual();
+            using (var dc = bg.RenderOpen())
+            {
+                var sky = new RadialGradientBrush
+                {
+                    GradientOrigin = new Point(0.5, 0.45), Center = new Point(0.5, 0.45), RadiusX = 0.95, RadiusY = 0.8,
+                    GradientStops = new GradientStopCollection { new GradientStop(pal.BgIn, 0.0), new GradientStop(pal.BgOut, 1.0) },
+                };
+                dc.DrawRectangle(sky, null, new Rect(0, 0, w, h));
+                var haze = new LinearGradientBrush
+                {
+                    StartPoint = new Point(0.5, 0.0), EndPoint = new Point(0.5, 1.0),
+                    GradientStops = new GradientStopCollection
+                    {
+                        new GradientStop(Color.FromArgb(0, pal.Haze.R, pal.Haze.G, pal.Haze.B), 0.0),
+                        new GradientStop(Color.FromArgb((byte)pal.HazeAlpha, pal.Haze.R, pal.Haze.G, pal.Haze.B), 0.5),
+                        new GradientStop(Color.FromArgb(0, pal.Haze.R, pal.Haze.G, pal.Haze.B), 1.0),
+                    },
+                };
+                // Haze band in the lane frame: rotated to the flow direction, shifted by the lane offset.
+                dc.PushTransform(new RotateTransform(sc.Angle * 180 / Math.PI, cx, cy));
+                dc.PushTransform(new TranslateTransform(0, laneOffset));
+                dc.DrawRectangle(haze, null, new Rect(cx - diag, cy - Math.Min(w, h) * 0.34, diag * 2, Math.Min(w, h) * 0.68));
+                dc.Pop(); dc.Pop();
+                for (int i = 0; i < 46; i++)
+                {
+                    double s = seedBase + i * 3.7 + 5000;
+                    double sr = (0.35 + Seeded(s + 2) * 0.85) * Math.Max(k, 0.6);
+                    dc.DrawEllipse(new SolidColorBrush(Color.FromArgb((byte)(80 + Seeded(s + 3) * 130), 255, 255, 255)), null,
+                        new Point(Seeded(s) * w, Seeded(s + 1) * h), sr, sr);
+                }
+            }
+            var bgBmp = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+            bgBmp.Render(bg);
+            bgBmp.Freeze();
+            sc.Background = bgBmp;
+
+            // ----- fine dust: a square tile in the lane frame, seamless along u (specks near an edge are also drawn one tile over) -----
+            int tile = (int)Math.Ceiling(diag);
+            var dust = new DrawingVisual();
+            using (var dc = dust.RenderOpen())
+            {
+                int dustN = (int)(pal.Dust * Math.Max(0.35, k * k) * (diag * diag) / ((double)w * h) * 0.55);
+                for (int i = 0; i < dustN; i++)
+                {
+                    double s = seedBase + i * 7.13 + 8000;
+                    double u = Seeded(s) * tile;
+                    double v = tile / 2.0 + laneOffset + Lane(s, 3) * thickness * 1.5;
+                    double dr = (0.35 + Seeded(s + 2) * 0.85) * Math.Max(k, 0.6);
+                    byte da = (byte)(55 + Seeded(s + 3) * 110);
+                    var col = Seeded(s + 4) > 0.5 ? (pal.DustLight ?? pal.Light) : (pal.DustMid ?? pal.Mid);
+                    var br = new SolidColorBrush(Color.FromArgb(da, col.R, col.G, col.B));
+                    dc.DrawEllipse(br, null, new Point(u, v), dr, dr);
+                    if (u < dr * 2) dc.DrawEllipse(br, null, new Point(u + tile, v), dr, dr);
+                    if (u > tile - dr * 2) dc.DrawEllipse(br, null, new Point(u - tile, v), dr, dr);
+                }
+            }
+            var dustBmp = new RenderTargetBitmap(tile, tile, 96, 96, PixelFormats.Pbgra32);
+            dustBmp.Render(dust);
+            dustBmp.Freeze();
+            sc.Dust = dustBmp;
+
+            // ----- rocks -----
+            var layers = new[]
+            {
+                (layer: 0, count: 90, dMin: 10.0, dMax: 22.0, vMin: 4.0,  vMax: 7.0,  op: pal.FarOpacity),
+                (layer: 1, count: 44, dMin: 22.0, dMax: 48.0, vMin: 8.0,  vMax: 13.0, op: 1.0),
+                (layer: 2, count: 7,  dMin: 54.0, dMax: 76.0, vMin: 16.0, vMax: 22.0, op: 1.0),
+            };
+            foreach (var L in layers)
+            {
+                var sprites = GetSprites(pal, seedBase, L.layer, toLight);
+                int cnt = Math.Max(4, (int)(L.count * Math.Max(0.4, k)));
+                for (int i = 0; i < cnt; i++)
+                {
+                    double s = seedBase + L.layer * 3000 + i * 13.7;
+                    double d = (L.dMin + Seeded(s + 2) * (L.dMax - L.dMin)) * k;
+                    // Most rocks follow the lane; ~22% stray further out (the scattered stragglers).
+                    double v = Seeded(s + 5) < 0.22
+                        ? (Seeded(s + 1) - 0.5) * Math.Min(w, h) * 1.1
+                        : laneOffset + Lane(s, 1) * thickness * (L.layer == 0 ? 1.5 : 1.15);
+                    sc.Rocks.Add(new Rock
+                    {
+                        Sprite = sprites[(int)(Seeded(s + 6) * sprites.Length) % sprites.Length],
+                        D = d, V = v,
+                        Speed = (L.vMin + Seeded(s + 7) * (L.vMax - L.vMin)) * k,
+                        Phase = Seeded(s),
+                        Rot0 = Seeded(s + 8) * 360, RotAmp = 4 + Seeded(s + 9) * 9,
+                        RotPeriod = 18 + Seeded(s + 10) * 30, RotPhase = Seeded(s + 11),
+                        Opacity = L.op * (0.88 + Seeded(s + 12) * 0.12),
+                    });
+                }
+            }
+            return sc;
+        }
+
+        // Top-left of a rock's sprite when it is at flow position u (measured from the view centre).
+        private static Point RockTopLeft(Scene sc, Rock r, double u)
+        {
+            var p = new Point(sc.W / 2.0, sc.H / 2.0) + sc.Dir * u + sc.Perp * r.V;
+            return new Point(p.X - r.D / 2, p.Y - r.D / 2);
+        }
+
+        private static double TravelHalf(Scene sc, Rock r) => (sc.Diag + r.D) / 2;
+
+        // ---------------------------------------------------------------- static frame (thumbnails)
+
+        public static BitmapSource GetAsteroidFieldFrame(string bodyName, string? rawRingClass, int width = 370, int height = 420)
+        {
+            var key = bodyName + "|belt5|" + (rawRingClass ?? "?") + "|" + width + "x" + height;
+            if (!_frameCache.TryGetValue(key, out var bmp)) { bmp = RenderStatic(bodyName, rawRingClass, width, height); _frameCache[key] = bmp; }
+            return bmp;
+        }
+
+        private static BitmapSource RenderStatic(string bodyName, string? rawRingClass, int w, int h)
+        {
+            var sc = BuildScene(bodyName, rawRingClass, w, h);
+            var vis = new DrawingVisual();
+            using (var dc = vis.RenderOpen())
+            {
+                dc.DrawImage(sc.Background, new Rect(0, 0, w, h));
+                double cx = w / 2.0, cy = h / 2.0;
+                dc.PushTransform(new RotateTransform(sc.Angle * 180 / Math.PI, cx, cy));
+                dc.DrawImage(sc.Dust, new Rect(cx - sc.Dust.PixelWidth / 2.0, cy - sc.Dust.PixelHeight / 2.0, sc.Dust.PixelWidth, sc.Dust.PixelHeight));
+                dc.Pop();
+                foreach (var r in sc.Rocks)
+                {
+                    double half = TravelHalf(sc, r);
+                    var tl = RockTopLeft(sc, r, -half + r.Phase * 2 * half);
+                    dc.PushOpacity(r.Opacity);
+                    dc.PushTransform(new RotateTransform(r.Rot0, tl.X + r.D / 2, tl.Y + r.D / 2));
+                    dc.DrawImage(r.Sprite, new Rect(tl.X, tl.Y, r.D, r.D));
+                    dc.Pop(); dc.Pop();
+                }
+            }
+            var bmp = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+            bmp.Render(vis);
+            bmp.Freeze();
+            return bmp;
+        }
+
+        // ---------------------------------------------------------------- animated scene (Planet tab)
+
+        private static void Throttle(Timeline t) => Timeline.SetDesiredFrameRate(t, 30);
+
+        public static FrameworkElement CreateAnimatedField(string bodyName, string? rawRingClass, int w = 370, int h = 420)
+        {
+            var sc = BuildScene(bodyName, rawRingClass, w, h);
+            var root = new Canvas { Width = w, Height = h, ClipToBounds = true, IsHitTestVisible = false };
+            root.Children.Add(new Image { Source = sc.Background, Width = w, Height = h });
+            double cx = w / 2.0, cy = h / 2.0;
+
+            // Dust: three tiles in a row along the flow, rotated to the flow direction, scrolled by exactly one tile and repeated.
+            double tile = sc.Dust.PixelWidth;
+            var dustHost = new Canvas { Width = tile * 3, Height = tile };
+            for (int i = 0; i < 3; i++)
+            {
+                var di = new Image { Source = sc.Dust, Width = tile, Height = tile };
+                Canvas.SetLeft(di, i * tile);
+                dustHost.Children.Add(di);
+            }
+            Canvas.SetLeft(dustHost, cx - tile * 1.5);
+            Canvas.SetTop(dustHost, cy - tile / 2);
+            var dustT = new TranslateTransform();
+            dustHost.RenderTransform = new TransformGroup
+            {
+                Children = { dustT, new RotateTransform(sc.Angle * 180 / Math.PI, tile * 1.5, tile / 2) },
+            };
+            var dustAnim = new DoubleAnimation(-tile, 0, TimeSpan.FromSeconds(tile / sc.DustSpeed)) { RepeatBehavior = RepeatBehavior.Forever };
+            Throttle(dustAnim);
+            dustT.BeginAnimation(TranslateTransform.XProperty, dustAnim);
+            root.Children.Add(dustHost);
+
+            foreach (var r in sc.Rocks)
+            {
+                var img = new Image { Source = r.Sprite, Width = r.D, Height = r.D, Opacity = r.Opacity };
+                RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
+                var rot = new RotateTransform(r.Rot0, r.D / 2, r.D / 2);
+                var tr = new TranslateTransform();
+                img.RenderTransform = new TransformGroup { Children = { rot, tr } };
+
+                double half = TravelHalf(sc, r), T = 2 * half / r.Speed;
+                var a = RockTopLeft(sc, r, -half);
+                var b = RockTopLeft(sc, r, half);
+                var begin = TimeSpan.FromSeconds(-r.Phase * T);
+                var ax = new DoubleAnimation(a.X, b.X, TimeSpan.FromSeconds(T)) { RepeatBehavior = RepeatBehavior.Forever, BeginTime = begin };
+                var ay = new DoubleAnimation(a.Y, b.Y, TimeSpan.FromSeconds(T)) { RepeatBehavior = RepeatBehavior.Forever, BeginTime = begin };
+                var ar = new DoubleAnimation(r.Rot0 - r.RotAmp, r.Rot0 + r.RotAmp, TimeSpan.FromSeconds(r.RotPeriod))
+                {
+                    AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever,
+                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+                    BeginTime = TimeSpan.FromSeconds(-r.RotPhase * r.RotPeriod * 2),
+                };
+                Throttle(ax); Throttle(ay); Throttle(ar);
+                tr.BeginAnimation(TranslateTransform.XProperty, ax);
+                tr.BeginAnimation(TranslateTransform.YProperty, ay);
+                rot.BeginAnimation(RotateTransform.AngleProperty, ar);
+                root.Children.Add(img);
+            }
+
+            // Soft fade toward the edges so rocks drift in and out of the dark rather than popping at a hard rectangle.
+            root.OpacityMask = new RadialGradientBrush
+            {
+                Center = new Point(0.5, 0.5), GradientOrigin = new Point(0.5, 0.5), RadiusX = 0.62, RadiusY = 0.62,
+                GradientStops = new GradientStopCollection
+                {
+                    new GradientStop(Colors.White, 0.0),
+                    new GradientStop(Colors.White, 0.70),
+                    new GradientStop(Color.FromArgb(0, 255, 255, 255), 1.0),
+                },
+            };
+            return root;
+        }
+
+        // Real Gaussian blur, baked into the sprite (no live effects) - the depth-of-field softness.
         private static RenderTargetBitmap ToBlurred(BitmapSource sharp, int width, int height, double radius)
         {
             var img = new Image { Source = sharp, Width = width, Height = height, Effect = new BlurEffect { Radius = radius, KernelType = KernelType.Gaussian } };

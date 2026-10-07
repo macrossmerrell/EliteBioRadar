@@ -273,7 +273,7 @@ namespace EliteBioRadar
         // Non-landable High Metal Content bodies with no rings: a tinted surface seen through a haze,
         // clouds and cyclones. Everything else (and any body with rings) keeps the CPU terrain scene.
         public static bool IsAtmoWorld(BodyScanDetail detail, string iconCode) =>
-            (iconCode == "HMC" || iconCode == "ICY" || iconCode == "RIB" || iconCode == "WTR" || iconCode == "RBD") && !detail.Landable && detail.SurfacePressure > 0 &&
+            (iconCode == "HMC" || iconCode == "ICY" || iconCode == "RIB" || iconCode == "WTR" || iconCode == "ELW" || iconCode == "AMW" || iconCode == "RBD") && !detail.Landable && detail.SurfacePressure > 0 &&
             !detail.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0);
 
         // Calibrated against 12 real in-game non-landable HMC screenshots matched to their journal
@@ -298,6 +298,8 @@ namespace EliteBioRadar
             bool icy = iconCode == "ICY";
             bool rockyIce = iconCode == "RIB";
             bool water = iconCode == "WTR";
+            bool elw = iconCode == "ELW";
+            bool amw = iconCode == "AMW";
             bool rocky = iconCode == "RBD";
             if (rocky && haze <= 0.80)
             {
@@ -310,6 +312,14 @@ namespace EliteBioRadar
             else if (water)
             {
                 s0 = rgb(20, 34, 50); s1 = rgb(58, 86, 110); contrast = 0.5;   // deep ocean blue, slightly lighter in places
+            }
+            else if (elw)
+            {
+                s0 = rgb(8, 28, 62); s1 = rgb(22, 62, 112); contrast = 0.45;  // open ocean: deep blue, a little lighter in places
+            }
+            else if (amw)
+            {
+                s0 = rgb(52, 28, 24); s1 = rgb(92, 52, 40); contrast = 0.35;   // dark maroon-brown basins
             }
             else if (rockyIce)
             {
@@ -441,6 +451,63 @@ namespace EliteBioRadar
                 atmoLook.CycloneAmt = 0.85; atmoLook.CloudAmt = 0.70; atmoLook.CrackAmt = 0.0;
                 double wcold = detail.SurfaceTemperature > 0 ? 0.20 + (300.0 - detail.SurfaceTemperature) / 160.0 : 0.3;
                 atmoLook.Cap = rgb(226, 232, 236); atmoLook.CapAmt = Math.Clamp(wcold, 0.15, 0.85);
+                atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.40, 0.38, 0.84);
+            }
+            else if (elw)
+            {
+                // Earth-like worlds (references: web screenshots + 9 scanned bodies, 56-415 kPa, 269-309 K): a blue ocean with
+                // olive-green land, tan-orange coasts, scattered white cloud and hurricane-style cyclones, a broad sun glint on
+                // the water and ice caps that grow with cold. Land colour and coverage come from the name hash; the colder
+                // ones go grey-green with bigger caps (real: Drojia EM-C c29-4 6, 266 K).
+                atmoLook.Haze = rgb(86, 124, 162); atmoLook.Glow = rgb(96, 160, 220);
+                atmoLook.Cloud = rgb(232, 238, 246);
+                atmoLook.HazeAmt = Math.Min(haze, 0.14);
+                atmoLook.CycloneAmt = 0.90; atmoLook.CloudAmt = 0.55; atmoLook.CrackAmt = 0.0;
+                int lv = (hash >> 6) % 4;
+                bool chilly = detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 278;
+                if (lv == 1)      { atmoLook.Land0 = rgb(48, 80, 42);  atmoLook.Land1 = rgb(126, 108, 64); }    // greener
+                else if (lv == 2) { atmoLook.Land0 = rgb(78, 86, 50);  atmoLook.Land1 = rgb(138, 104, 62); }    // drier, browner
+                else              { atmoLook.Land0 = rgb(56, 76, 40);  atmoLook.Land1 = rgb(140, 104, 58); }    // olive with tan
+                if (chilly)       { atmoLook.Land0 = rgb(76, 84, 66);  atmoLook.Land1 = rgb(128, 118, 96); }
+                atmoLook.LandAmt = 0.14 + 0.16 * (((hash >> 9) % 100) / 100.0);
+                double ecold = detail.SurfaceTemperature > 0 ? (300.0 - detail.SurfaceTemperature) / 90.0 : 0.2;
+                atmoLook.Cap = rgb(232, 236, 240); atmoLook.CapAmt = Math.Clamp(0.08 + ecold * 0.8, 0.08, 0.7);
+                atmoLook.SurfContrast = 0.25;
+                atmoLook.GlintAmt = 0.9;
+                atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.40, 0.38, 0.84);
+            }
+            else if (amw)
+            {
+                // Ammonia worlds (references: 5 web screenshots; scans show 3-4 MPa nitrogen/argon, ~180 K): dark maroon-brown
+                // basins with grey-olive and tan rough-textured patches over about half the surface, a glossy sheen on the dark
+                // areas, a few white storms and an amber-to-olive atmosphere rim. They range from dark and sooty to bright
+                // orange-tan, and from clear to a thick yellow-brown haze; a name hash picks the variant.
+                int av = (hash >> 5) % 4;
+                atmoLook.Cloud = rgb(222, 222, 226);
+                atmoLook.CycloneAmt = 0.55; atmoLook.CloudAmt = 0.30; atmoLook.CrackAmt = 0.0; atmoLook.CapAmt = 0.0;
+                atmoLook.GlintAmt = 0.75;
+                atmoLook.LandAmt = 0.18 + 0.14 * (((hash >> 9) % 100) / 100.0);
+                if (av == 0)      // standard: grey-olive on maroon
+                {
+                    atmoLook.Land0 = rgb(78, 74, 60);  atmoLook.Land1 = rgb(150, 120, 84);
+                    atmoLook.Haze = rgb(150, 124, 86); atmoLook.Glow = rgb(190, 150, 90); atmoLook.HazeAmt = 0.18;
+                }
+                else if (av == 1) // bright orange-tan
+                {
+                    atmoLook.Land0 = rgb(128, 102, 80); atmoLook.Land1 = rgb(186, 142, 96);
+                    atmoLook.Haze = rgb(190, 140, 84); atmoLook.Glow = rgb(214, 160, 90); atmoLook.HazeAmt = 0.22;
+                }
+                else if (av == 2) // thick yellow-brown haze (real: very hazy, soft-edged patches)
+                {
+                    atmoLook.Land0 = rgb(112, 98, 72); atmoLook.Land1 = rgb(160, 130, 90);
+                    atmoLook.Haze = rgb(166, 138, 82); atmoLook.Glow = rgb(206, 180, 110); atmoLook.HazeAmt = 0.55;
+                    atmoLook.CycloneAmt = 0.15;
+                }
+                else              // dark and sooty
+                {
+                    atmoLook.Land0 = rgb(54, 46, 40);  atmoLook.Land1 = rgb(120, 92, 68);
+                    atmoLook.Haze = rgb(110, 86, 62);  atmoLook.Glow = rgb(170, 120, 70); atmoLook.HazeAmt = 0.14;
+                }
                 atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.40, 0.38, 0.84);
             }
             else if (rockyIce)
