@@ -700,6 +700,7 @@ namespace EliteBioRadar
 
         private InfoPanelMode ComputeMode(EliteStatus status)
         {
+            if (PreviewStarType() != null) return InfoPanelMode.Star;
             if (ShouldShowDeorbit(status)) return InfoPanelMode.Deorbit;
 
             // FSD spooling up for a real hyperspace jump wins next — even from an
@@ -830,6 +831,7 @@ namespace EliteBioRadar
             // multi-star system) over the primary — falls back to the primary when nothing
             // is targeted, or when the primary itself is the target.
             var detail = _watcher?.TargetedStarDetail ?? _watcher?.CurrentStarDetail;
+            if (PreviewStarType() is string previewType) detail = GetPreviewStar(previewType);
             if (!force && ReferenceEquals(detail, _lastRenderedStar)) return;
             _lastRenderedStar = detail;
 
@@ -1010,6 +1012,13 @@ namespace EliteBioRadar
         {
             const int sceneW = 370, sceneH = 420, sceneX = 171, sceneY = 40;
 
+            if ((StarRenderer.IsNeutronStar(detail.StarType) && TryAddNeutronShaderScene(detail, sceneW, sceneH, sceneX, sceneY))
+                || (StarRenderer.IsWhiteDwarf(detail.StarType) && TryAddWhiteDwarfShaderScene(detail, sceneW, sceneH, sceneX, sceneY)))
+            {
+                AddStarHudStats(detail);
+                return;
+            }
+
             var core = StarRenderer.GetNeutronCore(detail, sceneW, sceneH);
             var imgCore = new Image { Width = sceneW, Height = sceneH, Source = core };
             var imgJets = new Image { Width = sceneW, Height = sceneH, Source = StarRenderer.RenderNeutronJets(detail, sceneW, sceneH, 0.0) };
@@ -1042,6 +1051,11 @@ namespace EliteBioRadar
         private void RenderBlackHoleStarPanel(BodyScanDetail detail)
         {
             const int sceneW = 370, sceneH = 420, sceneX = 171, sceneY = 40;
+            if (TryAddBlackHoleShaderScene(detail, sceneW, sceneH, sceneX, sceneY))
+            {
+                AddStarHudStats(detail);
+                return;
+            }
 
             var (core, glowA, glowB) = StarRenderer.GetBlackHoleLayers(detail, sceneW, sceneH);
             var imgGlowA = new Image { Width = sceneW, Height = sceneH, Source = glowA };
