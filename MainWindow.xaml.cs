@@ -694,7 +694,8 @@ namespace EliteBioRadar
             // player merely engaged the charge, before Supercruise itself actually kicked in.
             // Confirmed by feedback: ascent should wait for Supercruise to actually be live.
             bool nearBodyInSupercruise = status.Supercruise && status.HasPosition;
-            return _deorbitSeqActive || nearBodyInSupercruise || status.IsGliding;
+            // A hyperspace charge started while still near a body (an atmospheric jump) gets its own screen too.
+            return _deorbitSeqActive || nearBodyInSupercruise || status.IsGliding || JumpSceneActive(status);
         }
 
         private InfoPanelMode ComputeMode(EliteStatus status)
@@ -1805,7 +1806,8 @@ namespace EliteBioRadar
         // resolved parent body if known (already scanned), null if not (rare).
         private void RenderSignalTargetPanel(string signalLabel, BodyScanDetail? detail)
         {
-            planetPanelCanvas.Children.Add(MakeMiningSignalIllustration(356.5, 260, 2.3));
+            bool nonHuman = signalLabel.Contains("nonhuman", StringComparison.OrdinalIgnoreCase) || signalLabel.Contains("non human", StringComparison.OrdinalIgnoreCase);
+            planetPanelCanvas.Children.Add(nonHuman ? MakeThargoidSensorIllustration(356.5, 256, 0.62) : MakeMiningSiteScanIllustration(356.5, 256, 0.62, detail?.MiningSignalCount ?? 0));
             planetPanelCanvas.Children.Add(MakeCenterLabel(signalLabel.ToUpperInvariant(), 356.5, 470, InfoValueBrush, 15));
             var sub = detail != null
                 ? $"on {EliteWatcherService.GetShortBodyName(detail.BodyName, _watcher?.StarSystem ?? "").ToUpperInvariant()}"
@@ -2359,6 +2361,7 @@ namespace EliteBioRadar
             _deorbitProgress = null;
             _deorbitStartAltitude = 0;
             _deorbitClimbSince = DateTime.MinValue;
+            ResetAscentState();
             // Deliberately NOT cleared here — see UpdateDeorbitPanel's own body-name check for
             // why. Real report: the planet still jumped ~5% bigger partway through a descent
             // even with the "lock once" fix, because ResetDeorbitState runs on EVERY mode
@@ -2524,7 +2527,18 @@ namespace EliteBioRadar
             bool arcStarted = _deorbitProgress.HasValue;
             bool isDescending = haveRealSpeed && (!climbingNow || (arcStarted && !sustainedClimb));
             bool undecided = !haveRealSpeed || (climbingNow && !sustainedClimb && !arcStarted);
-            if (isDescending)
+            // Altitude only updates a few times a second, so extrapolate it from the last reading and the real climb rate
+            // (bounded) to keep the planet gliding instead of moving in bursts. Shared by the climb and jump screens.
+            double estAltForScene = status.Altitude;
+            if (_deorbitLastAltitude.HasValue && _deorbitLastDataTick != DateTime.MinValue)
+            {
+                double since = Math.Min((now - _deorbitLastDataTick).TotalSeconds, 1.0);
+                estAltForScene = Math.Min(_deorbitLastAltitude.Value + Math.Max(_deorbitCachedVs, 0) * since, Math.Max(_deorbitLastAltitude.Value * 1.5, 1000));
+            }
+            bool jumpScene = JumpSceneActive(status);
+            string jumpPhase = "";
+            if (jumpScene) jumpPhase = DrawJumpScene(deorbitPanelCanvas, bodyDetail, status, estAltForScene, dt);
+            else if (isDescending)
             {
             // ---- Descent-arc scene — first WPF port of the "Deorbit Trajectory Concept"
             // mockup (a curved glide path with fixed gates the ship flies through, ending on a
@@ -2601,7 +2615,6 @@ namespace EliteBioRadar
             }
             double descentT = _deorbitProgress.Value;
 
-            const double planetCx = 620 * 0.66, planetCy = 580 * 0.30, planetR = 580 * 0.62;
 
             // Real planet render — GetTerrainSceneFrame (already public, used by the Planet
             // tab) turned out to need no new "sphere-only" export at all: it clips to a circle
@@ -2638,145 +2651,7 @@ namespace EliteBioRadar
             }
             else
             {
-                int imgSize = (int)Math.Round(planetR / 0.34);
-                var sphereFrame = PlanetRenderer.GetTerrainSceneFrame(bodyDetail!, deorbitIconCode!, imgSize, imgSize, _watcher?.SystemPopulation ?? 0);
-                var (frameCx, frameCy, _) = PlanetRenderer.GetTerrainGeometry(imgSize, imgSize, bodyDetail);
-                var planetImg = new Image { Width = imgSize, Height = imgSize, Source = sphereFrame };
-                Canvas.SetLeft(planetImg, planetCx - frameCx); Canvas.SetTop(planetImg, planetCy - frameCy);
-                deorbitPanelCanvas.Children.Add(planetImg);
-
-                // Fixed arc — starts low in the lower-left corner, rises through a high control
-                // point, then comes back down onto roughly the middle of the planet's visible
-                // face. Not reshaped by gravity (an earlier pass did this); real feedback was
-                // that the descent line should read as one relatively static path, not something
-                // that visibly warps per body.
-                var arcP0 = new Point(620 * 0.08, 580 * 0.92);
-                var arcC = new Point(620 * 0.26, 580 * 0.08);
-                var arcP1 = new Point(planetCx - planetR * 0.12, planetCy + planetR * 0.30);
-
-                Point ArcPoint(double tt)
-                {
-                    double it = 1 - tt;
-                    double x = it * it * arcP0.X + 2 * it * tt * arcC.X + tt * tt * arcP1.X;
-                    double y = it * it * arcP0.Y + 2 * it * tt * arcC.Y + tt * tt * arcP1.Y;
-                    return new Point(x, y);
-                }
-                double ArcTangentDeg(double tt)
-                {
-                    var pa = ArcPoint(Math.Max(0, tt - 0.01));
-                    var pb = ArcPoint(Math.Min(1, tt + 0.01));
-                    return Math.Atan2(pb.Y - pa.Y, pb.X - pa.X) * 180 / Math.PI;
-                }
-
-                var arcFigure = new PathFigure { StartPoint = arcP0, IsClosed = false };
-                arcFigure.Segments.Add(new QuadraticBezierSegment(arcC, arcP1, true));
-                var arcGeo = new PathGeometry();
-                arcGeo.Figures.Add(arcFigure);
-                deorbitPanelCanvas.Children.Add(new System.Windows.Shapes.Path
-                {
-                    Data = arcGeo, Stroke = new SolidColorBrush(Color.FromArgb(140, 0xe6, 0xf5, 0xfa)),
-                    StrokeThickness = 1.6, StrokeDashArray = new DoubleCollection { 6, 7 },
-                });
-
-                // Target marker at the arc's own endpoint — will carry the real body name once
-                // this reads live data (EliteWatcherService.GetShortBodyName), same convention
-                // the rest of the app already uses for target labels.
-                var targetMarker = new Canvas();
-                targetMarker.Children.Add(new Line { X1 = -12, Y1 = 0, X2 = 12, Y2 = 0, Stroke = InfoOrangeBrush, StrokeThickness = 1.6 });
-                targetMarker.Children.Add(new Line { X1 = 0, Y1 = -12, X2 = 0, Y2 = 12, Stroke = InfoOrangeBrush, StrokeThickness = 1.6 });
-                targetMarker.Children.Add(new Ellipse
-                {
-                    Width = 14, Height = 14, Stroke = InfoOrangeBrush, StrokeThickness = 1.6,
-                    RenderTransform = new TranslateTransform(-7, -7),
-                });
-                Canvas.SetLeft(targetMarker, arcP1.X); Canvas.SetTop(targetMarker, arcP1.Y);
-                deorbitPanelCanvas.Children.Add(targetMarker);
-
-                // Gates — fixed points along the arc; the ship flies through them as descentT
-                // advances, rather than the gates drifting past a parked ship. Biggest at the
-                // start of the descent, smallest near the surface; level at the top of the arc,
-                // tilting into the path's own rightward curve as they near the planet.
-                const int gateCount = 7;
-                var gateTs = Enumerable.Range(1, gateCount).Select(i => (double)i / (gateCount + 1)).ToArray();
-                double nextGateT = gateTs.FirstOrDefault(gt => gt >= descentT);
-
-                foreach (var gt in gateTs)
-                {
-                    var p = ArcPoint(gt);
-                    double gscale = 0.15 + (1 - gt) * (1 - gt) * 0.95;
-                    if (gscale < 0.035) continue;
-                    string gateStatus = gt < descentT ? "passed" : (gt == nextGateT ? "next" : "upcoming");
-                    // Upcoming gates brightened (higher alpha floor + lighter cyan) — the
-                    // original 0x00e5ff at as little as ~0.53 alpha washed out against a lit
-                    // planet face; real feedback was they got hard to see over the planet.
-                    double baseAlpha = gateStatus == "passed" ? 0.22
-                        : gateStatus == "next" ? Math.Min(1.0, 0.4 + gscale * 0.85)
-                        : Math.Min(1.0, 0.6 + gscale * 0.7);
-                    Color color = gateStatus == "next" ? Color.FromRgb(0xff, 0xaa, 0x00)
-                        : gateStatus == "passed" ? Color.FromRgb(0x5a, 0x8c, 0x96)
-                        : Color.FromRgb(0x55, 0xf2, 0xff);
-                    double gw = 78 * gscale, gh = gw * 0.62;
-                    // Per feedback, every gate now tips right (right side the lower side),
-                    // not just the ones near the end. Rotation sign matches ArcTangentDeg's own
-                    // screen-space convention (positive = clockwise = right side down) — but the
-                    // raw tangent goes NEGATIVE during the arc's early climbing portion (heading
-                    // up-and-right, before it levels off and curves down toward the planet),
-                    // which would tip those gates the opposite way. Math.Abs forces every gate
-                    // to lean the same direction regardless of which part of the arc it's on;
-                    // the magnitude still varies with how steep the local path is (capped so the
-                    // steep early portion doesn't tip a gate absurdly far).
-                    double gateTiltDeg = Math.Min(Math.Abs(ArcTangentDeg(gt)) * 0.4, 30);
-                    var gateRect = new Rectangle
-                    {
-                        Width = Math.Max(1, gw), Height = Math.Max(1, gh),
-                        Stroke = new SolidColorBrush(Color.FromArgb((byte)(baseAlpha * 255), color.R, color.G, color.B)),
-                        StrokeThickness = (gateStatus == "next" ? 3 : 2.2) * Math.Max(gscale, 0.4),
-                        Fill = Brushes.Transparent,
-                        RenderTransform = new RotateTransform(gateTiltDeg, gw / 2, gh / 2),
-                    };
-                    if (gateStatus == "next")
-                        gateRect.Effect = new DropShadowEffect { Color = color, BlurRadius = 14 * gscale, ShadowDepth = 0, Opacity = 0.85 };
-                    else if (gateStatus == "upcoming")
-                        gateRect.Effect = new DropShadowEffect { Color = color, BlurRadius = 8 * gscale, ShadowDepth = 0, Opacity = 0.5 };
-                    Canvas.SetLeft(gateRect, p.X - gw / 2);
-                    Canvas.SetTop(gateRect, p.Y - gh / 2);
-                    deorbitPanelCanvas.Children.Add(gateRect);
-                }
-
-                // Ship — rides the arc at descentT, shrinking (but never disappearing) as it
-                // nears the surface. Its own local coordinates are centered on its nose-
-                // reference point (0,0) so RotateTransform/ScaleTransform's absolute
-                // CenterX/CenterY (a real point in local space, not a bounding-box fraction)
-                // pivot exactly where the Canvas placement below puts it on the arc.
-                var shipPoint = ArcPoint(descentT);
-                double shipAngle = ArcTangentDeg(descentT);
-                double shipScale = 1 - descentT * 0.6;
-                var shipVisual = new Canvas();
-                var trailBrush = new LinearGradientBrush(
-                    Color.FromArgb(0, 0x00, 0xc8, 0xff), Color.FromArgb(150, 0x00, 0xc8, 0xff),
-                    new Point(0, 0.5), new Point(1, 0.5));
-                shipVisual.Children.Add(new Polygon
-                {
-                    Points = new PointCollection { new Point(-14, -6), new Point(-46, -2), new Point(-46, 2), new Point(-14, 6) },
-                    Fill = trailBrush,
-                });
-                shipVisual.Children.Add(new Polygon
-                {
-                    Points = new PointCollection { new Point(30, 0), new Point(-14, -16), new Point(-6, -5), new Point(-16, 0), new Point(-6, 5), new Point(-14, 16) },
-                    Fill = new SolidColorBrush(Color.FromRgb(0x10, 0x1c, 0x1c)),
-                    Stroke = InfoValueBrush, StrokeThickness = 1.8,
-                });
-                shipVisual.Children.Add(new Ellipse
-                {
-                    Width = 7, Height = 4, Fill = new SolidColorBrush(Color.FromArgb(230, 0x00, 0xe5, 0xff)),
-                    RenderTransform = new TranslateTransform(8.5, -2),
-                });
-                var shipTransform = new TransformGroup();
-                shipTransform.Children.Add(new ScaleTransform(shipScale, shipScale, 0, 0));
-                shipTransform.Children.Add(new RotateTransform(shipAngle, 0, 0));
-                shipVisual.RenderTransform = shipTransform;
-                Canvas.SetLeft(shipVisual, shipPoint.X); Canvas.SetTop(shipVisual, shipPoint.Y);
-                deorbitPanelCanvas.Children.Add(shipVisual);
+                DrawDescentScene(deorbitPanelCanvas, bodyDetail!, deorbitIconCode!, descentT, dt, _deorbitDevValue, _deorbitCachedVs);
             }
             }
             else if (undecided)
@@ -2793,53 +2668,6 @@ namespace EliteBioRadar
             }
             else
             {
-            // ---- Old tunnel — LAUNCH only now (confirmed ascending), since the new arc scene
-            // only makes sense heading toward a planet. Unchanged from before the arc scene
-            // existed. ----
-            const double cx = 310, cy = 270, halfW = 250, halfH = 210;
-            // Gravity shapes the tunnel: light worlds get a wide, lazy corridor; heavy worlds
-            // pull it tight and steep, so the same fixed ground speed feels like it's rushing
-            // past faster than it actually is.
-            double gt2 = Math.Max(0, Math.Min(1, gravityG / 3.0));
-            double perspective = 2.6 - gt2 * 1.1;
-            double spacing = 1.25 - gt2 * 0.55;
-
-            Brush DevColor(double localDevAbs) =>
-                localDevAbs > 0.9 ? InfoDangerBrush :
-                (localDevAbs > 0.45 || closeness > 0.8) ? InfoOrangeBrush : InfoValueBrush;
-
-            const int gates = 8;
-            for (int i = gates; i >= 0; i--)
-            {
-                double p = (i + _deorbitScroll) / gates;
-                double depth = Math.Pow(Math.Max(0, Math.Min(1, p)), perspective);
-                double scale = (0.05 + depth * 1.0) * spacing + (1 - spacing) * depth * 0.3;
-                double gw = halfW * 2 * scale, gh = halfH * 2 * scale;
-
-                // Deviation drifts the gate off-centre, exaggerated with proximity — same
-                // perspective trick as the mockup: distant gates barely move, near ones swing.
-                double offsetX = _deorbitDevValue * 40 * depth;
-                double offsetY = _deorbitDevValue * 12 * depth;
-                double localDevAbs = Math.Min(1.4, devAbs * (0.4 + depth * 0.9));
-
-                var rect = new Rectangle
-                {
-                    Width = Math.Max(1, gw), Height = Math.Max(1, gh),
-                    Stroke = DevColor(localDevAbs), StrokeThickness = 1.2 + depth * 2.3,
-                    Opacity = 0.15 + depth * 0.75,
-                };
-                Canvas.SetLeft(rect, cx + offsetX - gw / 2);
-                Canvas.SetTop(rect, cy + offsetY - gh / 2);
-                deorbitPanelCanvas.Children.Add(rect);
-            }
-
-            // Centre reticle
-            var xLine1 = new Line { X1 = cx - 16, Y1 = cy, X2 = cx - 5, Y2 = cy, Stroke = InfoBrightValueBrush, StrokeThickness = 1.5, Opacity = 0.85 };
-            var xLine2 = new Line { X1 = cx + 5,  Y1 = cy, X2 = cx + 16, Y2 = cy, Stroke = InfoBrightValueBrush, StrokeThickness = 1.5, Opacity = 0.85 };
-            var yLine  = new Line { X1 = cx, Y1 = cy - 16, X2 = cx, Y2 = cy - 5, Stroke = InfoBrightValueBrush, StrokeThickness = 1.5, Opacity = 0.85 };
-            deorbitPanelCanvas.Children.Add(xLine1);
-            deorbitPanelCanvas.Children.Add(xLine2);
-            deorbitPanelCanvas.Children.Add(yLine);
             }
 
             // The glide flag doesn't distinguish direction — it's Frontier's general assisted-
@@ -2848,18 +2676,18 @@ namespace EliteBioRadar
             // guessing "descending" before there's a real reading yet was actively wrong often
             // enough to be worse than saying nothing — a neutral label until it's known beats a
             // confident wrong one for the first second.
-            string modeLabel = undecided ? "ATMOSPHERIC TRANSIT"
+            string modeLabel = jumpScene ? "FSD JUMP" : undecided ? "ATMOSPHERIC TRANSIT"
                 : isDescending ? "DEORBIT" : "LAUNCH TRAJECTORY";
-            tabRadar.Content = undecided ? "⛛ TRANSIT" : isDescending ? "⛛ DEORBIT" : "⤒ LAUNCH";
+            tabRadar.Content = jumpScene ? "⛛ JUMP" : undecided ? "⛛ TRANSIT" : isDescending ? "⛛ DEORBIT" : "⤒ LAUNCH";
 
             // Three tiers, matching the gate colouring above — "drifting" was missing entirely
             // before (only the two extremes had distinct text), so most of the wander's range
             // never showed anything different from steady cruising.
-            string statusText = closeness > 0.8 ? $"{modeLabel} — GROUND PROXIMITY"
+            string statusText = jumpScene ? $"{modeLabel} — {jumpPhase}" : closeness > 0.8 ? $"{modeLabel} — GROUND PROXIMITY"
                 : devAbs > 0.9 ? $"{modeLabel} — CORRECT COURSE NOW"
                 : devAbs > 0.45 ? $"{modeLabel} — DEVIATION DETECTED"
                 : $"{modeLabel} — ON COURSE";
-            var statusBrush = closeness > 0.8 || devAbs > 0.9 ? InfoDangerBrush : devAbs > 0.45 ? InfoOrangeBrush : InfoValueBrush;
+            var statusBrush = jumpScene ? InfoValueBrush : closeness > 0.8 || devAbs > 0.9 ? InfoDangerBrush : devAbs > 0.45 ? InfoOrangeBrush : InfoValueBrush;
 
             // A solid plate behind the text, not just the text on its own — the tunnel gates
             // pass directly behind/through it constantly, and bare text with no backing card

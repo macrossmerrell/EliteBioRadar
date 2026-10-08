@@ -176,6 +176,8 @@ namespace EliteBioRadar
         // (Odyssey allows both from a landed position, and only this combination tells them
         // apart).
         public bool FsdChargingAny => (Flags & (1u << 17)) != 0;
+        // The drive has fired: set for the jump itself (the moment after a hyperspace charge completes).
+        public bool FsdJump => (Flags & (1u << 30)) != 0;
         // Confirmed against a real captured glide (2026-08-29): Flags2 gains this bit the
         // instant Supercruise drops on final approach, and loses it again the instant normal
         // powered flight resumes — a real, always-available start/end signal, no altitude

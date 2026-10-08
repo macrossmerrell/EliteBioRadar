@@ -62,6 +62,8 @@ namespace EliteBioRadar
         // whatever in-system target happens to be more "recent" by timestamp. Supercruise
         // (boosted or not) never sets this.
         public bool             IsChargingJump        { get; private set; }
+        // When the hyperspace jump itself fired (the journal's StartJump event, written as the charge ends) - live only, not replayed.
+        public DateTime         HyperspaceJumpStartedAt { get; private set; }
         // Armed by the FSDJump handler, cleared once Status.json's charging flag has been seen
         // false (or after a few seconds) — see the ReadStatus comment where it's consumed.
         private volatile bool   _chargeFlagStaleSinceArrival;
@@ -813,7 +815,11 @@ namespace EliteBioRadar
                     // the special illustration.
                     string newSignalLabel = "";
                     var sigMatch = SignalDestinationRegex.Match(destName);
-                    if (sigMatch.Success)
+                    // Points of interest on a planet's surface (real example, A 3 of Eafots JJ-B c13-2:
+                    // Name "$POIScene_Wreckage_UA;", Name_Localised "Nonhuman Signature", Body = the parent planet's BodyID).
+                    // Resolved to the parent planet exactly like the mining signals above.
+                    bool poiMatch = !sigMatch.Success && destName.StartsWith("$POIScene_", StringComparison.OrdinalIgnoreCase);
+                    if (sigMatch.Success || poiMatch)
                     {
                         var bodyId = destObj.Value<int?>("Body");
                         var parentBody = bodyId.HasValue
@@ -821,7 +827,15 @@ namespace EliteBioRadar
                             : null;
                         if (parentBody != null)
                         {
-                            newSignalLabel = FormatSignalLabel(sigMatch.Groups[1].Value, sigMatch.Groups[2].Value);
+                            if (sigMatch.Success)
+                                newSignalLabel = FormatSignalLabel(sigMatch.Groups[1].Value, sigMatch.Groups[2].Value);
+                            else
+                            {
+                                newSignalLabel = destObj.Value<string>("Name_Localised") ?? "";
+                                if (string.IsNullOrWhiteSpace(newSignalLabel))
+                                    newSignalLabel = System.Text.RegularExpressions.Regex.Replace(
+                                        destName.Replace("$POIScene_", "").TrimEnd(';').Replace('_', ' '), "(?<!^)([A-Z])", " $1");
+                            }
                             destName = parentBody.BodyName;
                         }
                         else
@@ -4258,6 +4272,7 @@ namespace EliteBioRadar
                     if (string.Equals(jumpType, "Hyperspace", StringComparison.OrdinalIgnoreCase))
                     {
                         IsChargingJump = true;
+                        if (!backfill) HyperspaceJumpStartedAt = DateTime.UtcNow;
                         FsdTargetedAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
                         if (!backfill) DestinationUpdated?.Invoke(this, EventArgs.Empty);
                     }

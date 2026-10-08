@@ -78,7 +78,7 @@ namespace EliteBioRadar
 
         // string.GetHashCode is randomized per process in .NET, which would give a body a
         // different seed (and so a different look) every launch.
-        private static int StableHash(string s)
+        internal static int StableHash(string s)
         {
             unchecked
             {
@@ -421,9 +421,12 @@ namespace EliteBioRadar
             }
             else             if (!icy && !rockyIce && denseVariant == 1)
             {
-                atmoLook.Haze = rgb(196, 100, 58); atmoLook.Glow = rgb(210, 130, 90);
-                atmoLook.Cloud = rgb(170, 180, 205); atmoLook.CycloneAmt = 0.0; atmoLook.CloudAmt = 0.18; atmoLook.CapAmt = 0;
-                atmoLook.HazeAmt = 0.75;
+                // Real example: Eafots JJ-B c13-2 A 1 (CO2, 4.45 MPa, 808 K) - an orange-red surface seen through a pale blue-grey haze
+                // veil that lets the surface show in patches, with a distinct pale rim all the way round and an even, frontal light.
+                atmoLook.Haze = rgb(156, 172, 194); atmoLook.Glow = rgb(178, 202, 226);
+                atmoLook.Cloud = rgb(160, 178, 202); atmoLook.CycloneAmt = 0.0; atmoLook.CloudAmt = 0.85; atmoLook.CapAmt = 0;   // the blue-grey comes in streaky patches over the orange
+                atmoLook.HazeAmt = 0.28; atmoLook.SurfContrast = 1.1;
+                atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.20, 0.20, 0.96);
             }
             else if (!icy && !rockyIce && denseVariant == 2)
             {
