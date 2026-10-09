@@ -60,12 +60,14 @@ namespace EliteBioRadar
         // ---- GPU shader path (GasGiantShaderEffect). The shader draws the sphere itself, so the
         // static layers around it are just the ring back-pass and the front-sliver/atmosphere
         // layer WITHOUT the CPU limb darkening (the shader does its own). ----
-        public static (BitmapSource ringBack, BitmapSource top) GetGasGiantShaderStaticLayers(
-            BodyScanDetail detail, string iconCode, int width, int height)
+        public static (BitmapSource? ringBack, BitmapSource top) GetGasGiantShaderStaticLayers(
+            BodyScanDetail detail, string iconCode, int width, int height, bool shaderRings = false)
         {
-            var baseKey = detail.BodyName + "|ggshader|" + iconCode + "|" + width + "x" + height;
-            if (!_cache.TryGetValue(baseKey + "|ring", out var ring)) { ring = RenderGasGiantBase(detail, iconCode, width, height, includeSphere: false); _cache[baseKey + "|ring"] = ring; }
-            if (!_cache.TryGetValue(baseKey + "|top", out var top)) { top = RenderGasGiantTop(detail, iconCode, width, height, includeLimb: false); _cache[baseKey + "|top"] = top; }
+            var baseKey = detail.BodyName + "|ggshader" + (shaderRings ? "R" : "") + "|" + iconCode + "|" + width + "x" + height;
+            // With shader rings the ring back-pass and front sliver both come from RingShaderEffect, so only the glow stays here.
+            RenderTargetBitmap? ring = null;
+            if (!shaderRings && !_cache.TryGetValue(baseKey + "|ring", out ring)) { ring = RenderGasGiantBase(detail, iconCode, width, height, includeSphere: false); _cache[baseKey + "|ring"] = ring; }
+            if (!_cache.TryGetValue(baseKey + "|top", out var top)) { top = RenderGasGiantTop(detail, iconCode, width, height, includeLimb: false, includeRings: !shaderRings); _cache[baseKey + "|top"] = top; }
             return (ring, top);
         }
 
@@ -74,6 +76,13 @@ namespace EliteBioRadar
         {
             var (cx, cy, R, rings) = ComputeGeometry(detail, width, height);
             return (cx, cy, rings.Count > 0 ? R * 0.85 : R);
+        }
+
+        // Ring shader inputs (RingShaderEffect): planet centre/radius plus up to three bands in scene pixels.
+        internal static (double cx, double cy, double sphereR, List<RingBand> bands) GetRingShaderGeometry(BodyScanDetail detail, int width, int height)
+        {
+            var (cx, cy, R, rings) = ComputeGeometry(detail, width, height);
+            return (cx, cy, rings.Count > 0 ? R * 0.85 : R, rings);
         }
 
         // string.GetHashCode is randomized per process in .NET, which would give a body a
@@ -90,8 +99,7 @@ namespace EliteBioRadar
 
         // ---- GPU landable worlds (Shaders\LandableWorld.fx) ----
         public static bool IsLandableWorld(BodyScanDetail detail, string iconCode) =>
-            (iconCode == "HMC" || iconCode == "ICY" || iconCode == "RBD") && detail.Landable &&
-            !detail.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0);
+            (iconCode == "HMC" || iconCode == "ICY" || iconCode == "RBD") && detail.Landable;
 
         // Calibrated against five real landable HMC screenshots (matched to their journal scans).
         // All five carry the same composition (iron ~22%, nickel ~17%, sulphur ~16%) yet look
@@ -273,8 +281,7 @@ namespace EliteBioRadar
         // Non-landable High Metal Content bodies with no rings: a tinted surface seen through a haze,
         // clouds and cyclones. Everything else (and any body with rings) keeps the CPU terrain scene.
         public static bool IsAtmoWorld(BodyScanDetail detail, string iconCode) =>
-            (iconCode == "HMC" || iconCode == "ICY" || iconCode == "RIB" || iconCode == "WTR" || iconCode == "ELW" || iconCode == "AMW" || iconCode == "RBD") && !detail.Landable && detail.SurfacePressure > 0 &&
-            !detail.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0);
+            (iconCode == "HMC" || iconCode == "ICY" || iconCode == "RIB" || iconCode == "WTR" || iconCode == "ELW" || iconCode == "AMW" || iconCode == "RBD") && !detail.Landable && detail.SurfacePressure > 0;
 
         // Calibrated against 12 real in-game non-landable HMC screenshots matched to their journal
         // scans (see the surface palettes below). Findings that drive this:
@@ -785,6 +792,7 @@ namespace EliteBioRadar
             public double InnerPx, OuterPx;
             public Color Color;
             public string Name = "";
+            public string RingClass = "";
         }
 
         internal const double RingTilt = -0.16, RingSquash = 0.30;
@@ -845,6 +853,7 @@ namespace EliteBioRadar
                     // actually read as separate bands.
                     Color = ShadeRing(GetRingColor(r.RingClass), i, defs.Count),
                     Name = r.Name,
+                    RingClass = r.RingClass,
                 });
             }
             return rings;
@@ -1034,7 +1043,7 @@ namespace EliteBioRadar
         // front-sliver, atmosphere glow — none of this depends on cloud phase either, so it
         // renders once and composites on top of both the base and cloud layers, staying rock
         // still regardless of the cross-fade animating underneath it. ----
-        private static RenderTargetBitmap RenderGasGiantTop(BodyScanDetail detail, string iconCode, int width, int height, bool includeLimb = true)
+        private static RenderTargetBitmap RenderGasGiantTop(BodyScanDetail detail, string iconCode, int width, int height, bool includeLimb = true, bool includeRings = true)
         {
             var (cx, cy, R, rings) = ComputeGeometry(detail, width, height);
             var pal = GetPalette(iconCode);
@@ -1061,7 +1070,7 @@ namespace EliteBioRadar
                 // ---- ring front sliver — same bands again, clipped to (planet circle) ∩
                 // (front half-plane), the classic ring-passes-in-front-of-the-near-limb
                 // illusion ----
-                if (rings.Count > 0)
+                if (rings.Count > 0 && includeRings)
                 {
                     var planetCircle = new EllipseGeometry(new Point(cx, cy), sphereR, sphereR);
                     // The ring's true "equator" cut: a half-plane through the ring's own
@@ -1113,10 +1122,10 @@ namespace EliteBioRadar
         // systemPopulation gates Earthlike city lights (only an inhabited system would show
         // any) — it's real per-SYSTEM data, not on the body's own BodyScanDetail, so it comes
         // in as its own parameter rather than living on `detail`.
-        public static BitmapSource GetTerrainSceneFrame(BodyScanDetail detail, string iconCode, int width = 620, int height = 460, long systemPopulation = 0)
+        public static BitmapSource GetTerrainSceneFrame(BodyScanDetail detail, string iconCode, int width = 620, int height = 460, long systemPopulation = 0, bool shaderRings = false)
         {
-            var key = detail.BodyName + "|terrain|" + iconCode + "|" + width + "x" + height + "|" + (systemPopulation > 0 ? "pop" : "nopop");
-            if (!_cache.TryGetValue(key, out var bmp)) { bmp = RenderTerrainScene(detail, iconCode, width, height, systemPopulation); _cache[key] = bmp; }
+            var key = detail.BodyName + "|terrain|" + iconCode + "|" + width + "x" + height + "|" + (systemPopulation > 0 ? "pop" : "nopop") + (shaderRings ? "|sr" : "");
+            if (!_cache.TryGetValue(key, out var bmp)) { bmp = RenderTerrainScene(detail, iconCode, width, height, systemPopulation, shaderRings); _cache[key] = bmp; }
             return bmp;
         }
 
@@ -1789,7 +1798,7 @@ namespace EliteBioRadar
             return (cx, cy, R);
         }
 
-        private static RenderTargetBitmap RenderTerrainScene(BodyScanDetail detail, string iconCode, int width, int height, long systemPopulation = 0)
+        private static RenderTargetBitmap RenderTerrainScene(BodyScanDetail detail, string iconCode, int width, int height, long systemPopulation = 0, bool shaderRings = false)
         {
             // detail passed through here so a ringed body's R already comes back at the gas
             // giant's own sphere fraction (see GetTerrainGeometry's own comment) — everything
@@ -1818,7 +1827,7 @@ namespace EliteBioRadar
             var visual = new DrawingVisual();
             using (var dc = visual.RenderOpen())
             {
-                for (int i = 0; i < terrainRings.Count; i++)
+                if (!shaderRings) for (int i = 0; i < terrainRings.Count; i++)
                     DrawRingBandTextured(dc, cx, cy, terrainRings[i], RingTilt, RingSquash, seedBase, i, R);
 
                 dc.PushClip(new EllipseGeometry(new Point(cx, cy), R, R));
@@ -2497,7 +2506,7 @@ namespace EliteBioRadar
                 // illusion — see the gas giant renderer's own front-sliver pass for the same
                 // technique explained in more detail. Drawn before the atmosphere/limb glow
                 // below so that glow sits over the ring too, same ordering as the gas giant one.
-                if (terrainRings.Count > 0)
+                if (terrainRings.Count > 0 && !shaderRings)
                 {
                     var planetCircle = new EllipseGeometry(new Point(cx, cy), R, R);
                     var halfPlane = new RectangleGeometry(new Rect(cx - R * 4, cy, R * 8, R * 4));

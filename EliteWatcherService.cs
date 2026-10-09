@@ -1425,6 +1425,8 @@ namespace EliteBioRadar
                 }
             }
 
+            detail.DistanceFromArrivalLS = obj.Value<double?>("DistanceFromArrivalLS") ?? 0;
+
             if (isStar)
             {
                 detail.StarType          = obj.Value<string>("StarType") ?? "";

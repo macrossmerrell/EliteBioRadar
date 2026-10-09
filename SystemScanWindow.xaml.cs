@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 
@@ -832,6 +833,13 @@ namespace EliteBioRadar
                     {
                         Text = $"habitable zone ≈ {hz.Value.innerAU * 499:N0}–{hz.Value.outerAU * 499:N0} ls",
                         Foreground = HzColor, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center,
+                    });
+                if (star.DistanceFromArrivalLS >= 1)
+                    head.Children.Add(new TextBlock
+                    {
+                        Text = $"distance from primary {star.DistanceFromArrivalLS:N0} ls",
+                        Foreground = TextDim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center,
+                        Margin = new Thickness(11, 0, 0, 0),
                     });
             }
             else
@@ -1859,6 +1867,85 @@ namespace EliteBioRadar
             return string.Join(" ", words);
         }
 
+        // GPU thumbnails: the same shader scenes the Planet tab uses (gas giants with the ring shader, thick-atmosphere
+        // worlds, landable worlds), drawn live in a small host with Time frozen at a per-body offset so each planet shows a
+        // different, still rotation. The host is bitmap-cached (MainWindow.Supersample), so each shader renders once.
+        // Returns null for anything the shaders don't cover (landable rocky ice, ringed terrain bodies, software rendering)
+        // so the caller keeps the old bitmap renders for those.
+        private UIElement? TryBuildShaderThumb(BodyScanDetail b, string iconCode, double size)
+        {
+            if ((System.Windows.Media.RenderCapability.Tier >> 16) == 0) return null;
+            bool gas = PlanetRenderer.IsGasGiantFamily(iconCode);
+            bool atmo = PlanetRenderer.IsAtmoWorld(b, iconCode);
+            bool landable = !atmo && PlanetRenderer.IsLandableWorld(b, iconCode);
+            if (!gas && !atmo && !landable && !(PlanetRenderer.IsTerrainFamily(iconCode) && b.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0))) return null;
+            double t = PlanetRenderer.StableHash(b.BodyName) % 900;
+            var elements = new List<FrameworkElement>();
+            int box;
+            double cx, cy;
+            if (gas)
+            {
+                bool ringed = b.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0);
+                box = ringed ? (int)size : (int)Math.Floor(size * 0.8 / 0.46);
+                var (ringBack, top) = PlanetRenderer.GetGasGiantShaderStaticLayers(b, iconCode, box, box, shaderRings: ringed);
+                var look = PlanetRenderer.GetGasGiantLook(b, iconCode);
+                double sphereR;
+                (cx, cy, sphereR) = PlanetRenderer.GetGasGiantSphere(b, box, box);
+                var effect = GasGiantShaderEffect.Create(look, new Point(cx / box, cy / box), new Point(sphereR / box, sphereR / box));
+                effect.SetValue(GasGiantShaderEffect.TimeProperty, t);
+                FrameworkElement Surface(Effect e) => MainWindow.Supersample(new Rectangle { Width = box, Height = box, Fill = Brushes.Black, Effect = e });
+                if (ringed)
+                {
+                    var light = (System.Windows.Media.Media3D.Vector3D)effect.GetValue(GasGiantShaderEffect.LightDirProperty);
+                    elements.Add(Surface(RingShaderEffect.Create(b, box, box, false, light)));
+                    elements.Add(Surface(effect));
+                    elements.Add(Surface(RingShaderEffect.Create(b, box, box, true, light)));
+                }
+                else
+                {
+                    if (ringBack != null) elements.Add(new Image { Width = box, Height = box, Source = ringBack });
+                    elements.Add(Surface(effect));
+                }
+                elements.Add(new Image { Width = box, Height = box, Source = top });
+            }
+            else
+            {
+                bool ringedBody = b.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0);
+                box = ringedBody ? (int)size : (int)Math.Floor(size * 0.82 / 0.68);
+                double r;
+                (cx, cy, r) = PlanetRenderer.GetTerrainGeometry(box, box, b);
+                var ringLight = new System.Windows.Media.Media3D.Vector3D(-0.55, 0.55, 0.63);
+                FrameworkElement Surface(Effect e) => MainWindow.Supersample(new Rectangle { Width = box, Height = box, Fill = Brushes.Black, Effect = e });
+                if (ringedBody) elements.Add(Surface(RingShaderEffect.Create(b, box, box, false, ringLight, r)));
+                if (atmo)
+                {
+                    var e = AtmoWorldShaderEffect.Create(PlanetRenderer.GetAtmoWorldLook(b, iconCode), new Point(cx / box, cy / box), new Point(r / box, r / box));
+                    e.SetValue(AtmoWorldShaderEffect.TimeProperty, t);
+                    elements.Add(Surface(e));
+                }
+                else if (landable)
+                {
+                    var e = LandableWorldShaderEffect.Create(PlanetRenderer.GetLandableWorldLook(b, iconCode), new Point(cx / box, cy / box), new Point(r / box, r / box));
+                    e.SetValue(LandableWorldShaderEffect.TimeProperty, t);
+                    elements.Add(Surface(e));
+                }
+                else
+                {
+                    // No shader for this planet (e.g. landable rocky ice, airless bodies): the bitmap planet, minus its CPU rings.
+                    elements.Add(new Image { Width = box, Height = box, Source = PlanetRenderer.GetTerrainSceneFrame(b, iconCode, box, box, _watcher.SystemPopulation, true) });
+                }
+                if (ringedBody) elements.Add(Surface(RingShaderEffect.Create(b, box, box, true, ringLight, r)));
+            }
+            var clip = new Canvas { Width = size, Height = size, ClipToBounds = true };
+            foreach (var el in elements)
+            {
+                Canvas.SetLeft(el, size / 2.0 - cx);
+                Canvas.SetTop(el, size / 2.0 - cy);
+                clip.Children.Add(el);
+            }
+            return clip;
+        }
+
         // Real scaled-down renders — the original ask ("use our planet/star/asteroid renders,
         // scaled down") — for terrain-family planets (PlanetRenderer.GetTerrainSceneFrame,
         // already a transparent-background sphere-only render, same technique the Deorbit arc
@@ -1875,6 +1962,7 @@ namespace EliteBioRadar
                     return new Image { Source = frame, Width = size, Height = size, Stretch = Stretch.UniformToFill, ClipToBounds = true };
                 }
                 var iconCode = MainWindow.MapPlanetClassToIconCode(b.PlanetClass);
+                if (iconCode != null && TryBuildShaderThumb(b, iconCode, size) is UIElement shaderThumb) return shaderThumb;
                 if (iconCode != null && PlanetRenderer.IsGasGiantFamily(iconCode))
                 {
                     // GetGasGiantLayers turned out to already BE 4 static bitmaps — the

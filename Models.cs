@@ -247,6 +247,7 @@ namespace EliteBioRadar
         public double AgeMY             { get; set; }
         public string Luminosity        { get; set; } = ""; // short string enum e.g. "Va"
         public double RotationPeriod    { get; set; }
+        public double DistanceFromArrivalLS { get; set; } // from the Scan event: light-seconds from the arrival (primary) star
 
         // Planet fields
         public string PlanetClass      { get; set; } = "";

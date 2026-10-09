@@ -1373,7 +1373,7 @@ namespace EliteBioRadar
         // Renders a shader scene at 2x and smooths it down. A pixel shader cannot antialias its own contours (band
         // edges, storm outlines, cracks), which showed up as single-pixel stair-steps; a 2x bitmap cache with
         // high-quality downscaling is a cheap supersample for these small panels.
-        private static FrameworkElement Supersample(FrameworkElement scene)
+        internal static FrameworkElement Supersample(FrameworkElement scene)
         {
             var host = new Canvas { Width = scene.Width, Height = scene.Height, CacheMode = new BitmapCache(2.0) };
             RenderOptions.SetBitmapScalingMode(host, BitmapScalingMode.HighQuality);
@@ -1390,7 +1390,8 @@ namespace EliteBioRadar
             if ((RenderCapability.Tier >> 16) == 0) return false;
             try
             {
-                var (ringBack, top) = PlanetRenderer.GetGasGiantShaderStaticLayers(detail, iconCode, sceneW, sceneH);
+                bool ringed = detail.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0);
+                var (ringBack, top) = PlanetRenderer.GetGasGiantShaderStaticLayers(detail, iconCode, sceneW, sceneH, shaderRings: ringed);
                 var look = PlanetRenderer.GetGasGiantLook(detail, iconCode);
                 var (cx, cy, sphereR) = PlanetRenderer.GetGasGiantSphere(detail, sceneW, sceneH);
                 var effect = GasGiantShaderEffect.Create(look,
@@ -1399,10 +1400,23 @@ namespace EliteBioRadar
                 effect.BeginAnimation(GasGiantShaderEffect.TimeProperty,
                     new DoubleAnimation(0, 36000, TimeSpan.FromSeconds(36000)));
 
-                var imgRing = new Image { Width = sceneW, Height = sceneH, Source = ringBack };
                 var surface = new System.Windows.Shapes.Rectangle { Width = sceneW, Height = sceneH, Fill = Brushes.Black, Effect = effect };
                 var imgTop = new Image { Width = sceneW, Height = sceneH, Source = top };
-                foreach (var el in new FrameworkElement[] { imgRing, Supersample(surface), imgTop })
+                var layers = new List<FrameworkElement>();
+                if (ringed)
+                {
+                    var lightDir = (System.Windows.Media.Media3D.Vector3D)effect.GetValue(GasGiantShaderEffect.LightDirProperty);
+                    layers.Add(Supersample(new System.Windows.Shapes.Rectangle { Width = sceneW, Height = sceneH, Fill = Brushes.Black, Effect = RingShaderEffect.Create(detail, sceneW, sceneH, false, lightDir) }));
+                    layers.Add(Supersample(surface));
+                    layers.Add(Supersample(new System.Windows.Shapes.Rectangle { Width = sceneW, Height = sceneH, Fill = Brushes.Black, Effect = RingShaderEffect.Create(detail, sceneW, sceneH, true, lightDir) }));
+                }
+                else
+                {
+                    if (ringBack != null) layers.Add(new Image { Width = sceneW, Height = sceneH, Source = ringBack });
+                    layers.Add(Supersample(surface));
+                }
+                layers.Add(imgTop);
+                foreach (var el in layers)
                 { Canvas.SetLeft(el, sceneX); Canvas.SetTop(el, sceneY); planetPanelCanvas.Children.Add(el); }
                 return true;
             }
@@ -1653,14 +1667,31 @@ namespace EliteBioRadar
             int ringHotspotTotal = ringHotspots.Sum(s => s.Count);
 
             const int sceneW = 370, sceneH = 420, sceneX = 171, sceneY = 40;
+            // Ringed body on a GPU-capable machine: the rings come from RingShaderEffect (back pass, planet, front sliver)
+            // and the planet itself is drawn without its CPU rings.
+            bool ringShader = detail.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0) && (RenderCapability.Tier >> 16) != 0;
+            var ringLight = new System.Windows.Media.Media3D.Vector3D(-0.55, 0.55, 0.63);
+            double ringPlanetR = PlanetRenderer.GetTerrainGeometry(sceneW, sceneH, detail).R;
+            void AddRingLayer(bool front)
+            {
+                try
+                {
+                    var rr = new System.Windows.Shapes.Rectangle { Width = sceneW, Height = sceneH, Fill = Brushes.Black, Effect = RingShaderEffect.Create(detail, sceneW, sceneH, front, ringLight, ringPlanetR) };
+                    var host = Supersample(rr); Canvas.SetLeft(host, sceneX); Canvas.SetTop(host, sceneY);
+                    planetPanelCanvas.Children.Add(host);
+                }
+                catch (Exception ex) { Log.Write($"Ring shader setup failed: {ex.Message}"); }
+            }
+            if (ringShader) AddRingLayer(false);
             if (!TryAddAtmoWorldScene(detail, iconCode, sceneW, sceneH, sceneX, sceneY) &&
                 !TryAddLandableWorldScene(detail, iconCode, sceneW, sceneH, sceneX, sceneY))
             {
-                var frame = PlanetRenderer.GetTerrainSceneFrame(detail, iconCode, sceneW, sceneH, _watcher?.SystemPopulation ?? 0);
+                var frame = PlanetRenderer.GetTerrainSceneFrame(detail, iconCode, sceneW, sceneH, _watcher?.SystemPopulation ?? 0, ringShader);
                 var img = new Image { Width = sceneW, Height = sceneH, Source = frame };
                 Canvas.SetLeft(img, sceneX); Canvas.SetTop(img, sceneY);
                 planetPanelCanvas.Children.Add(img);
             }
+            if (ringShader) AddRingLayer(true);
 
             // Badges anchor to the SPHERE's own actual center/radius, not a fixed offset from
             // the scene box's corner — this scene's sphere doesn't fill nearly as much of its
@@ -2682,6 +2713,7 @@ namespace EliteBioRadar
             }
             else
             {
+                DrawClimbScene(deorbitPanelCanvas, bodyDetail, estAltForScene, _deorbitCachedVs, dt);
             }
 
             // The glide flag doesn't distinguish direction — it's Frontier's general assisted-

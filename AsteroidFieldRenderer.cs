@@ -76,12 +76,14 @@ namespace EliteBioRadar
             Color c(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
             switch (rawRingClass)
             {
-                case "eRingClass_Icy":      // pale grey-white rocks, blue-grey shadows, navy sky
-                    return new Pal { Key = "Icy", Ice = true, Light = c(238, 240, 243), Mid = c(172, 182, 196), Dark = c(66, 76, 96),
-                        Haze = c(74, 92, 128), BgIn = c(30, 36, 50), BgOut = c(9, 11, 18), Glint = 0.0, Crater = 0.0, Dust = 280 };
-                case "eRingClass_Rocky":    // warm tan-brown, deeply pitted, violet-black sky
-                    return new Pal { Key = "Rocky", Light = c(224, 178, 134), Mid = c(158, 112, 86), Dark = c(48, 34, 32),
-                        Haze = c(66, 46, 72), BgIn = c(26, 21, 36), BgOut = c(8, 7, 16), Glint = 0.10, Crater = 0.85, Dust = 820 };
+                case "eRingClass_Icy":      // real ring: slate-blue haze everywhere, blue-grey ridged rocks with bright white lit edges, far rocks melting into the haze
+                    return new Pal { Key = "Icy", Ice = true, Light = c(232, 238, 246), Mid = c(100, 130, 156), Dark = c(20, 32, 46),
+                        Haze = c(72, 98, 124), BgIn = c(58, 80, 102), BgOut = c(12, 18, 28), Glint = 0.0, Crater = 0.0, Dust = 280,
+                        DustLight = c(150, 176, 198), DustMid = c(84, 110, 134), FarOpacity = 0.68, HazeAlpha = 120 };
+                case "eRingClass_Rocky":    // real ring: near-black pitted rocks on a brown dust haze, pale tan where backlit
+                    return new Pal { Key = "Rocky", Light = c(140, 110, 86), Mid = c(62, 49, 41), Dark = c(16, 13, 13),
+                        Haze = c(146, 106, 74), BgIn = c(124, 94, 68), BgOut = c(32, 24, 19), Glint = 0.05, Crater = 0.85, Dust = 780,
+                        DustLight = c(172, 136, 102), DustMid = c(116, 86, 62), FarOpacity = 0.46, HazeAlpha = 175 };
                 case "eRingClass_MetalRich":
                     return new Pal { Key = "MetalRich", Light = c(104, 88, 76), Mid = c(48, 41, 37), Dark = c(14, 12, 12),
                         Haze = c(176, 118, 68), BgIn = c(132, 88, 54), BgOut = c(38, 25, 18), Glint = 0.10, Crater = 0.70, Dust = 700,
