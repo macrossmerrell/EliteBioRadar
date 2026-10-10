@@ -348,6 +348,18 @@ namespace EliteBioRadar
                 .Where(g => g.Count() > 1)
                 .SelectMany(g => g.Select(b => (b, list: g.ToList())))
                 .ToDictionary(x => x.b.BodyName, x => x.list, StringComparer.OrdinalIgnoreCase);
+
+            // Planets that orbit EACH OTHER around a barycenter of their own (real: Qiedea ZW-R d5-22 BC 3 and BC 4, Parents
+            // [{"Null":34},{"Null":3},{"Null":2},{"Null":0}] - no Star/Planet parent, so the rule above misses them). The test that
+            // tells them from planets circling a star pair: their nearest barycenter is not any star's own, so it holds just this
+            // bound group (the circumbinary planets AB 1, AB 2 ... share the stars' barycenter and stay ungrouped).
+            var starBarycenters = new HashSet<int>(bodies.Where(b => b.IsStar && b.BarycenterID >= 0).Select(b => b.BarycenterID));
+            foreach (var g in bodies.Where(b => !b.IsStar && !b.IsBelt && b.BarycenterID >= 0 && b.ParentBodyID < 0 && !starBarycenters.Contains(b.BarycenterID))
+                         .GroupBy(b => b.BarycenterID).Where(g => g.Count() > 1))
+            {
+                var list = g.ToList();
+                foreach (var b in list) _baryGroups[b.BodyName] = list;
+            }
             rootStack.Children.Add(BuildTripBar());
 
             if (bodies.Count == 0)
@@ -817,6 +829,16 @@ namespace EliteBioRadar
                     var (core, mid, _) = StarRenderer.GetStarColors(star.SurfaceTemperature > 0 ? star.SurfaceTemperature : 5700, star.StarType);
                     swatchFill = new RadialGradientBrush(mid, core);
                 }
+                var swatchThumb = GetCachedThumb("s|" + ThumbSignature(star, 40), () => TryBuildStarShaderThumb(star, 40));
+                if (swatchThumb != null)
+                {
+                    // Live star render, bigger than the 24px dot slot so its glow has room; a Canvas lets it overflow the slot.
+                    var slot = new Canvas { Width = 24, Height = 24, Margin = new Thickness(0, 0, 11, 0) };
+                    Canvas.SetLeft(swatchThumb, -8); Canvas.SetTop(swatchThumb, -8);
+                    slot.Children.Add(swatchThumb);
+                    head.Children.Add(slot);
+                }
+                else
                 head.Children.Add(new Ellipse
                 {
                     Width = 24, Height = 24, Margin = new Thickness(0, 0, 11, 0),
@@ -1136,6 +1158,10 @@ namespace EliteBioRadar
             // 59px thumb so the ring keeps its proportions instead of looking cramped.
             const int box = 140;
             var thumbWrap = new Grid { Width = 59, Height = 59, Margin = new Thickness(0, 0, 10, 0) };
+            var starShaderThumb = GetCachedThumb("s|" + ThumbSignature(s, 59), () => TryBuildStarShaderThumb(s, 59));
+            if (starShaderThumb != null)
+                thumbWrap.Children.Add(starShaderThumb);
+            else
             thumbWrap.Children.Add(new Image
             {
                 Source = StarRenderer.GetStarThumbFrame(s, box, box),
@@ -1295,8 +1321,10 @@ namespace EliteBioRadar
             top.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
             var thumbWrap = new Grid { Width = 59, Height = 59, Margin = new Thickness(0, 0, 10, 0) };
+            if (b.IsMapped && MappedRingStyle) thumbWrap.Children.Add(MakeMappedRing(59, false));
             thumbWrap.Children.Add(BuildThumb(b, 59));
-            if (b.IsMapped)
+            if (b.IsMapped && MappedRingStyle) thumbWrap.Children.Add(MakeMappedRing(59, true));
+            if (b.IsMapped && !MappedRingStyle)
             {
                 // ~50% of the thumb's own diameter — covers roughly a quarter of the sphere's
                 // area, per direct feedback ("a little hard to see... ok if it covers more").
@@ -1500,8 +1528,10 @@ namespace EliteBioRadar
             // every moon row noticeably taller).
             var dock = new DockPanel();
             var thumbGrid = new Grid { Width = 28, Height = 28, Margin = new Thickness(0, 0, 7, 0) };
+            if (m.IsMapped && MappedRingStyle) thumbGrid.Children.Add(MakeMappedRing(28, false));
             thumbGrid.Children.Add(BuildThumb(m, 28));
-            if (m.IsMapped)
+            if (m.IsMapped && MappedRingStyle) thumbGrid.Children.Add(MakeMappedRing(28, true));
+            if (m.IsMapped && !MappedRingStyle)
             {
                 // Bumped again — the earlier "already matches the card's own ratio" reasoning
                 // didn't hold up against an actual screenshot of a moon card, which still read
@@ -1693,30 +1723,76 @@ namespace EliteBioRadar
             };
         }
 
+        // Mapped marker, option F: a tilted orbit ring around the whole thumbnail (the planet stays fully visible). Drawn in two layers
+        // so it passes behind the planet (dashed, faint, under the thumbnail) and in front of it (solid, with a small probe dot, over it).
+        // false = the older corner wireframe globe (MakeMappedBadge), kept so the choice is easy to flip.
+        private const bool MappedRingStyle = true;
+
+        private static FrameworkElement MakeMappedRing(double size, bool front)
+        {
+            double c = size / 2, R = size * 0.41, rx = R * 1.2, ry = R * 0.34;
+            double w = Math.Max(1.0, size * 0.026);
+            var canvas = new Canvas { Width = size, Height = size, IsHitTestVisible = false };
+            var fig = new PathFigure { StartPoint = new Point(c - rx, c) };
+            fig.Segments.Add(new ArcSegment(new Point(c + rx, c), new Size(rx, ry), 0, false,
+                front ? SweepDirection.Counterclockwise : SweepDirection.Clockwise, true));
+            var path = new Path
+            {
+                Data = new PathGeometry(new[] { fig }),
+                Stroke = new SolidColorBrush(Color.FromArgb(front ? (byte)240 : (byte)110, 0x7e, 0xe7, 0x87)),
+                StrokeThickness = w,
+                RenderTransform = new RotateTransform(-22, c, c),
+            };
+            if (!front) path.StrokeDashArray = new DoubleCollection { 2, 2 };
+            canvas.Children.Add(path);
+            if (front)
+            {
+                double dr = Math.Max(1.4, size * 0.036);
+                var dot = new Ellipse { Width = dr * 2, Height = dr * 2, Fill = new SolidColorBrush(Color.FromRgb(0x7e, 0xe7, 0x87)) };
+                // The probe sits on the front arc at 62% of the way across, then the same -22 degree tilt as the ring.
+                double px = c + rx * 0.62, py = c + ry * Math.Sqrt(1 - 0.62 * 0.62);
+                double a = -22 * Math.PI / 180, dx = px - c, dy = py - c;
+                Canvas.SetLeft(dot, c + dx * Math.Cos(a) - dy * Math.Sin(a) - dr);
+                Canvas.SetTop(dot, c + dx * Math.Sin(a) + dy * Math.Cos(a) - dr);
+                canvas.Children.Add(dot);
+            }
+            return canvas;
+        }
+
         private static FrameworkElement MakeMappedBadge(double size)
         {
+            // A see-through wireframe globe: no fill, so the planet shows through. Same footprint as before; meridians and
+            // parallels are clipped to the circle, and the small moon-row version drops the finer lines so it stays legible.
             var canvas = new Canvas { Width = size, Height = size, IsHitTestVisible = false };
-            var outline = new Ellipse
+            double R = size / 2, c = R;
+            double thin = Math.Max(0.7, size * 0.045);
+            var line = new SolidColorBrush(Color.FromArgb(215, 0x7e, 0xe7, 0x87));
+            var rim = new SolidColorBrush(Color.FromArgb(240, 0x7e, 0xe7, 0x87));
+            bool detailed = size >= 24;
+
+            var wires = new Canvas { Width = size, Height = size, Clip = new EllipseGeometry(new Point(c, c), R, R) };
+            Ellipse Ell(double cy, double rx, double ry) => new Ellipse
             {
-                Width = size, Height = size,
-                Stroke = HzColor, StrokeThickness = Math.Max(1, size * 0.09),
-                Fill = Brush("#0a1010"),
+                Width = rx * 2, Height = ry * 2, Stroke = line, StrokeThickness = thin,
             };
-            canvas.Children.Add(outline);
-            var equator = new Ellipse
+            void Put(Ellipse e, double cy)
             {
-                Width = size * 0.92, Height = size * 0.34,
-                Stroke = HzColor, StrokeThickness = Math.Max(0.8, size * 0.06),
-            };
-            Canvas.SetLeft(equator, size * 0.04);
-            Canvas.SetTop(equator, size * 0.33);
-            canvas.Children.Add(equator);
-            var meridian = new Line
+                Canvas.SetLeft(e, c - e.Width / 2); Canvas.SetTop(e, cy - e.Height / 2);
+                wires.Children.Add(e);
+            }
+            // Meridians.
+            Put(Ell(c, R * 0.45, R), c);
+            if (detailed) Put(Ell(c, R * 0.82, R), c);
+            wires.Children.Add(new Line { X1 = c, Y1 = 0, X2 = c, Y2 = size, Stroke = line, StrokeThickness = thin });
+            // Parallels: equator, plus two more on the larger badge.
+            Put(Ell(c, R, R * 0.2), c);
+            if (detailed)
             {
-                X1 = size / 2, Y1 = size * 0.06, X2 = size / 2, Y2 = size * 0.94,
-                Stroke = HzColor, StrokeThickness = Math.Max(0.8, size * 0.06),
-            };
-            canvas.Children.Add(meridian);
+                Put(Ell(c - R * 0.5, R * 0.87, R * 0.17), c - R * 0.5);
+                Put(Ell(c + R * 0.5, R * 0.87, R * 0.17), c + R * 0.5);
+            }
+            canvas.Children.Add(wires);
+            canvas.Children.Add(new Ellipse { Width = size, Height = size, Stroke = rim, StrokeThickness = Math.Max(1, size * 0.07) });
             return canvas;
         }
 
@@ -1867,84 +1943,59 @@ namespace EliteBioRadar
             return string.Join(" ", words);
         }
 
-        // GPU thumbnails: the same shader scenes the Planet tab uses (gas giants with the ring shader, thick-atmosphere
-        // worlds, landable worlds), drawn live in a small host with Time frozen at a per-body offset so each planet shows a
-        // different, still rotation. The host is bitmap-cached (MainWindow.Supersample), so each shader renders once.
-        // Returns null for anything the shaders don't cover (landable rocky ice, ringed terrain bodies, software rendering)
-        // so the caller keeps the old bitmap renders for those.
+        // GPU thumbnails: the same shader scenes the Planet tab uses (PlanetShaderScenes), drawn small with Time frozen at a per-body
+        // offset so each planet shows a different, still rotation. Returns null for anything the shaders don't cover (landable rocky ice
+        // without rings, airless bodies, software rendering) or on any failure, so the caller keeps the old bitmap renders.
         private UIElement? TryBuildShaderThumb(BodyScanDetail b, string iconCode, double size)
         {
-            if ((System.Windows.Media.RenderCapability.Tier >> 16) == 0) return null;
-            bool gas = PlanetRenderer.IsGasGiantFamily(iconCode);
-            bool atmo = PlanetRenderer.IsAtmoWorld(b, iconCode);
-            bool landable = !atmo && PlanetRenderer.IsLandableWorld(b, iconCode);
-            if (!gas && !atmo && !landable && !(PlanetRenderer.IsTerrainFamily(iconCode) && b.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0))) return null;
-            double t = PlanetRenderer.StableHash(b.BodyName) % 900;
-            var elements = new List<FrameworkElement>();
-            int box;
-            double cx, cy;
-            if (gas)
+            try
             {
                 bool ringed = b.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0);
-                box = ringed ? (int)size : (int)Math.Floor(size * 0.8 / 0.46);
-                var (ringBack, top) = PlanetRenderer.GetGasGiantShaderStaticLayers(b, iconCode, box, box, shaderRings: ringed);
-                var look = PlanetRenderer.GetGasGiantLook(b, iconCode);
-                double sphereR;
-                (cx, cy, sphereR) = PlanetRenderer.GetGasGiantSphere(b, box, box);
-                var effect = GasGiantShaderEffect.Create(look, new Point(cx / box, cy / box), new Point(sphereR / box, sphereR / box));
-                effect.SetValue(GasGiantShaderEffect.TimeProperty, t);
-                FrameworkElement Surface(Effect e) => MainWindow.Supersample(new Rectangle { Width = box, Height = box, Fill = Brushes.Black, Effect = e });
-                if (ringed)
+                int box = PlanetRenderer.IsGasGiantFamily(iconCode)
+                    ? (ringed ? (int)size : (int)Math.Floor(size * 0.8 / 0.46))     // ringed: whole scene; ringless: sphere fills ~80%
+                    : (ringed ? (int)size : (int)Math.Floor(size * 0.82 / 0.68));
+                double t = PlanetRenderer.StableHash(b.BodyName) % 900;
+                var scene = PlanetShaderScenes.Build(b, iconCode, box, box, t, _watcher.SystemPopulation);
+                if (scene == null) return null;
+                var clip = new Canvas { Width = size, Height = size, ClipToBounds = true };
+                foreach (var el in scene.Layers)
                 {
-                    var light = (System.Windows.Media.Media3D.Vector3D)effect.GetValue(GasGiantShaderEffect.LightDirProperty);
-                    elements.Add(Surface(RingShaderEffect.Create(b, box, box, false, light)));
-                    elements.Add(Surface(effect));
-                    elements.Add(Surface(RingShaderEffect.Create(b, box, box, true, light)));
+                    Canvas.SetLeft(el, size / 2.0 - scene.Cx);
+                    Canvas.SetTop(el, size / 2.0 - scene.Cy);
+                    clip.Children.Add(el);
                 }
-                else
-                {
-                    if (ringBack != null) elements.Add(new Image { Width = box, Height = box, Source = ringBack });
-                    elements.Add(Surface(effect));
-                }
-                elements.Add(new Image { Width = box, Height = box, Source = top });
+                return clip;
             }
-            else
+            catch (Exception ex)
             {
-                bool ringedBody = b.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0);
-                box = ringedBody ? (int)size : (int)Math.Floor(size * 0.82 / 0.68);
-                double r;
-                (cx, cy, r) = PlanetRenderer.GetTerrainGeometry(box, box, b);
-                var ringLight = new System.Windows.Media.Media3D.Vector3D(-0.55, 0.55, 0.63);
-                FrameworkElement Surface(Effect e) => MainWindow.Supersample(new Rectangle { Width = box, Height = box, Fill = Brushes.Black, Effect = e });
-                if (ringedBody) elements.Add(Surface(RingShaderEffect.Create(b, box, box, false, ringLight, r)));
-                if (atmo)
-                {
-                    var e = AtmoWorldShaderEffect.Create(PlanetRenderer.GetAtmoWorldLook(b, iconCode), new Point(cx / box, cy / box), new Point(r / box, r / box));
-                    e.SetValue(AtmoWorldShaderEffect.TimeProperty, t);
-                    elements.Add(Surface(e));
-                }
-                else if (landable)
-                {
-                    var e = LandableWorldShaderEffect.Create(PlanetRenderer.GetLandableWorldLook(b, iconCode), new Point(cx / box, cy / box), new Point(r / box, r / box));
-                    e.SetValue(LandableWorldShaderEffect.TimeProperty, t);
-                    elements.Add(Surface(e));
-                }
-                else
-                {
-                    // No shader for this planet (e.g. landable rocky ice, airless bodies): the bitmap planet, minus its CPU rings.
-                    elements.Add(new Image { Width = box, Height = box, Source = PlanetRenderer.GetTerrainSceneFrame(b, iconCode, box, box, _watcher.SystemPopulation, true) });
-                }
-                if (ringedBody) elements.Add(Surface(RingShaderEffect.Create(b, box, box, true, ringLight, r)));
+                Log.Write($"Shader thumbnail failed for {b.BodyName}: {ex.Message}");
+                return null;
             }
-            var clip = new Canvas { Width = size, Height = size, ClipToBounds = true };
-            foreach (var el in elements)
-            {
-                Canvas.SetLeft(el, size / 2.0 - cx);
-                Canvas.SetTop(el, size / 2.0 - cy);
-                clip.Children.Add(el);
-            }
-            return clip;
         }
+
+        // Built thumbnails are kept for the life of the window and handed out again on every repopulate (an element can only sit in one
+        // place, so it is detached from the old tree first). The signature changes when a re-scan changes what the render depends on.
+        private readonly Dictionary<string, UIElement> _thumbCache = new();
+
+        private UIElement? GetCachedThumb(string signature, Func<UIElement?> build)
+        {
+            if (_thumbCache.TryGetValue(signature, out var el))
+            {
+                var parent = VisualTreeHelper.GetParent(el) ?? LogicalTreeHelper.GetParent(el);
+                if (parent is Panel p) p.Children.Remove(el);
+                else if (parent is Decorator d) d.Child = null;
+                else if (parent is ContentControl cc) cc.Content = null;
+                if (VisualTreeHelper.GetParent(el) == null && LogicalTreeHelper.GetParent(el) == null) return el;
+                _thumbCache.Remove(signature);   // couldn't free it: build a fresh one
+            }
+            var built = build();
+            if (built != null) _thumbCache[signature] = built;
+            return built;
+        }
+
+        private static string ThumbSignature(BodyScanDetail b, double size) =>
+            $"{b.BodyName}|{size}|{b.PlanetClass}|{b.StarType}|{b.Landable}|{b.AtmosphereType}|{b.SurfacePressure:F0}|{b.SurfaceTemperature:F0}|{b.Radius:F0}|" +
+            string.Join(",", b.Rings.Select(r => $"{r.RingClass}:{r.InnerRad:F0}:{r.OuterRad:F0}"));
 
         // Real scaled-down renders — the original ask ("use our planet/star/asteroid renders,
         // scaled down") — for terrain-family planets (PlanetRenderer.GetTerrainSceneFrame,
@@ -1962,7 +2013,7 @@ namespace EliteBioRadar
                     return new Image { Source = frame, Width = size, Height = size, Stretch = Stretch.UniformToFill, ClipToBounds = true };
                 }
                 var iconCode = MainWindow.MapPlanetClassToIconCode(b.PlanetClass);
-                if (iconCode != null && TryBuildShaderThumb(b, iconCode, size) is UIElement shaderThumb) return shaderThumb;
+                if (iconCode != null && GetCachedThumb("p|" + ThumbSignature(b, size), () => TryBuildShaderThumb(b, iconCode, size)) is UIElement shaderThumb) return shaderThumb;
                 if (iconCode != null && PlanetRenderer.IsGasGiantFamily(iconCode))
                 {
                     // GetGasGiantLayers turned out to already BE 4 static bitmaps — the

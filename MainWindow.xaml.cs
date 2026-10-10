@@ -21,7 +21,8 @@ namespace EliteBioRadar
         private EliteWatcherService? _watcher;
         private RadarRenderer        _renderer = null!;
         private DispatcherTimer      _refreshTimer = null!;
-        private DispatcherTimer?     _animTimer;
+        private bool                 _animRunning;      // DEORBIT / FSS repaint is hooked to the display refresh while one of them is showing
+        private TimeSpan             _animLastRenderTime;
 
         private double _scaleMetres  = 1000;
         private double _defaultScale = 1000;
@@ -260,17 +261,6 @@ namespace EliteBioRadar
             _refreshTimer.Tick += (_, __) => RefreshAll();
             _refreshTimer.Start();
 
-            // DEORBIT/FSS SCANNER redraw at a much higher rate than the general 100ms refresh
-            // tick — their tunnel/orbit motion looked visibly stepped at 10fps. Only runs while
-            // one of those two is actually showing (started/stopped in ApplyInfoPanelMode); the
-            // 100ms tick still handles mode *detection* for everything, this just repaints
-            // whichever of the two is currently active.
-            _animTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
-            _animTimer.Tick += (_, __) =>
-            {
-                if (_lastMode == InfoPanelMode.Deorbit) UpdateDeorbitPanel(force: true);
-                else if (_lastMode == InfoPanelMode.FssScanner) UpdateFssScannerPanel(force: true);
-            };
 
             // Save position whenever the window is moved or resized
             this.LocationChanged += (_, __) => SaveSettings();
@@ -289,6 +279,7 @@ namespace EliteBioRadar
 
                 var svc = new EliteWatcherService(journalDir);
                 svc.ShipDepartureThresholdMetres = _shipDepartureRangeMetres;
+                InitShipEventChip(svc);
                 svc.StatusUpdated     += (_, args) => Dispatcher.InvokeAsync(() => UpdateStatusBar(args.Status));
                 svc.BodyChanged       += (_, args) => Dispatcher.InvokeAsync(() => UpdateBodyInfo(args));
                 svc.PlanetListChanged += (_, __)   => UpdatePlanetPanel();
@@ -505,7 +496,7 @@ namespace EliteBioRadar
                     case InfoPanelMode.Star:        UpdateStarPanel(); break;
                     case InfoPanelMode.Planet:      UpdateInfoPlanetPanel(); break;
                     case InfoPanelMode.Destination: UpdateDestinationPanel(); break;
-                    // Deorbit/FssScanner are repainted by _animTimer at 60fps instead — see
+                    // Deorbit/FssScanner are repainted every display frame (AnimFrame) instead — see
                     // ApplyInfoPanelMode — so there's nothing to do for them here.
                 }
                 return;
@@ -632,9 +623,13 @@ namespace EliteBioRadar
         // proper doesn't drop it until afterward — so this costs nothing for the real case.
         private bool _deorbitSeqActive;
         private bool _prevHasPositionForSeq;
+        private DateTime _positionSinceUtc = DateTime.MinValue;
         private bool _prevIsGlidingForSeq;
         private void UpdateDeorbitSequenceState(EliteStatus status)
         {
+            // When the ship came within reach of a planet (lat/long appeared) - a next-system pick counts for the Destination tab only if it
+            // was made after this, so the auto-targeted next hop of a plotted route does not pin the tab while you explore.
+            if (status.HasPosition && !_prevHasPositionForSeq) _positionSinceUtc = DateTime.UtcNow;
             if (status.HasPosition && !_prevHasPositionForSeq && status.Supercruise)
                 _deorbitSeqActive = true;
 
@@ -714,7 +709,20 @@ namespace EliteBioRadar
             // (2026-08-30).
             if (status.GuiFocus == 9) return InfoPanelMode.FssScanner;
 
-            if (status.HasPosition) return InfoPanelMode.Radar;
+            if (status.HasPosition)
+            {
+                // On or flying over a planet: the radar, unless the player picked a next system after getting here (then the
+                // Destination tab, still beneath the launch/jump scenes that were checked above). Clearing the route
+                // (NavRouteClear empties CurrentDestination) puts the radar straight back. Only a pick made after reaching
+                // the planet counts: the game auto-targets the next hop of a plotted route right after each jump, which
+                // must not pin the tab to Destination while exploring.
+                bool nextSystemPicked = _watcher != null && _watcher.CurrentDestination != null &&
+                    !string.IsNullOrEmpty(_watcher.CurrentDestination.NextSystem) &&
+                    _watcher.FsdTargetedAt >= _watcher.SystemArrivedAt &&
+                    _watcher.FsdTargetedAt >= _appLaunchedUtc &&
+                    _watcher.FsdTargetedAt >= _positionSinceUtc;
+                return nextSystemPicked ? InfoPanelMode.Destination : InfoPanelMode.Radar;
+            }
             if (_watcher == null) return InfoPanelMode.Star;
 
             // Any star — primary or a secondary/tertiary in a multi-star system — can also be
@@ -744,14 +752,32 @@ namespace EliteBioRadar
             return InfoPanelMode.Star;
         }
 
+        // Repaints the DEORBIT / FSS SCANNER screens once per display refresh (CompositionTarget.Rendering) instead of from a DispatcherTimer: the
+        // 16 ms timer actually fired every ~25 ms (a measured 40 fps on a 60 Hz screen), which showed as uneven, jittery motion. Every animation here
+        // is driven by real elapsed time, so the extra frames only make it smoother.
+        private void AnimFrame(object? sender, EventArgs e)
+        {
+            // Rendering can be raised more than once for the same frame: act once per new render time.
+            if (e is System.Windows.Media.RenderingEventArgs re)
+            {
+                if (re.RenderingTime == _animLastRenderTime) return;
+                _animLastRenderTime = re.RenderingTime;
+            }
+            if (_lastMode == InfoPanelMode.Deorbit) { long t0 = System.Diagnostics.Stopwatch.GetTimestamp(); UpdateDeorbitPanel(force: true); NoteDeorbitFrame(System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds); }
+            else if (_lastMode == InfoPanelMode.FssScanner) UpdateFssScannerPanel(force: true);
+        }
+
         private void ApplyInfoPanelMode(InfoPanelMode mode)
         {
             radarCanvas.Visibility         = mode == InfoPanelMode.Radar       ? Visibility.Visible : Visibility.Collapsed;
+            shipEventLayer.Visibility      = mode == InfoPanelMode.Radar       ? Visibility.Visible : Visibility.Collapsed;
+            RefreshHazardChip();
             starPanelViewbox.Visibility    = mode == InfoPanelMode.Star        ? Visibility.Visible : Visibility.Collapsed;
             planetPanelViewbox.Visibility  = mode == InfoPanelMode.Planet      ? Visibility.Visible : Visibility.Collapsed;
             destinationPanel.Visibility    = mode == InfoPanelMode.Destination ? Visibility.Visible : Visibility.Collapsed;
             deorbitPanelViewbox.Visibility = mode == InfoPanelMode.Deorbit     ? Visibility.Visible : Visibility.Collapsed;
             fssScannerPanel.Visibility     = mode == InfoPanelMode.FssScanner  ? Visibility.Visible : Visibility.Collapsed;
+            RefreshFuelScoopBanner(_watcher?.CurrentStatus);
 
             // DEORBIT/FSS SCANNER don't get their own tab buttons — they temporarily take over
             // the RADAR/STAR tab's slot and label for as long as they're actually relevant,
@@ -759,15 +785,11 @@ namespace EliteBioRadar
             tabRadar.Content = mode == InfoPanelMode.Deorbit ? "⛛ DEORBIT" : "◎ RADAR";
             tabStar.Content  = mode == InfoPanelMode.FssScanner ? "📡 FSS SCANNER" : "☉ STAR";
 
-            // The 60fps repaint timer only needs to run for these two — everything else is
-            // either static until its next real event or already animated by RadarRenderer.
-            // _animTimer isn't constructed until MainWindow_Loaded, but ApplyInfoPanelMode can
-            // run before that — Window_SizeChanged fires during the window's initial layout
-            // pass, which happens before Loaded — so this needs to tolerate it still being
-            // null (crashed on exactly this the first time, via that exact call path).
+            // The per-frame repaint (AnimFrame) only needs to run for these two - everything else is either static until its next real event
+            // or already animated by RadarRenderer.
             bool needsFastAnim = mode == InfoPanelMode.Deorbit || mode == InfoPanelMode.FssScanner;
-            if (needsFastAnim && _animTimer?.IsEnabled == false) _animTimer.Start();
-            else if (!needsFastAnim && _animTimer?.IsEnabled == true) _animTimer.Stop();
+            if (needsFastAnim && !_animRunning) { CompositionTarget.Rendering += AnimFrame; _animRunning = true; }
+            else if (!needsFastAnim && _animRunning) { CompositionTarget.Rendering -= AnimFrame; _animRunning = false; }
 
             // Hide the right BIO SURVEY sidebar in every non-Radar mode without touching the
             // persisted _showSidebar setting — it restores exactly as configured the moment
@@ -1381,50 +1403,16 @@ namespace EliteBioRadar
             return host;
         }
 
-        // GPU gas giant: ring back-pass image, then a Rectangle carrying GasGiantShaderEffect (which
-        // draws the whole lit sphere and animates its own rotation from Time), then the
-        // front-sliver/atmosphere layer. Returns false (caller falls back to the CPU layers) on
-        // software-only rendering or any setup failure.
-        private bool TryAddGasGiantShaderScene(BodyScanDetail detail, string iconCode, int sceneW, int sceneH, int sceneX, int sceneY)
+        // GPU planet scene (gas giants, thick-atmosphere worlds, landable worlds, and any ringed planet's ring shader): the layers come from
+        // PlanetShaderScenes, which the System Scan thumbnails share. Returns false (caller draws the CPU render, rings included) when
+        // the body isn't covered, on software-only rendering, or on any setup failure.
+        private bool TryAddPlanetShaderScene(BodyScanDetail detail, string iconCode, int sceneW, int sceneH, int sceneX, int sceneY)
         {
-            if ((RenderCapability.Tier >> 16) == 0) return false;
-            try
-            {
-                bool ringed = detail.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0);
-                var (ringBack, top) = PlanetRenderer.GetGasGiantShaderStaticLayers(detail, iconCode, sceneW, sceneH, shaderRings: ringed);
-                var look = PlanetRenderer.GetGasGiantLook(detail, iconCode);
-                var (cx, cy, sphereR) = PlanetRenderer.GetGasGiantSphere(detail, sceneW, sceneH);
-                var effect = GasGiantShaderEffect.Create(look,
-                    new Point(cx / sceneW, cy / sceneH), new Point(sphereR / sceneW, sphereR / sceneH));
-                // Linear, effectively endless (10h) - the shader treats Time as seconds of rotation.
-                effect.BeginAnimation(GasGiantShaderEffect.TimeProperty,
-                    new DoubleAnimation(0, 36000, TimeSpan.FromSeconds(36000)));
-
-                var surface = new System.Windows.Shapes.Rectangle { Width = sceneW, Height = sceneH, Fill = Brushes.Black, Effect = effect };
-                var imgTop = new Image { Width = sceneW, Height = sceneH, Source = top };
-                var layers = new List<FrameworkElement>();
-                if (ringed)
-                {
-                    var lightDir = (System.Windows.Media.Media3D.Vector3D)effect.GetValue(GasGiantShaderEffect.LightDirProperty);
-                    layers.Add(Supersample(new System.Windows.Shapes.Rectangle { Width = sceneW, Height = sceneH, Fill = Brushes.Black, Effect = RingShaderEffect.Create(detail, sceneW, sceneH, false, lightDir) }));
-                    layers.Add(Supersample(surface));
-                    layers.Add(Supersample(new System.Windows.Shapes.Rectangle { Width = sceneW, Height = sceneH, Fill = Brushes.Black, Effect = RingShaderEffect.Create(detail, sceneW, sceneH, true, lightDir) }));
-                }
-                else
-                {
-                    if (ringBack != null) layers.Add(new Image { Width = sceneW, Height = sceneH, Source = ringBack });
-                    layers.Add(Supersample(surface));
-                }
-                layers.Add(imgTop);
-                foreach (var el in layers)
-                { Canvas.SetLeft(el, sceneX); Canvas.SetTop(el, sceneY); planetPanelCanvas.Children.Add(el); }
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Log.Write($"Gas giant shader setup failed, using CPU renderer: {ex.Message}");
-                return false;
-            }
+            var scene = PlanetShaderScenes.Build(detail, iconCode, sceneW, sceneH, null, _watcher?.SystemPopulation ?? 0);
+            if (scene == null) return false;
+            foreach (var el in scene.Layers)
+            { Canvas.SetLeft(el, sceneX); Canvas.SetTop(el, sceneY); planetPanelCanvas.Children.Add(el); }
+            return true;
         }
 
         private void RenderGasGiantPanel(BodyScanDetail detail, string iconCode)
@@ -1478,7 +1466,7 @@ namespace EliteBioRadar
             // sit in the cross-fade fixes that at the source instead of just hiding it.
             // GPU shader path first (rotating, turbulent bands - see GasGiantShaderEffect); the
             // original CPU layers below remain as the fallback for software-rendering machines.
-            if (!TryAddGasGiantShaderScene(detail, iconCode, sceneW, sceneH, sceneX, sceneY))
+            if (!TryAddPlanetShaderScene(detail, iconCode, sceneW, sceneH, sceneX, sceneY))
             {
             var (baseLayer, cloudA, cloudB, topLayer) = PlanetRenderer.GetGasGiantLayers(detail, iconCode, sceneW, sceneH);
             var imgBase = new Image { Width = sceneW, Height = sceneH, Source = baseLayer };
@@ -1598,62 +1586,6 @@ namespace EliteBioRadar
         // font/spacing machinery — only the stat rows themselves differ (Planet Class's trait
         // chip is conditional on TidalLock here, not always present; Geo Signals gets a real
         // Volcanism sub-line the same way Ring Mining gets a materials sub-line).
-        // GPU landable world (landable HMC): one Rectangle carrying LandableWorldShaderEffect draws the
-        // lit sphere with terrain patches, craters, rust streaks, frost and glowing flecks, and animates
-        // itself from Time. Returns false (caller uses the CPU terrain scene) for any other body, on
-        // software-only rendering, or on any setup failure.
-        private bool TryAddLandableWorldScene(BodyScanDetail detail, string iconCode, int sceneW, int sceneH, int sceneX, int sceneY)
-        {
-            if (!PlanetRenderer.IsLandableWorld(detail, iconCode)) return false;
-            if ((RenderCapability.Tier >> 16) == 0) return false;
-            try
-            {
-                var look = PlanetRenderer.GetLandableWorldLook(detail, iconCode);
-                var (cx, cy, R) = PlanetRenderer.GetTerrainGeometry(sceneW, sceneH, detail);
-                var effect = LandableWorldShaderEffect.Create(look,
-                    new Point(cx / sceneW, cy / sceneH), new Point(R / sceneW, R / sceneH));
-                effect.BeginAnimation(LandableWorldShaderEffect.TimeProperty,
-                    new DoubleAnimation(0, 36000, TimeSpan.FromSeconds(36000)));
-                var surface = new System.Windows.Shapes.Rectangle { Width = sceneW, Height = sceneH, Fill = Brushes.Black, Effect = effect };
-                { var ssHost = Supersample(surface); Canvas.SetLeft(ssHost, sceneX); Canvas.SetTop(ssHost, sceneY);
-                planetPanelCanvas.Children.Add(ssHost); }
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Log.Write($"Landable world shader setup failed, using CPU renderer: {ex.Message}");
-                return false;
-            }
-        }
-
-        // GPU thick-atmosphere world (non-landable HMC): one Rectangle carrying AtmoWorldShaderEffect
-        // draws the lit sphere, haze, clouds, cyclones and caps and animates itself from Time.
-        // Returns false (caller uses the CPU terrain scene) when the body isn't one of those, on
-        // software-only rendering, or on any setup failure.
-        private bool TryAddAtmoWorldScene(BodyScanDetail detail, string iconCode, int sceneW, int sceneH, int sceneX, int sceneY)
-        {
-            if (!PlanetRenderer.IsAtmoWorld(detail, iconCode)) return false;
-            if ((RenderCapability.Tier >> 16) == 0) return false;
-            try
-            {
-                var look = PlanetRenderer.GetAtmoWorldLook(detail, iconCode);
-                var (cx, cy, R) = PlanetRenderer.GetTerrainGeometry(sceneW, sceneH, detail);
-                var effect = AtmoWorldShaderEffect.Create(look,
-                    new Point(cx / sceneW, cy / sceneH), new Point(R / sceneW, R / sceneH));
-                effect.BeginAnimation(AtmoWorldShaderEffect.TimeProperty,
-                    new DoubleAnimation(0, 36000, TimeSpan.FromSeconds(36000)));
-                var surface = new System.Windows.Shapes.Rectangle { Width = sceneW, Height = sceneH, Fill = Brushes.Black, Effect = effect };
-                { var ssHost = Supersample(surface); Canvas.SetLeft(ssHost, sceneX); Canvas.SetTop(ssHost, sceneY);
-                planetPanelCanvas.Children.Add(ssHost); }
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Log.Write($"Atmosphere world shader setup failed, using CPU renderer: {ex.Message}");
-                return false;
-            }
-        }
-
         private void RenderTerrainPanel(BodyScanDetail detail, string iconCode)
         {
             bool hasBio = detail.BioSignalCount > 0, hasGeo = detail.GeoSignalCount > 0;
@@ -1667,31 +1599,13 @@ namespace EliteBioRadar
             int ringHotspotTotal = ringHotspots.Sum(s => s.Count);
 
             const int sceneW = 370, sceneH = 420, sceneX = 171, sceneY = 40;
-            // Ringed body on a GPU-capable machine: the rings come from RingShaderEffect (back pass, planet, front sliver)
-            // and the planet itself is drawn without its CPU rings.
-            bool ringShader = detail.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0) && (RenderCapability.Tier >> 16) != 0;
-            var ringLight = new System.Windows.Media.Media3D.Vector3D(-0.55, 0.55, 0.63);
-            double ringPlanetR = PlanetRenderer.GetTerrainGeometry(sceneW, sceneH, detail).R;
-            void AddRingLayer(bool front)
+            if (!TryAddPlanetShaderScene(detail, iconCode, sceneW, sceneH, sceneX, sceneY))
             {
-                try
-                {
-                    var rr = new System.Windows.Shapes.Rectangle { Width = sceneW, Height = sceneH, Fill = Brushes.Black, Effect = RingShaderEffect.Create(detail, sceneW, sceneH, front, ringLight, ringPlanetR) };
-                    var host = Supersample(rr); Canvas.SetLeft(host, sceneX); Canvas.SetTop(host, sceneY);
-                    planetPanelCanvas.Children.Add(host);
-                }
-                catch (Exception ex) { Log.Write($"Ring shader setup failed: {ex.Message}"); }
-            }
-            if (ringShader) AddRingLayer(false);
-            if (!TryAddAtmoWorldScene(detail, iconCode, sceneW, sceneH, sceneX, sceneY) &&
-                !TryAddLandableWorldScene(detail, iconCode, sceneW, sceneH, sceneX, sceneY))
-            {
-                var frame = PlanetRenderer.GetTerrainSceneFrame(detail, iconCode, sceneW, sceneH, _watcher?.SystemPopulation ?? 0, ringShader);
+                var frame = PlanetRenderer.GetTerrainSceneFrame(detail, iconCode, sceneW, sceneH, _watcher?.SystemPopulation ?? 0);
                 var img = new Image { Width = sceneW, Height = sceneH, Source = frame };
                 Canvas.SetLeft(img, sceneX); Canvas.SetTop(img, sceneY);
                 planetPanelCanvas.Children.Add(img);
             }
-            if (ringShader) AddRingLayer(true);
 
             // Badges anchor to the SPHERE's own actual center/radius, not a fixed offset from
             // the scene box's corner — this scene's sphere doesn't fill nearly as much of its
@@ -2420,6 +2334,24 @@ namespace EliteBioRadar
             // clearing the lock here too was actively working against that.
         }
 
+        // Diagnostic: while the descent/climb/jump screen is repainting, logs the real frame rate and how long a frame takes to build every 5 s
+        // ("Deorbit animation: 41.2 fps, build avg 9.8 ms, max 31.0 ms"), since the timer only asks for 60 fps and the scene is rebuilt each tick.
+        private long _fpsWindowStart, _fpsLastFrame; private int _fpsFrames; private double _fpsBuildMsSum, _fpsBuildMsMax;
+        private void NoteDeorbitFrame(double buildMs)
+        {
+            long now = System.Diagnostics.Stopwatch.GetTimestamp();
+            // A gap of over a second means the screen was not showing: start a fresh window instead of diluting the average.
+            if (_fpsWindowStart == 0 || (now - _fpsLastFrame) > System.Diagnostics.Stopwatch.Frequency) { _fpsWindowStart = now; _fpsFrames = 0; _fpsBuildMsSum = 0; _fpsBuildMsMax = 0; }
+            _fpsLastFrame = now;
+            _fpsFrames++; _fpsBuildMsSum += buildMs; _fpsBuildMsMax = Math.Max(_fpsBuildMsMax, buildMs);
+            double secs = (now - _fpsWindowStart) / (double)System.Diagnostics.Stopwatch.Frequency;
+            if (secs >= 5.0)
+            {
+                Log.Write($"Deorbit animation: {_fpsFrames / secs:F1} fps, build avg {_fpsBuildMsSum / _fpsFrames:F1} ms, max {_fpsBuildMsMax:F1} ms");
+                _fpsWindowStart = now; _fpsFrames = 0; _fpsBuildMsSum = 0; _fpsBuildMsMax = 0;
+            }
+        }
+
         private void UpdateDeorbitPanel(bool force = false)
         {
             // Defaults to a blank status (glide/supercruise both false) when the watcher isn't
@@ -2924,10 +2856,20 @@ namespace EliteBioRadar
             // the player even when it's technically distance-accurate. Planets sort by their
             // leading number (PlanetNumberKey); each planet's own moons sort by their trailing
             // letter (MoonLetterKey, base-26 so multi-letter designations still order correctly).
-            int PlanetNumberKey(string name)
+            // Designations are "<star letters> <number>" in a multi-star system ("A 1", "B 3", "AB 1") and just "<number>" around a single
+            // star. Stars sort first, by letter (A, B, C ... then barycentre groups like AB); planets sort by their star's letters and then
+            // by number. Everything is recomputed on every refresh, so the list stays in order whatever order the bodies were scanned in.
+            (int prefixLen, string prefix, int number) DesignationKey(string name)
             {
-                var token = EliteWatcherService.GetShortBodyName(name, watcher.StarSystem).Split(' ')[0];
-                return int.TryParse(token, out var n) ? n : int.MaxValue;
+                var tokens = EliteWatcherService.GetShortBodyName(name, watcher.StarSystem).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (tokens.Length == 0) return (0, "", int.MaxValue);
+                bool lettersFirst = tokens[0].All(char.IsLetter);
+                if (lettersFirst)
+                {
+                    int num = tokens.Length > 1 && int.TryParse(tokens[1], out var n1) ? n1 : 0;
+                    return (tokens[0].Length, tokens[0].ToUpperInvariant(), num);
+                }
+                return (0, "", int.TryParse(tokens[0], out var n2) ? n2 : int.MaxValue);
             }
             int MoonLetterKey(string name)
             {
@@ -2941,10 +2883,14 @@ namespace EliteBioRadar
                 }
                 return val;
             }
-            var starName = resolved.FirstOrDefault(n => detailsByName.GetValueOrDefault(n)?.IsStar == true);
+            var starNames = resolved
+                .Where(n => detailsByName.GetValueOrDefault(n)?.IsStar == true)
+                .OrderBy(n => DesignationKey(n).prefixLen).ThenBy(n => DesignationKey(n).prefix, StringComparer.Ordinal)
+                .ToList();
+            var starName = starNames.FirstOrDefault();
             var planetNames = resolved
-                .Where(n => n != starName && detailsByName.GetValueOrDefault(n)?.IsMoon != true)
-                .OrderBy(PlanetNumberKey)
+                .Where(n => detailsByName.GetValueOrDefault(n)?.IsStar != true && detailsByName.GetValueOrDefault(n)?.IsMoon != true)
+                .OrderBy(n => DesignationKey(n).prefixLen).ThenBy(n => DesignationKey(n).prefix, StringComparer.Ordinal).ThenBy(n => DesignationKey(n).number)
                 .ToList();
             var moonsByParentId = resolved
                 .Where(n => detailsByName.GetValueOrDefault(n)?.IsMoon == true)
@@ -2954,12 +2900,12 @@ namespace EliteBioRadar
                     .ToList());
 
             var rows = new List<(string title, string sub, int bio, int geo, int mining, bool isStar, bool resolved, bool isMoon)>();
-            if (starName != null)
+            foreach (var sn in starNames)
             {
-                var d = detailsByName[starName];
-                rows.Add((EliteWatcherService.GetShortBodyName(starName, watcher.StarSystem).ToUpperInvariant(), RowSub(d), 0, 0, 0, true, true, false));
+                var d = detailsByName[sn];
+                rows.Add((EliteWatcherService.GetShortBodyName(sn, watcher.StarSystem).ToUpperInvariant(), RowSub(d), 0, 0, 0, true, true, false));
             }
-            else if (total > 0)
+            if (starNames.Count == 0 && total > 0)
             {
                 rows.Add(("PRIMARY STAR", "awaiting scan…", 0, 0, 0, false, false, false));
             }
@@ -2978,7 +2924,7 @@ namespace EliteBioRadar
             }
             // Generic unresolved placeholders (unknown identity, so unnumbered position among
             // the sorted list above isn't meaningful) always trail at the end.
-            int knownCount = 1 + planetNames.Count + moonsByParentId.Values.Sum(l => l.Count); // star slot always counted, resolved or not
+            int knownCount = Math.Max(1, starNames.Count) + planetNames.Count + moonsByParentId.Values.Sum(l => l.Count); // a star slot is always counted, resolved or not
             int unresolvedCount = Math.Max(0, total - knownCount);
             for (int i = 0; i < unresolvedCount; i++)
                 rows.Add(("UNRESOLVED BODY", "awaiting scan…", 0, 0, 0, false, false, false));
@@ -3843,6 +3789,7 @@ namespace EliteBioRadar
                     Foreground = new SolidColorBrush(Color.FromRgb(0x33, 0x66, 0x66)),
                     FontFamily = AppFonts.Mono,
                     FontSize   = 13,
+                    TextWrapping = TextWrapping.Wrap,
                 });
             }
 
@@ -4039,8 +3986,17 @@ namespace EliteBioRadar
         }
 
         // ---------------------------------------------------------------
+        // "FUEL SCOOPING" title over the Star tab while the scoop is feeding the tank, with the tonnes on board.
+        private void RefreshFuelScoopBanner(EliteStatus? status)
+        {
+            bool show = status != null && status.ScoopingFuel && starPanelViewbox.Visibility == Visibility.Visible;
+            fuelScoopLayer.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            if (show) fuelScoopText.Text = $"FUEL SCOOPING  ·  {status!.FuelMain + status.FuelReservoir:F1} t";
+        }
+
         private void UpdateStatusBar(EliteStatus status)
         {
+            RefreshFuelScoopBanner(status);
             txtHeading.Text = $"{status.Heading:F0}°";
             if (status.HasPosition)
             {

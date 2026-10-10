@@ -152,6 +152,10 @@ namespace EliteBioRadar
         public double PlanetRadius { get; set; }
         public double FuelMain      { get; set; }
         public double FuelReservoir { get; set; }
+        // On-foot readings from Status.json (zero while in a ship): suit temperature in kelvin, oxygen and health as 0..1.
+        public double SuitTemperatureK { get; set; }
+        public double Oxygen { get; set; }
+        public double Health { get; set; }
         // Numeric enum of which full-screen game panel has focus (galaxy map, system map,
         // FSS, etc.) — Frontier doesn't publish an authoritative list, so this is our best
         // read of it; verify/correct against Log.Write's GuiFocus line the first time the
@@ -160,11 +164,13 @@ namespace EliteBioRadar
 
         // Elite Dangerous Status.json Flags bitmasks
         public bool Docked      => (Flags & (1u << 0))  != 0;
+        public bool ScoopingFuel => (Flags & (1u << 11)) != 0;
         public bool Landed      => (Flags & (1u << 1))  != 0;
         public bool Supercruise => (Flags & (1u << 4))  != 0;
         public bool InSRV       => (Flags & (1u << 26)) != 0;
         public bool InFighter   => (Flags & (1u << 25)) != 0;
-        public bool HasLatLong  => (Flags & (1u << 19)) != 0;
+        // Bit 21 per the Status.json docs (bit 19 is Low Fuel); confirmed on a live landed ship.
+        public bool HasLatLong  => (Flags & (1u << 21)) != 0;
         public bool OnFoot      => (Flags2 & (1u << 0)) != 0;
         // Set specifically for an actual hyperspace charge-up — distinct from Flags bit17
         // "FsdCharging", which is ambiguous (also set for a plain supercruise charge).

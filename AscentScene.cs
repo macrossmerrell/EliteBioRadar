@@ -17,12 +17,17 @@ namespace EliteBioRadar
         private double _ascentP, _ascentGatePhase;
         private DateTime _ascentLastTick = DateTime.MinValue;
         private DateTime _jumpChargeStart = DateTime.MinValue, _jumpLastCharging = DateTime.MinValue;
+        private DateTime _jumpTunnelAt = DateTime.MinValue;   // when the drive entered hyperspace (end of the engage stage)
 
         // Expected seconds an atmospheric jump charge takes; the scene's timeline is stretched to it (and holds at "charge
         // complete" if the real charge runs longer).
         // A hyperspace charge takes about 15 s. The first ~2.5 s are the align-and-lock beat; the charge ring then fills across the rest
         // of the real spool-up and holds just short of full until the drive actually fires.
         private const double JumpChargeSeconds = 15.0, JumpLockSeconds = 2.5, JumpFlashSeconds = 1.6;
+        // How long the engage stage lasts after StartJump before the tunnel. Status.json offers no signal for it (the FsdJump flag rises in the
+        // very second StartJump is logged, and nothing changes again until arrival), so it is timed: in the two hyperspace jumps logged the next hop was
+        // targeted 8-9 s after StartJump and arrival came 31-32 s after it.
+        private const double JumpEngageSeconds = 8.5;
 
         private void ResetAscentState()
         {
@@ -40,7 +45,10 @@ namespace EliteBioRadar
             if (charging)
             {
                 if (_jumpLastCharging == DateTime.MinValue || (now - _jumpLastCharging).TotalSeconds > 3)
+                {
                     _jumpChargeStart = now;
+                    _jumpTunnelAt = DateTime.MinValue;
+                }
                 _jumpLastCharging = now;
                 return true;
             }
@@ -273,16 +281,23 @@ namespace EliteBioRadar
             var now = DateTime.UtcNow;
             double t = Environment.TickCount64 / 1000.0;
             double p;
-            // The drive has fired once the journal's StartJump arrives (it lands as the charge ends): flash, then the tunnel.
+            // Three stages: charging (until the journal's StartJump), engaging (StartJump until the drive actually enters hyperspace),
+            // jumping (the flash, then the tunnel until arrival). The jump stage starts JumpEngageSeconds after StartJump (see that constant).
             bool jumped = _watcher != null && _watcher.HyperspaceJumpStartedAt > _jumpChargeStart;
             double tj = jumped ? (now - _watcher!.HyperspaceJumpStartedAt).TotalSeconds : -1;
-            if (jumped && tj >= JumpFlashSeconds)
+            if (jumped && _jumpTunnelAt == DateTime.MinValue && tj >= JumpEngageSeconds) _jumpTunnelAt = now;
+            bool tunnelStarted = jumped && _jumpTunnelAt != DateTime.MinValue;
+            double tt = tunnelStarted ? (now - _jumpTunnelAt).TotalSeconds : -1;
+            if (tunnelStarted && tt >= JumpFlashSeconds)
             {
                 DrawHyperspaceTunnel(c, t, _watcher?.CurrentDestination?.NextSystem ?? "");
                 return "HYPERSPACE";
             }
-            if (jumped)
-                p = 0.9 + 0.1 * Math.Clamp(tj / JumpFlashSeconds, 0, 1);
+            bool engaging = jumped && !tunnelStarted;
+            if (tunnelStarted)
+                p = 0.9 + 0.1 * Math.Clamp(tt / JumpFlashSeconds, 0, 1);
+            else if (engaging)
+                p = 0.9;
             else
             {
                 double el = (now - _jumpChargeStart).TotalSeconds;
@@ -372,6 +387,31 @@ namespace EliteBioRadar
             {
                 c.Children.Add(MakeCenterLabel(locked ? "LOCKED" : $"ALIGN {al * 34:F1}°", fx, fy + 78, new SolidColorBrush(locked ? lockCol : Color.FromRgb(0xff, 0x9a, 0xd8)), 15));
                 phase = locked ? "TARGET LOCKED" : "ALIGNING";
+            }
+            else if (engaging)
+            {
+                // Charge complete, the drive is engaging: the ring holds full and pulses, the stars begin to stretch, and the screen
+                // stays here until the jump itself starts.
+                double pulse = 0.5 + 0.5 * Math.Sin(t * 7);
+                c.Children.Add(new Ellipse { Width = 84, Height = 84, Stroke = new SolidColorBrush(DAlpha(lockCol, 0.7 + 0.3 * pulse)), StrokeThickness = 4.5, IsHitTestVisible = false,
+                    RenderTransform = new TranslateTransform(fx - 42, fy - 42) });
+                double e = Math.Clamp(tj / JumpEngageSeconds, 0, 1);
+                var sg = new StreamGeometry();
+                using (var gc = sg.Open())
+                {
+                    for (int i = 0; i < 70; i++)
+                    {
+                        double a = Frac(Math.Sin(i * 12.9898) * 43758.5453) * Math.PI * 2;
+                        double d0 = 70 + Frac(Math.Sin(i * 3.7) * 9999) * 190;
+                        double d1 = d0 + e * e * 70 * (0.4 + Frac(Math.Sin(i * 7.1) * 9999));
+                        gc.BeginFigure(new Point(fx + Math.Cos(a) * d0, fy + Math.Sin(a) * d0), false, false);
+                        gc.LineTo(new Point(fx + Math.Cos(a) * d1, fy + Math.Sin(a) * d1), true, false);
+                    }
+                }
+                sg.Freeze();
+                c.Children.Add(new Path { Data = sg, Stroke = new SolidColorBrush(DAlpha(Color.FromRgb(190, 230, 255), 0.15 + 0.4 * e)), StrokeThickness = 1.2, IsHitTestVisible = false });
+                c.Children.Add(MakeCenterLabel("FSD ENGAGING", fx, fy + 78, new SolidColorBrush(lockCol), 15));
+                phase = "FSD ENGAGING";
             }
             else phase = "JUMPING";
             if (locked && p < 0.9 && (p < 0.66 || (int)(Environment.TickCount64 / 250) % 2 == 0))

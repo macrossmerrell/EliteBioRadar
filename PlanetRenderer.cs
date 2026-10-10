@@ -99,7 +99,7 @@ namespace EliteBioRadar
 
         // ---- GPU landable worlds (Shaders\LandableWorld.fx) ----
         public static bool IsLandableWorld(BodyScanDetail detail, string iconCode) =>
-            (iconCode == "HMC" || iconCode == "ICY" || iconCode == "RBD") && detail.Landable;
+            (iconCode == "HMC" || iconCode == "ICY" || iconCode == "RBD" || iconCode == "MRB") && detail.Landable;
 
         // Calibrated against five real landable HMC screenshots (matched to their journal scans).
         // All five carry the same composition (iron ~22%, nickel ~17%, sulphur ~16%) yet look
@@ -115,6 +115,7 @@ namespace EliteBioRadar
             double temp = detail.SurfaceTemperature;
             if (iconCode == "ICY") return GetIcyLandableLook(detail, hash, temp);
             if (iconCode == "RBD") return GetRockyLandableLook(detail, hash);
+            if (iconCode == "MRB") return GetMetalRichLandableLook(detail, hash);
 
             // Colour does not follow temperature (13 real bodies from 450 K to 900 K ranged over every look), so it is
             // picked from the name hash across all eleven looks.
@@ -137,11 +138,11 @@ namespace EliteBioRadar
                 case 0: // dark rust brown, tan patches
                     l.Light = rgb(150, 110, 88); l.Dark = rgb(62, 40, 32); l.Accent = rgb(140, 64, 40); l.Bright = rgb(190, 170, 155);
                     l.Contrast = 1.0; l.RustAmt = 0.6; l.BrightAmt = 0.2; l.CraterAmt = 0.7; l.RayAmt = 0.3; break;
-                case 1: // grey with white regolith patches and rust streaks
-                    l.Light = rgb(146, 136, 128); l.Dark = rgb(86, 78, 74); l.Accent = rgb(118, 52, 46); l.Bright = rgb(214, 208, 202);
-                    l.Contrast = 0.9; l.RustAmt = 0.9; l.BrightAmt = 0.8; l.CraterAmt = 0.6; l.RayAmt = 0.2; break;
+                case 1: // grey with pale regolith patches and rust streaks (dimmed: real greys such as UH-V B 2 / B 4 and Qiedea ZW-R d5-22 BC 1 are much darker and flatter)
+                    l.Light = rgb(116, 108, 102); l.Dark = rgb(66, 60, 57); l.Accent = rgb(104, 48, 42); l.Bright = rgb(158, 152, 146);
+                    l.Contrast = 0.8; l.RustAmt = 0.7; l.BrightAmt = 0.45; l.CraterAmt = 0.6; l.RayAmt = 0.2; break;
                 case 2: // lunar grey-beige
-                    l.Light = rgb(152, 142, 134); l.Dark = rgb(98, 94, 86); l.Accent = rgb(120, 92, 70); l.Bright = rgb(190, 184, 176);
+                    l.Light = rgb(122, 114, 107); l.Dark = rgb(76, 72, 66); l.Accent = rgb(100, 76, 58); l.Bright = rgb(150, 144, 136);
                     l.Contrast = 0.7; l.RustAmt = 0.1; l.BrightAmt = 0.0; l.CraterAmt = 0.9; l.RayAmt = 0.3; break;
                 case 3: // dim smooth grey-green
                     l.Light = rgb(84, 90, 78); l.Dark = rgb(58, 64, 56); l.Accent = rgb(84, 80, 60); l.Bright = rgb(150, 156, 144);
@@ -150,7 +151,7 @@ namespace EliteBioRadar
                     l.Light = rgb(190, 140, 106); l.Dark = rgb(134, 98, 78); l.Accent = rgb(170, 112, 78); l.Bright = rgb(214, 170, 120);
                     l.Contrast = 0.55; l.RustAmt = 0.15; l.BrightAmt = 0.7; l.CraterAmt = 0.4; l.RayAmt = 0.0; break;
                 case 6: // grey-brown with olive-grey basins and a dark-rayed crater (B 2)
-                    l.Light = rgb(142, 128, 118); l.Dark = rgb(98, 96, 84); l.Accent = rgb(110, 96, 88); l.Bright = rgb(160, 140, 126);
+                    l.Light = rgb(110, 100, 92); l.Dark = rgb(74, 72, 64); l.Accent = rgb(88, 78, 72); l.Bright = rgb(128, 112, 100);
                     l.Contrast = 0.65; l.RustAmt = 0.15; l.BrightAmt = 0.3; l.CraterAmt = 0.5; l.RayAmt = -0.6; break;
                 case 7: // olive-tan with green patches, dark-rayed craters (C 3)
                     l.Light = rgb(150, 138, 112); l.Dark = rgb(104, 106, 78); l.Accent = rgb(100, 112, 70); l.Bright = rgb(108, 128, 70);
@@ -172,10 +173,32 @@ namespace EliteBioRadar
             // Frost on the cold bodies.
             if (temp > 0 && temp < 250)
                 l.IceAmt = 0.20 + 0.35 * (((hash >> 9) % 100) / 100.0);
-            // Glowing flecks on hot magma-volcanic bodies.
-            bool magma = !string.IsNullOrEmpty(detail.Volcanism) &&
-                detail.Volcanism.Contains("magma", StringComparison.OrdinalIgnoreCase);
-            if (magma && temp > 500) l.HotAmt = 0.8;
+            // No glowing flecks on hot magma-volcanic landable bodies: two real ones (Qiedea ZW-R d5-22 C 1, 864 K, and the Metal-rich B 1, 1153 K) show none in
+            // game. (The non-landable lava worlds above 1,500 K keep their glow - that one was matched to a real body.)
+            return l;
+        }
+
+        // Landable METAL-RICH bodies. One real example so far - Qiedea ZW-R d5-22 B 1 (airless, tidally locked, 1153 K, 100% metal, iron 35% / nickel
+        // 26% / chromium 16%, metallic magma volcanism): a deep red-brown surface with dark charcoal patches, a cracked polygon texture and one big
+        // crater with long soft rays - and no glowing flecks even though it is far above 1000 K. Treated as the default look for the class
+        // (a hypothesis), with a small name-hash shift in redness so neighbours do not look cloned.
+        private static LandableWorldLook GetMetalRichLandableLook(BodyScanDetail detail, int hash)
+        {
+            Color rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
+            int shift = (hash >> 5) % 5 - 2;   // -2..2: redder or browner
+            var l = new LandableWorldLook
+            {
+                Light = rgb(142 + shift * 4, 66 - shift * 2, 56 - shift * 3), Dark = rgb(104 + shift * 3, 52, 48),
+                Accent = rgb(58, 52, 50), Bright = rgb(168, 86, 76), Ice = rgb(206, 226, 238), Hot = rgb(255, 120, 40),
+                Seed = (hash % 5000) / 100.0 + 1.0,
+                Tilt = (((hash >> 3) % 100) / 100.0 - 0.5) * 0.35,
+                Pitch = (((hash >> 12) % 9) - 4) * 0.08,
+                Mottle = 0.85 + ((hash >> 7) % 40) / 100.0,
+                AtmGlow = detail.SurfacePressure > 0 ? 0.30 : 0.0,
+                Contrast = 0.5, RustAmt = 0.55, BrightAmt = 0.0, CraterAmt = 0.6, RayAmt = 0.9, HotAmt = 0.0,
+            };
+            if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 250)
+                l.IceAmt = 0.20 + 0.35 * (((hash >> 9) % 100) / 100.0);
             return l;
         }
 
@@ -375,14 +398,23 @@ namespace EliteBioRadar
                 // that methane tints the surface that way, to be confirmed with more methane bodies.
                 if ((detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase)) denseVariant = 3;
                 if (rocky) denseVariant = 0;   // real dense rocky bodies (RR-N d6-47 A 2 a, 3.3 MPa) were a pale blue-grey shell
+                // Cold thick atmospheres (real: Qiedea ZW-R d5-22 A 5, 3.49 MPa nitrogen/argon, 214 K): a Mars-like ochre-tan surface under a thin
+                // lavender haze with white polar caps. One data point - a hypothesis that the cold ones look like this.
+                if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 300 && !rocky && (detail.AtmosphereType ?? "").IndexOf("Methane", StringComparison.OrdinalIgnoreCase) < 0
+                    && (detail.AtmosphereType ?? "").IndexOf("Water", StringComparison.OrdinalIgnoreCase) < 0) denseVariant = 7;
+                // Water atmospheres (steam): pale blue-grey, as steam clouds are. One real body so far - Qiedea ZW-R d5-22 A 3,
+                // hot thick water, 951 kPa, 659 K: a pale blue-grey veil with faint brown showing through - a hypothesis for the rest.
+                if ((detail.AtmosphereType ?? "").Contains("Water", StringComparison.OrdinalIgnoreCase) && !(detail.SurfaceTemperature >= 1500)) denseVariant = 6;
                 if (veryHot)                { denseVariant = 4; s0 = rgb(14, 14, 17); s1 = rgb(34, 33, 38); contrast = 0.8; }
+                else if (denseVariant == 6) { s0 = rgb(112, 98, 98); s1 = rgb(146, 162, 188); contrast = 0.75; }   // faint brown-grey under a pale blue-grey steam veil (see the atmoLook override below)
+                else if (denseVariant == 7) { s0 = rgb(176, 120, 66); s1 = rgb(230, 182, 108); contrast = 0.45; }   // ochre-tan, Mars-like (atmoLook override below)
                 else if (denseVariant == 3) { s0 = rgb(74, 78, 44); s1 = rgb(132, 130, 78); contrast = 0.5; }   // olive-green
                 else if (denseVariant == 1) { s0 = rgb(150, 70, 40); s1 = rgb(206, 104, 58); contrast = 0.5; }   // orange-red
                 else if (denseVariant == 5) { s0 = rgb(150, 126, 70); s1 = rgb(236, 208, 128); contrast = 0.9; }   // pale blue-grey with a yellow wash (real: RR-N d6-47 B 3)
                 else if (denseVariant == 2) { s0 = rgb(24, 26, 32);  s1 = rgb(46, 50, 58);  contrast = 0.5; }   // near-black
                 else                        { s0 = rgb(112, 124, 140); s1 = rgb(162, 174, 188); contrast = 0.7; }   // slate
             }
-            else if (pick <= 3)     { s0 = rgb(128, 88, 44);   s1 = rgb(196, 150, 84); }                     // ochre / orange
+            else if (pick <= 3)     { s0 = rgb(172, 114, 60);  s1 = rgb(228, 168, 98); }                     // ochre / orange (brightened to match a real orange Mars-like body, Qiedea ZW-R d5-22 BC 4)
             else if (pick == 4)     { s0 = rgb(92, 40, 30);    s1 = rgb(150, 72, 52); }                      // rust red
             else if (pick <= 6)     { s0 = rgb(66, 52, 44);    s1 = rgb(118, 96, 80); }                      // brown
             else if (pick == 7)     { s0 = rgb(74, 70, 40);    s1 = rgb(128, 120, 70); }                     // olive
@@ -406,6 +438,25 @@ namespace EliteBioRadar
                 Pitch = (((hash >> 12) % 9) - 4) * 0.08,
                 Seed = (hash % 5000) / 100.0 + 1.0,
             };
+            if (!icy && !rockyIce && denseVariant == 7)
+            {
+                // Thin lavender-blue haze that shows mostly at the limb, soft low-contrast dark spots, and white caps (cold).
+                atmoLook.Haze = rgb(150, 140, 186); atmoLook.Glow = rgb(150, 156, 222);
+                atmoLook.Cloud = rgb(214, 204, 206); atmoLook.CycloneAmt = 0.0; atmoLook.CloudAmt = 0.12;
+                atmoLook.HazeAmt = 0.28; atmoLook.SurfContrast = 0.8;
+                atmoLook.Cap = rgb(232, 230, 236); atmoLook.CapAmt = Math.Clamp(0.10 + (300.0 - detail.SurfaceTemperature) / 800.0, 0.10, 0.30);
+                atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.35, 0.30, 0.89);
+            }
+            else
+            if (!icy && !rockyIce && denseVariant == 6)
+            {
+                // Steam veil: a thick, soft, pale blue-grey cloud layer with the brownish surface only just showing in blotches.
+                atmoLook.Haze = rgb(168, 184, 204); atmoLook.Glow = rgb(170, 200, 232);
+                atmoLook.Cloud = rgb(168, 186, 210); atmoLook.CycloneAmt = 0.0; atmoLook.CloudAmt = 0.6; atmoLook.CapAmt = 0;
+                atmoLook.HazeAmt = 0.62; atmoLook.SurfContrast = 1.0;
+                atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.20, 0.20, 0.96);
+            }
+            else
             if (!icy && !rockyIce && denseVariant == 5)
             {
                 atmoLook.Haze = rgb(150, 170, 188); atmoLook.Glow = rgb(130, 170, 205);
@@ -469,10 +520,10 @@ namespace EliteBioRadar
                 // olive-green land, tan-orange coasts, scattered white cloud and hurricane-style cyclones, a broad sun glint on
                 // the water and ice caps that grow with cold. Land colour and coverage come from the name hash; the colder
                 // ones go grey-green with bigger caps (real: Drojia EM-C c29-4 6, 266 K).
-                atmoLook.Haze = rgb(86, 124, 162); atmoLook.Glow = rgb(96, 160, 220);
+                atmoLook.Haze = rgb(96, 136, 176); atmoLook.Glow = rgb(104, 176, 232);
                 atmoLook.Cloud = rgb(232, 238, 246);
-                atmoLook.HazeAmt = Math.Min(haze, 0.14);
-                atmoLook.CycloneAmt = 0.90; atmoLook.CloudAmt = 0.55; atmoLook.CrackAmt = 0.0;
+                atmoLook.HazeAmt = Math.Clamp(haze, 0.24, 0.34);   // Earth-likes always carry a visible atmosphere (real shot: strong blue limb, soft haze over the land)
+                atmoLook.CycloneAmt = 0.90; atmoLook.CloudAmt = 0.62; atmoLook.CrackAmt = 0.0;
                 int lv = (hash >> 6) % 4;
                 bool chilly = detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 278;
                 if (lv == 1)      { atmoLook.Land0 = rgb(48, 80, 42);  atmoLook.Land1 = rgb(126, 108, 64); }    // greener
@@ -483,7 +534,7 @@ namespace EliteBioRadar
                 double ecold = detail.SurfaceTemperature > 0 ? (300.0 - detail.SurfaceTemperature) / 90.0 : 0.2;
                 atmoLook.Cap = rgb(232, 236, 240); atmoLook.CapAmt = Math.Clamp(0.08 + ecold * 0.8, 0.08, 0.7);
                 atmoLook.SurfContrast = 0.25;
-                atmoLook.GlintAmt = 0.9;
+                atmoLook.GlintAmt = 0.3;   // the ocean is only faintly glossy in game
                 atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.40, 0.38, 0.84);
             }
             else if (amw)

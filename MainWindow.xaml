@@ -252,6 +252,34 @@
                     Background="#080d0d" ClipToBounds="True"
                     MouseWheel="RadarCanvas_MouseWheel"/>
 
+            <!-- Ship event chip (liftoff, gear, lights, boarding ...): top centre of the radar, shown only on the RADAR tab.
+                 See ShipEventChip.cs. -->
+            <Grid x:Name="shipEventLayer" Grid.Column="1" IsHitTestVisible="False">
+                <Border x:Name="shipEventChip" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,6,0,0"
+                        Padding="12,4" CornerRadius="3" BorderThickness="1" Opacity="0"
+                        Background="#e0062a30" BorderBrush="#00e5ff">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="shipEventChipGlyph" Margin="0,0,8,0" FontSize="12" VerticalAlignment="Center"
+                                   FontFamily="pack://application:,,,/Assets/Fonts/#JetBrains Mono"/>
+                        <TextBlock x:Name="shipEventChipText" FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center"
+                                   FontFamily="pack://application:,,,/Assets/Fonts/#JetBrains Mono"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- FUEL SCOOPING title: top centre of the STAR tab while the ship is scooping (Status.json ScoopingFuel flag). -->
+            <Grid x:Name="fuelScoopLayer" Grid.Column="1" Panel.ZIndex="10" IsHitTestVisible="False" Visibility="Collapsed">
+                <Border HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,10,0,0" Padding="16,5"
+                        CornerRadius="3" BorderThickness="1" BorderBrush="#ffb347" Background="#e02b1d08">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="▲" Margin="0,0,10,0" FontSize="13" Foreground="#ffb347" VerticalAlignment="Center"
+                                   FontFamily="pack://application:,,,/Assets/Fonts/#JetBrains Mono"/>
+                        <TextBlock x:Name="fuelScoopText" Text="FUEL SCOOPING" FontSize="15" FontWeight="Bold" Foreground="#ffd48a" VerticalAlignment="Center"
+                                   FontFamily="pack://application:,,,/Assets/Fonts/#JetBrains Mono"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
             <!-- STAR / PLANET info panels — replace radarCanvas when no Lat/Lon is present.
                  Fixed-size inner Canvas + Viewbox Stretch=Uniform mirrors the approved SVG
                  mockup's viewBox/preserveAspectRatio trick: content scales uniformly with

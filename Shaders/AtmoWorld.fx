@@ -64,7 +64,7 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     float2 ps = float2((lon - Time * 0.010) / PI, lat / PI * 2.0);
     float big  = Tex(ps * 0.9 + Seed * 0.13).x;
     float mid  = Tex(ps * 2.3 + 0.31).y;
-    float fine = Tex(ps * 7.0 + 0.7).z;
+    float fine = Tex(ps * 3.0 + 0.7).z;   // was 7.0: that sampled ~8 texels per screen pixel, so the finest noise octaves aliased into faint stripes
     float alb  = big * 0.55 + mid * 0.30 + fine * 0.15;
     float polar = smoothstep(1.20, 1.45, abs(lat));   // fade detail at the poles (lat/lon pinches there)
     alb = saturate((alb - 0.5) * (1.6 * SurfContrast + 0.4) + 0.5);
@@ -187,6 +187,8 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     float halo = exp(-max(r - 1.0, 0.0) * 24.0) * 0.50 * side * (0.55 + 0.45 * HazeAmt);
 
     float edge = 1.0 - smoothstep(0.985, 1.0, r);
+    // Light dither (about 1.5 levels) so smooth, low-contrast surfaces cannot show 8-bit banding.
+    col += (frac(sin(dot(uv, float2(12.9898, 78.233)) * 977.0) * 43758.5453) - 0.5) * (1.5 / 255.0);
     float3 rgb = saturate(col) * edge + GlowCol.rgb * halo * (1.0 - edge);
     float alpha = saturate(edge + halo * (1.0 - edge));
     return float4(min(rgb, alpha + 0.0001), alpha);          // premultiplied alpha

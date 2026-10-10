@@ -20,6 +20,8 @@ namespace EliteBioRadar
         public event EventHandler<BodyChangedEventArgs>?     BodyChanged;
 
         // Info panel (STAR/PLANET/DESTINATION) — live-session-only state, not persisted to ScanCache
+        // Ship/SRV/foot events (gear, lights, scoop, liftoff, boarding ...) for the Radar chip and any later animation screen.
+        public ShipEventDetector ShipEvents { get; } = new();
         public event EventHandler? StarScanUpdated;
         public event EventHandler? PlanetTargetUpdated;
         public event EventHandler? DestinationUpdated;
@@ -701,6 +703,36 @@ namespace EliteBioRadar
             _prevStatus = status;
         }
 
+        // Diagnostic: logs every Status.json flag bit that changes, with the name Frontier's docs give it, so timing questions about the
+        // game's own sequences (the three stages of a hyperspace jump, for one) can be answered from the log instead of guessed.
+        private static readonly string[] FlagNames =
+        {
+            "Docked", "Landed", "GearDown", "ShieldsUp", "Supercruise", "FlightAssistOff", "Hardpoints", "InWing", "Lights", "CargoScoop",
+            "SilentRunning", "ScoopingFuel", "SrvHandbrake", "SrvTurretView", "SrvTurretRetracted", "SrvDriveAssist", "FsdMassLocked", "FsdCharging",
+            "FsdCooldown", "LowFuel", "Overheating", "HasLatLong", "InDanger", "BeingInterdicted", "InMainShip", "InFighter", "InSRV", "HudAnalysis",
+            "NightVision", "AltFromAvgRadius", "FsdJump", "SrvHighBeam",
+        };
+        private uint _logPrevFlags, _logPrevFlags2;
+        private bool _logHavePrevFlags;
+
+        private void LogFlagChanges(EliteStatus s)
+        {
+            if (_logHavePrevFlags)
+            {
+                uint d1 = s.Flags ^ _logPrevFlags, d2 = s.Flags2 ^ _logPrevFlags2;
+                if (d1 != 0 || d2 != 0)
+                {
+                    var parts = new List<string>();
+                    for (int i = 0; i < 32; i++)
+                        if ((d1 & (1u << i)) != 0) parts.Add(((s.Flags & (1u << i)) != 0 ? "+" : "-") + FlagNames[i]);
+                    for (int i = 0; i < 32; i++)
+                        if ((d2 & (1u << i)) != 0) parts.Add(((s.Flags2 & (1u << i)) != 0 ? "+" : "-") + "F2." + i);
+                    Log.Write("StatusFlags: " + string.Join(" ", parts));
+                }
+            }
+            _logPrevFlags = s.Flags; _logPrevFlags2 = s.Flags2; _logHavePrevFlags = true;
+        }
+
         // ---------------------------------------------------------------
         private void ReadStatus()
         {
@@ -733,6 +765,9 @@ namespace EliteBioRadar
                     PlanetRadius = obj.Value<double?>("PlanetRadius") ?? 0,
                     FuelMain      = fuelObj?.Value<double?>("FuelMain")      ?? 0,
                     FuelReservoir = fuelObj?.Value<double?>("FuelReservoir") ?? 0,
+                    SuitTemperatureK = obj.Value<double?>("Temperature") ?? 0,
+                    Oxygen = obj.Value<double?>("Oxygen") ?? 0,
+                    Health = obj.Value<double?>("Health") ?? 0,
                     GuiFocus      = (int)(obj.Value<long?>("GuiFocus") ?? -1),
                 };
 
@@ -751,6 +786,8 @@ namespace EliteBioRadar
                 }
 
                 CurrentStatus = status;
+                ShipEvents.ObserveStatus(status);
+                LogFlagChanges(status);
                 if (CurrentDestination != null)
                 {
                     CurrentDestination.FuelMain      = status.FuelMain;
@@ -2741,7 +2778,13 @@ namespace EliteBioRadar
                         if (ev == "LeaveBody" || ev == "FSDJump" || ev == "SupercruiseEntry")
                             lastLeaveIdx = i;
                     }
-                    if (lastLeaveIdx > lastScanIdx && lastLeaveIdx >= 0)
+                    // The journal alone cannot tell "left and still away" from "left, then arrived at a body again": arriving by supercruise
+                    // writes no Touchdown/Disembark, so a SupercruiseEntry earlier in the file looked like leaving. (Real case: Qiedea AH-T d4-6 A 3 -
+                    // the app restarted while the player was flying low over A 3, cleared it as "left" and showed another planet instead.) The live
+                    // Status.json is authoritative: if it has position data on the current body, the player is there.
+                    bool liveOnCurrentBody = CurrentStatus.HasPosition && !string.IsNullOrEmpty(CurrentBody) &&
+                        string.Equals(CurrentStatus.BodyName, CurrentBody, StringComparison.OrdinalIgnoreCase);
+                    if (lastLeaveIdx > lastScanIdx && lastLeaveIdx >= 0 && !liveOnCurrentBody)
                     {
                         Log.Write($"Backfill: LeaveBody/FSDJump after last scan — clearing body");
                         lock (ScannedOrganisms) ScannedOrganisms.Clear();
@@ -3051,6 +3094,7 @@ namespace EliteBioRadar
             // Raw-material stock for System Scan's "hide full materials" filter. Live only —
             // MaterialInventory.BuildAsync replays history at startup.
             if (!backfill) MaterialInventory.Apply(evt, obj);
+            if (!backfill) ShipEvents.ObserveJournal(evt, obj);
 
             switch (evt)
             {
@@ -3628,10 +3672,12 @@ namespace EliteBioRadar
                         }
                         else if (isCurrentBody)
                         {
-                            // We're previewing another planet but DiscoveredCount changed for the
-                            // current body — nudge the planet list so the GEOLOGICAL SITES row's
-                            // grey-out state stays in sync, without resetting the preview.
-                            PlanetListChanged?.Invoke(this, EventArgs.Empty);
+                            // A real scan on the body the player is standing on while the display shows another planet (typically the
+                            // targeted one - e.g. the nav target is on a different planet): the scan is already saved to the cache above, so
+                            // bring the display back to the current body, where it now shows. Without this the Geo Survey never showed the
+                            // scan and the player thought it had not registered.
+                            Log.Write($"CodexEntry geo on the current body while displaying '{DisplayedBody}': switching the display back to '{CurrentBody}'");
+                            PreviewPlanet(CurrentBody);
                         }
                     }
                     break;
@@ -4278,6 +4324,16 @@ namespace EliteBioRadar
                         FsdTargetedAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
                         if (!backfill) DestinationUpdated?.Invoke(this, EventArgs.Empty);
                     }
+                    break;
+                }
+
+                // The player cleared the plotted route / un-selected the next system: forget the destination so the
+                // panel can fall back (e.g. to the radar while on a planet). A later NavRoute/FSDTarget rebuilds it.
+                case "NavRouteClear":
+                {
+                    CurrentDestination = null;
+                    _lastNavRouteJson = null;
+                    if (!backfill) { _routeCache = null; RouteCache.Delete(); DestinationUpdated?.Invoke(this, EventArgs.Empty); }
                     break;
                 }
 

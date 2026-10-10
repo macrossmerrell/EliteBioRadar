@@ -16,14 +16,7 @@ namespace EliteBioRadar
             if ((RenderCapability.Tier >> 16) == 0) return false;
             try
             {
-                int hash = PlanetRenderer.StableHash(detail.BodyName);
-                var look = new NeutronStarLook
-                {
-                    Core = Color.FromRgb(238, 246, 255), Jet = Color.FromRgb(120, 170, 255), Tail = Color.FromRgb(176, 136, 255), Halo = Color.FromRgb(34, 64, 215),
-                    Seed = (hash % 5000) / 100.0 + 1.0,
-                    Tilt = (62 + (((hash >> 3) % 21) - 10)) * Math.PI / 180.0,   // jet axis around the usual 62 degrees, varied a little per star
-                    TailAmt = 1.0, Spin = 1.0,
-                };
+                var look = MakeNeutronLook(detail);
                 const double unit = 58;   // px per shader length unit
                 var effect = NeutronStarShaderEffect.Create(look, new Point(0.5, 0.5), new Point(unit / sceneW, unit / sceneH));
                 effect.BeginAnimation(NeutronStarShaderEffect.TimeProperty,
@@ -65,15 +58,7 @@ namespace EliteBioRadar
             if ((RenderCapability.Tier >> 16) == 0) return false;
             try
             {
-                int hash = PlanetRenderer.StableHash(detail.BodyName);
-                var look = new WhiteDwarfLook
-                {
-                    Core = Color.FromRgb(242, 249, 255), Jet = Color.FromRgb(160, 190, 255), Edge = Color.FromRgb(58, 84, 255), Halo = Color.FromRgb(30, 58, 215),
-                    Seed = (hash % 5000) / 100.0 + 1.0,
-                    Tilt = (62 + (((hash >> 3) % 21) - 10)) * Math.PI / 180.0,
-                    Power = 0.9 + ((hash >> 7) % 25) / 100.0,
-                    Spin = 1.0,
-                };
+                var look = MakeWhiteDwarfLook(detail);
                 const double unit = 58;
                 var effect = WhiteDwarfShaderEffect.Create(look, new Point(0.5, 0.5), new Point(unit / sceneW, unit / sceneH));
                 effect.BeginAnimation(WhiteDwarfShaderEffect.TimeProperty,
@@ -89,6 +74,31 @@ namespace EliteBioRadar
                 Log.Write($"White dwarf shader setup failed, using CPU renderer: {ex.Message}");
                 return false;
             }
+        }
+
+        internal static NeutronStarLook MakeNeutronLook(BodyScanDetail detail)
+        {
+            int hash = PlanetRenderer.StableHash(detail.BodyName);
+            return new NeutronStarLook
+            {
+                Core = Color.FromRgb(238, 246, 255), Jet = Color.FromRgb(120, 170, 255), Tail = Color.FromRgb(176, 136, 255), Halo = Color.FromRgb(34, 64, 215),
+                Seed = (hash % 5000) / 100.0 + 1.0,
+                Tilt = (62 + (((hash >> 3) % 21) - 10)) * Math.PI / 180.0,   // jet axis around the usual 62 degrees, varied a little per star
+                TailAmt = 1.0, Spin = 1.0,
+            };
+        }
+
+        internal static WhiteDwarfLook MakeWhiteDwarfLook(BodyScanDetail detail)
+        {
+            int hash = PlanetRenderer.StableHash(detail.BodyName);
+            return new WhiteDwarfLook
+            {
+                Core = Color.FromRgb(242, 249, 255), Jet = Color.FromRgb(160, 190, 255), Edge = Color.FromRgb(58, 84, 255), Halo = Color.FromRgb(30, 58, 215),
+                Seed = (hash % 5000) / 100.0 + 1.0,
+                Tilt = (62 + (((hash >> 3) % 21) - 10)) * Math.PI / 180.0,
+                Power = 0.9 + ((hash >> 7) % 25) / 100.0,
+                Spin = 1.0,
+            };
         }
 
         private void AddDistantStars(int sceneW, int sceneH, int sceneX, int sceneY)
