@@ -624,12 +624,20 @@ namespace EliteBioRadar
         private bool _deorbitSeqActive;
         private bool _prevHasPositionForSeq;
         private DateTime _positionSinceUtc = DateTime.MinValue;
+        private DateTime _positionLostSince = DateTime.MinValue;
         private bool _prevIsGlidingForSeq;
         private void UpdateDeorbitSequenceState(EliteStatus status)
         {
             // When the ship came within reach of a planet (lat/long appeared) - a next-system pick counts for the Destination tab only if it
             // was made after this, so the auto-targeted next hop of a plotted route does not pin the tab while you explore.
-            if (status.HasPosition && !_prevHasPositionForSeq) _positionSinceUtc = DateTime.UtcNow;
+            // A brief blink of the flag (the glide/position overlap) must not count as arriving again, or an earlier pick would be ignored.
+            if (!status.HasPosition) { if (_positionLostSince == DateTime.MinValue) _positionLostSince = DateTime.UtcNow; }
+            else
+            {
+                if (!_prevHasPositionForSeq && (_positionSinceUtc == DateTime.MinValue || (DateTime.UtcNow - _positionLostSince).TotalSeconds > 3))
+                    _positionSinceUtc = DateTime.UtcNow;
+                _positionLostSince = DateTime.MinValue;
+            }
             if (status.HasPosition && !_prevHasPositionForSeq && status.Supercruise)
                 _deorbitSeqActive = true;
 
@@ -2334,11 +2342,12 @@ namespace EliteBioRadar
             // clearing the lock here too was actively working against that.
         }
 
-        // Diagnostic: while the descent/climb/jump screen is repainting, logs the real frame rate and how long a frame takes to build every 5 s
+        // Diagnostic (only with BIORADAR_DIAG set): while the descent/climb/jump screen is repainting, logs the real frame rate and how long a frame takes to build every 5 s
         // ("Deorbit animation: 41.2 fps, build avg 9.8 ms, max 31.0 ms"), since the timer only asks for 60 fps and the scene is rebuilt each tick.
         private long _fpsWindowStart, _fpsLastFrame; private int _fpsFrames; private double _fpsBuildMsSum, _fpsBuildMsMax;
         private void NoteDeorbitFrame(double buildMs)
         {
+            if (!EliteWatcherService.DiagLogging) return;
             long now = System.Diagnostics.Stopwatch.GetTimestamp();
             // A gap of over a second means the screen was not showing: start a fresh window instead of diluting the average.
             if (_fpsWindowStart == 0 || (now - _fpsLastFrame) > System.Diagnostics.Stopwatch.Frequency) { _fpsWindowStart = now; _fpsFrames = 0; _fpsBuildMsSum = 0; _fpsBuildMsMax = 0; }
@@ -2514,7 +2523,7 @@ namespace EliteBioRadar
             }
             bool jumpScene = JumpSceneActive(status);
             string jumpPhase = "";
-            if (jumpScene) jumpPhase = DrawJumpScene(deorbitPanelCanvas, bodyDetail, status, estAltForScene, dt);
+            if (jumpScene) jumpPhase = DrawJumpScene(deorbitPanelCanvas, bodyDetail, estAltForScene, dt);
             else if (isDescending)
             {
             // ---- Descent-arc scene — first WPF port of the "Deorbit Trajectory Concept"

@@ -703,7 +703,7 @@ namespace EliteBioRadar
             _prevStatus = status;
         }
 
-        // Diagnostic: logs every Status.json flag bit that changes, with the name Frontier's docs give it, so timing questions about the
+        // Diagnostic (only with BIORADAR_DIAG set): logs every Status.json flag bit that changes, with the name Frontier's docs give it, so timing questions about the
         // game's own sequences (the three stages of a hyperspace jump, for one) can be answered from the log instead of guessed.
         private static readonly string[] FlagNames =
         {
@@ -712,11 +712,15 @@ namespace EliteBioRadar
             "FsdCooldown", "LowFuel", "Overheating", "HasLatLong", "InDanger", "BeingInterdicted", "InMainShip", "InFighter", "InSRV", "HudAnalysis",
             "NightVision", "AltFromAvgRadius", "FsdJump", "SrvHighBeam",
         };
+        // Diagnostics (flag changes here, animation frame rate in MainWindow) are written to the log only when the BIORADAR_DIAG environment variable
+        // is set before starting the app; they answered timing questions and are otherwise just log noise.
+        internal static readonly bool DiagLogging = Environment.GetEnvironmentVariable("BIORADAR_DIAG") != null;
         private uint _logPrevFlags, _logPrevFlags2;
         private bool _logHavePrevFlags;
 
         private void LogFlagChanges(EliteStatus s)
         {
+            if (!DiagLogging) return;
             if (_logHavePrevFlags)
             {
                 uint d1 = s.Flags ^ _logPrevFlags, d2 = s.Flags2 ^ _logPrevFlags2;
@@ -4333,7 +4337,9 @@ namespace EliteBioRadar
                 {
                     CurrentDestination = null;
                     _lastNavRouteJson = null;
-                    if (!backfill) { _routeCache = null; RouteCache.Delete(); DestinationUpdated?.Invoke(this, EventArgs.Empty); }
+                    // The saved route cache is left alone: the game also writes NavRouteClear when a route simply ends or is replotted, and a new
+                    // NavRoute/FSDTarget replaces the cache anyway.
+                    if (!backfill) DestinationUpdated?.Invoke(this, EventArgs.Empty);
                     break;
                 }
 

@@ -37,7 +37,16 @@ namespace EliteBioRadar
         }
 
         // glyph, border, text, background: brightness separates on/off, the hue is kept for things that need attention.
-        private static (string glyph, SolidColorBrush border, SolidColorBrush text, SolidColorBrush bg) ChipStyle(ShipEventTone tone) => tone switch
+        // Built once per tone (the brushes are frozen): hazard text updates several times a second and must not re-parse hex strings each time.
+        private static readonly Dictionary<ShipEventTone, (string glyph, SolidColorBrush border, SolidColorBrush text, SolidColorBrush bg)> _chipStyles = new();
+
+        private static (string glyph, SolidColorBrush border, SolidColorBrush text, SolidColorBrush bg) ChipStyle(ShipEventTone tone)
+        {
+            if (!_chipStyles.TryGetValue(tone, out var style)) _chipStyles[tone] = style = BuildChipStyle(tone);
+            return style;
+        }
+
+        private static (string glyph, SolidColorBrush border, SolidColorBrush text, SolidColorBrush bg) BuildChipStyle(ShipEventTone tone) => tone switch
         {
             ShipEventTone.On      => ("●", Frozen("#00e5ff"), Frozen("#e6fbff"), Frozen("#e0062a30")),
             ShipEventTone.Off     => ("○", Frozen("#4f7a85"), Frozen("#8fb0b8"), Frozen("#e00c1a1c")),

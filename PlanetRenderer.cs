@@ -271,7 +271,8 @@ namespace EliteBioRadar
                 Tilt = (((hash >> 3) % 100) / 100.0 - 0.5) * 0.35,
                 Pitch = (((hash >> 12) % 9) - 4) * 0.08,
                 Mottle = 0.85 + ((hash >> 7) % 40) / 100.0,
-                AtmGlow = 0.0, SpecAmt = 0.0,
+                // A thin atmosphere gives the limb a pale blue-teal glow in game (real: Qiedea AH-T d4-6 A 5 b, thin CO2 at 2.6 kPa), airless ones none.
+                AtmGlow = detail.SurfacePressure > 0 ? 0.35 : 0.0, SpecAmt = 0.0,
             };
             int look = (hash >> 4) % 6;   // by name alone: a star-group window did not hold up (4E was grey beside orange 3 moons)
             switch (look)

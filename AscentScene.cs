@@ -275,7 +275,7 @@ namespace EliteBioRadar
         }
 
         // Jump from atmosphere. Returns the short status text for the HUD plate.
-        private string DrawJumpScene(Canvas c, BodyScanDetail? body, EliteStatus status, double altitudeM, double dt)
+        private string DrawJumpScene(Canvas c, BodyScanDetail? body, double altitudeM, double dt)
         {
             const double W = DescentW, H = DescentH, CX = DescentCx;
             var now = DateTime.UtcNow;

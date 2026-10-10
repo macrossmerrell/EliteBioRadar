@@ -170,14 +170,14 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
 
     // Faint haze rim for bodies with a trace atmosphere.
     float rimGlow = pow(1.0 - z, 3.0) * AtmGlow * saturate(ndl * 0.8 + 0.4);
-    col += float3(0.42, 0.58, 0.50) * rimGlow * 0.55;
+    col += float3(0.26, 0.52, 0.68) * rimGlow * 1.25;   // blue-teal, as the thin-atmosphere limb looks in game
 
     float2 dirOut = q / max(r, 1e-3);
     float side = saturate(dot(float2(dirOut.x, -dirOut.y), normalize(LightDir.xy + 1e-4)) * 0.5 + 0.6);
-    float halo = exp(-max(r - 1.0, 0.0) * 38.0) * 0.30 * side * AtmGlow;
+    float halo = exp(-max(r - 1.0, 0.0) * 24.0) * 0.95 * (0.45 + 0.55 * side) * AtmGlow;
 
     float edge = 1.0 - smoothstep(0.985, 1.0, r);
-    float3 rgb = saturate(col) * edge + float3(0.42, 0.58, 0.50) * halo * (1.0 - edge);
+    float3 rgb = saturate(col) * edge + float3(0.26, 0.52, 0.68) * halo * (1.0 - edge);
     float alpha = saturate(edge + halo * (1.0 - edge));
     return float4(min(rgb, alpha + 0.0001), alpha);          // premultiplied alpha
 }

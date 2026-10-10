@@ -829,7 +829,7 @@ namespace EliteBioRadar
                     var (core, mid, _) = StarRenderer.GetStarColors(star.SurfaceTemperature > 0 ? star.SurfaceTemperature : 5700, star.StarType);
                     swatchFill = new RadialGradientBrush(mid, core);
                 }
-                var swatchThumb = GetCachedThumb("s|" + ThumbSignature(star, 40), () => TryBuildStarShaderThumb(star, 40));
+                var swatchThumb = GetCachedThumb("s|" + star.BodyName + "|40", ThumbSignature(star, 40), () => TryBuildStarShaderThumb(star, 40));
                 if (swatchThumb != null)
                 {
                     // Live star render, bigger than the 24px dot slot so its glow has room; a Canvas lets it overflow the slot.
@@ -1158,7 +1158,7 @@ namespace EliteBioRadar
             // 59px thumb so the ring keeps its proportions instead of looking cramped.
             const int box = 140;
             var thumbWrap = new Grid { Width = 59, Height = 59, Margin = new Thickness(0, 0, 10, 0) };
-            var starShaderThumb = GetCachedThumb("s|" + ThumbSignature(s, 59), () => TryBuildStarShaderThumb(s, 59));
+            var starShaderThumb = GetCachedThumb("s|" + s.BodyName + "|59", ThumbSignature(s, 59), () => TryBuildStarShaderThumb(s, 59));
             if (starShaderThumb != null)
                 thumbWrap.Children.Add(starShaderThumb);
             else
@@ -1321,20 +1321,10 @@ namespace EliteBioRadar
             top.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
             var thumbWrap = new Grid { Width = 59, Height = 59, Margin = new Thickness(0, 0, 10, 0) };
-            if (b.IsMapped && MappedRingStyle) thumbWrap.Children.Add(MakeMappedRing(59, false));
+            if (b.IsMapped) thumbWrap.Children.Add(MakeMappedRing(59, false));
             thumbWrap.Children.Add(BuildThumb(b, 59));
-            if (b.IsMapped && MappedRingStyle) thumbWrap.Children.Add(MakeMappedRing(59, true));
-            if (b.IsMapped && !MappedRingStyle)
-            {
-                // ~50% of the thumb's own diameter — covers roughly a quarter of the sphere's
-                // area, per direct feedback ("a little hard to see... ok if it covers more").
-                var mapBadge = MakeMappedBadge(30);
-                mapBadge.HorizontalAlignment = HorizontalAlignment.Left;
-                mapBadge.VerticalAlignment = VerticalAlignment.Top;
-                thumbWrap.Children.Add(mapBadge);
-            }
-            // Bottom-right, the opposite corner from the mapped badge (top-left, 30px of this
-            // 59px thumb) — a 17px badge here can't reach it.
+            if (b.IsMapped) thumbWrap.Children.Add(MakeMappedRing(59, true));
+            // The mapped marker is the orbit ring above; the other-commander badges keep the corners.
             if (DiscoveredByOther(b)) thumbWrap.Children.Add(MakeDiscoveredBadge(17));
             if (MappedByOther(b)) thumbWrap.Children.Add(MakeMappedByOtherBadge(17));
             if (FootfalledByOther(b)) thumbWrap.Children.Add(MakeFootfallBadge(17));
@@ -1528,22 +1518,10 @@ namespace EliteBioRadar
             // every moon row noticeably taller).
             var dock = new DockPanel();
             var thumbGrid = new Grid { Width = 28, Height = 28, Margin = new Thickness(0, 0, 7, 0) };
-            if (m.IsMapped && MappedRingStyle) thumbGrid.Children.Add(MakeMappedRing(28, false));
+            if (m.IsMapped) thumbGrid.Children.Add(MakeMappedRing(28, false));
             thumbGrid.Children.Add(BuildThumb(m, 28));
-            if (m.IsMapped && MappedRingStyle) thumbGrid.Children.Add(MakeMappedRing(28, true));
-            if (m.IsMapped && !MappedRingStyle)
-            {
-                // Bumped again — the earlier "already matches the card's own ratio" reasoning
-                // didn't hold up against an actual screenshot of a moon card, which still read
-                // as too small.
-                var mapBadge = MakeMappedBadge(19);
-                mapBadge.HorizontalAlignment = HorizontalAlignment.Left;
-                mapBadge.VerticalAlignment = VerticalAlignment.Top;
-                thumbGrid.Children.Add(mapBadge);
-            }
-            // 12px in the bottom-right of a 28px thumb vs the 19px mapped badge top-left: the two
-            // bounding boxes only meet at a corner, and the mapped badge is round, so no real
-            // overlap. Mapped-by-other sits bottom-left, the one corner still free.
+            if (m.IsMapped) thumbGrid.Children.Add(MakeMappedRing(28, true));
+            // The mapped marker is the orbit ring above; the other-commander badges (bottom-right, bottom-left, top-right) keep the corners.
             if (DiscoveredByOther(m)) thumbGrid.Children.Add(MakeDiscoveredBadge(12));
             if (MappedByOther(m)) thumbGrid.Children.Add(MakeMappedByOtherBadge(12));
             if (FootfalledByOther(m)) thumbGrid.Children.Add(MakeFootfallBadge(12));
@@ -1701,8 +1679,8 @@ namespace EliteBioRadar
 
         // Same disc-badge convention as MakeDiscoveredBadge (dark disc, red ring, bold letter),
         // bottom-LEFT instead of bottom-right — same red, same "annoyed someone beat you to it"
-        // read as the discovery badge, per feedback. Distinct from the wireframe-globe
-        // MakeMappedBadge above: that one means "this body has been DSS-mapped by anyone,
+        // read as the discovery badge, per feedback. Distinct from the orbit ring
+        // (MakeMappedRing): that one means "this body has been DSS-mapped by anyone,
         // including you"; this one specifically means "already mapped by ANOTHER commander
         // before you got here."
         private static FrameworkElement MakeMappedByOtherBadge(double size)
@@ -1725,9 +1703,6 @@ namespace EliteBioRadar
 
         // Mapped marker, option F: a tilted orbit ring around the whole thumbnail (the planet stays fully visible). Drawn in two layers
         // so it passes behind the planet (dashed, faint, under the thumbnail) and in front of it (solid, with a small probe dot, over it).
-        // false = the older corner wireframe globe (MakeMappedBadge), kept so the choice is easy to flip.
-        private const bool MappedRingStyle = true;
-
         private static FrameworkElement MakeMappedRing(double size, bool front)
         {
             double c = size / 2, R = size * 0.41, rx = R * 1.2, ry = R * 0.34;
@@ -1759,42 +1734,6 @@ namespace EliteBioRadar
             return canvas;
         }
 
-        private static FrameworkElement MakeMappedBadge(double size)
-        {
-            // A see-through wireframe globe: no fill, so the planet shows through. Same footprint as before; meridians and
-            // parallels are clipped to the circle, and the small moon-row version drops the finer lines so it stays legible.
-            var canvas = new Canvas { Width = size, Height = size, IsHitTestVisible = false };
-            double R = size / 2, c = R;
-            double thin = Math.Max(0.7, size * 0.045);
-            var line = new SolidColorBrush(Color.FromArgb(215, 0x7e, 0xe7, 0x87));
-            var rim = new SolidColorBrush(Color.FromArgb(240, 0x7e, 0xe7, 0x87));
-            bool detailed = size >= 24;
-
-            var wires = new Canvas { Width = size, Height = size, Clip = new EllipseGeometry(new Point(c, c), R, R) };
-            Ellipse Ell(double cy, double rx, double ry) => new Ellipse
-            {
-                Width = rx * 2, Height = ry * 2, Stroke = line, StrokeThickness = thin,
-            };
-            void Put(Ellipse e, double cy)
-            {
-                Canvas.SetLeft(e, c - e.Width / 2); Canvas.SetTop(e, cy - e.Height / 2);
-                wires.Children.Add(e);
-            }
-            // Meridians.
-            Put(Ell(c, R * 0.45, R), c);
-            if (detailed) Put(Ell(c, R * 0.82, R), c);
-            wires.Children.Add(new Line { X1 = c, Y1 = 0, X2 = c, Y2 = size, Stroke = line, StrokeThickness = thin });
-            // Parallels: equator, plus two more on the larger badge.
-            Put(Ell(c, R, R * 0.2), c);
-            if (detailed)
-            {
-                Put(Ell(c - R * 0.5, R * 0.87, R * 0.17), c - R * 0.5);
-                Put(Ell(c + R * 0.5, R * 0.87, R * 0.17), c + R * 0.5);
-            }
-            canvas.Children.Add(wires);
-            canvas.Children.Add(new Ellipse { Width = size, Height = size, Stroke = rim, StrokeThickness = Math.Max(1, size * 0.07) });
-            return canvas;
-        }
 
         private UIElement Chip(string text, SolidColorBrush color, SolidColorBrush? fill) => new Border
         {
@@ -1974,22 +1913,27 @@ namespace EliteBioRadar
         }
 
         // Built thumbnails are kept for the life of the window and handed out again on every repopulate (an element can only sit in one
-        // place, so it is detached from the old tree first). The signature changes when a re-scan changes what the render depends on.
-        private readonly Dictionary<string, UIElement> _thumbCache = new();
+        // place, so it is detached from the old tree first). One entry per body and size: when a re-scan changes what the render depends on
+        // (the signature), the entry is rebuilt and replaces the old one, so the cache holds at most one element per body and size.
+        private readonly Dictionary<string, (string signature, UIElement element)> _thumbCache = new();
 
-        private UIElement? GetCachedThumb(string signature, Func<UIElement?> build)
+        private UIElement? GetCachedThumb(string key, string signature, Func<UIElement?> build)
         {
-            if (_thumbCache.TryGetValue(signature, out var el))
+            if (_thumbCache.TryGetValue(key, out var entry))
             {
-                var parent = VisualTreeHelper.GetParent(el) ?? LogicalTreeHelper.GetParent(el);
-                if (parent is Panel p) p.Children.Remove(el);
-                else if (parent is Decorator d) d.Child = null;
-                else if (parent is ContentControl cc) cc.Content = null;
-                if (VisualTreeHelper.GetParent(el) == null && LogicalTreeHelper.GetParent(el) == null) return el;
-                _thumbCache.Remove(signature);   // couldn't free it: build a fresh one
+                if (entry.signature == signature)
+                {
+                    var el = entry.element;
+                    var parent = VisualTreeHelper.GetParent(el) ?? LogicalTreeHelper.GetParent(el);
+                    if (parent is Panel p) p.Children.Remove(el);
+                    else if (parent is Decorator d) d.Child = null;
+                    else if (parent is ContentControl cc) cc.Content = null;
+                    if (VisualTreeHelper.GetParent(el) == null && LogicalTreeHelper.GetParent(el) == null) return el;
+                }
+                _thumbCache.Remove(key);   // stale signature, or couldn't free it: build a fresh one
             }
             var built = build();
-            if (built != null) _thumbCache[signature] = built;
+            if (built != null) _thumbCache[key] = (signature, built);
             return built;
         }
 
@@ -2013,7 +1957,7 @@ namespace EliteBioRadar
                     return new Image { Source = frame, Width = size, Height = size, Stretch = Stretch.UniformToFill, ClipToBounds = true };
                 }
                 var iconCode = MainWindow.MapPlanetClassToIconCode(b.PlanetClass);
-                if (iconCode != null && GetCachedThumb("p|" + ThumbSignature(b, size), () => TryBuildShaderThumb(b, iconCode, size)) is UIElement shaderThumb) return shaderThumb;
+                if (iconCode != null && GetCachedThumb("p|" + b.BodyName + "|" + size, ThumbSignature(b, size), () => TryBuildShaderThumb(b, iconCode, size)) is UIElement shaderThumb) return shaderThumb;
                 if (iconCode != null && PlanetRenderer.IsGasGiantFamily(iconCode))
                 {
                     // GetGasGiantLayers turned out to already BE 4 static bitmaps — the
