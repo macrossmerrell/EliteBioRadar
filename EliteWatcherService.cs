@@ -1792,6 +1792,22 @@ namespace EliteBioRadar
                 // replay window (not just the current system) so a revisited, not-freshly-scanned
                 // body's detail is available via GetBodyDetail immediately at startup.
                 foreach (var kv in allBodyDetailsSeen) _sessionBodyDetails[kv.Key] = kv.Value;
+                // A system revisited earlier in the replay window (jumped away and back): its scans lie before the last arrival, which the
+                // per-system reset above discarded, and the game does not repeat them. Restore them for the System Scan window.
+                if (!string.IsNullOrEmpty(trackSystem))
+                {
+                    string trackPrefix = trackSystem + " ";
+                    foreach (var kv in allBodyDetailsSeen)
+                    {
+                        if (!kv.Key.StartsWith(trackPrefix, StringComparison.OrdinalIgnoreCase) &&
+                            !string.Equals(kv.Key, trackSystem, StringComparison.OrdinalIgnoreCase)) continue;
+                        if (_bodyScanDetails.ContainsKey(kv.Key)) continue;
+                        if (mappedBodies.Contains(kv.Key)) kv.Value.IsMapped = true;
+                        _bodyScanDetails[kv.Key] = kv.Value;
+                    }
+                    if (CurrentStarDetail == null && allBodyDetailsSeen.TryGetValue(trackSystem, out var revisitStar) && revisitStar.IsStar)
+                        CurrentStarDetail = revisitStar;
+                }
                 // Restores the FSS Scanner manifest for the current system across a restart —
                 // see lastBodyCount/resolvedOrder's declaration comment above.
                 SystemBodyCount = lastBodyCount;
@@ -4238,6 +4254,18 @@ namespace EliteBioRadar
                                 CurrentStarDetail = cachedStarDetail;
                                 Log.Write($"FSDJump: restored cached star detail for revisited '{arrivalBody}'");
                             }
+                            // Same reason for the rest of the system: the game does not re-send Scan events for bodies already scanned, so the System
+                            // Scan window stayed empty on a revisit. Bring back every body of this system seen earlier this session.
+                            string sysPrefix = newSystem + " ";
+                            int restored = 0;
+                            foreach (var kv in _sessionBodyDetails)
+                            {
+                                if (!kv.Key.StartsWith(sysPrefix, StringComparison.OrdinalIgnoreCase) &&
+                                    !string.Equals(kv.Key, newSystem, StringComparison.OrdinalIgnoreCase)) continue;
+                                _bodyScanDetails[kv.Key] = kv.Value;
+                                restored++;
+                            }
+                            if (restored > 0) Log.Write($"FSDJump: restored {restored} known bodies for revisited '{newSystem}'");
                             // Targeting an already-known planet in a revisited system also needs
                             // its detail immediately (TargetedPlanetDetail/TargetedStarDetail now
                             // fall back to _sessionBodyDetails via GetBodyDetail — see field doc).

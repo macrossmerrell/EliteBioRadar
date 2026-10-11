@@ -123,6 +123,16 @@ namespace EliteBioRadar
             // ("<system> <star letters>", the name up to the first number) picks a window of five looks and the
             // body picks within it.
             int look = (hash >> 4) % 11;   // by name alone: a star-group window did not hold up against real rocky bodies
+            // Three looks added from a 40-body review of real screenshots. The blue-grey one appeared only on landables with a thin
+            // atmosphere (3 of 6 of those, 0 of 17 airless), so it takes about half of them; the pale grey-white and the yellow-green
+            // each turned up on about 1 in 13 bodies, so a small slice of the others is diverted to them (the rest keep their old pick).
+            if (detail.SurfacePressure > 0 && ((hash >> 20) & 1) == 0) look = 11;
+            else
+            {
+                int slice = (hash >> 18) % 13;
+                if (slice == 0) look = 12;
+                else if (slice == 1) look = 13;
+            }
 
             var l = new LandableWorldLook
             {
@@ -165,6 +175,15 @@ namespace EliteBioRadar
                 case 10: // rust red with rayed craters (C 1)
                     l.Light = rgb(176, 88, 58); l.Dark = rgb(110, 62, 48); l.Accent = rgb(96, 64, 56); l.Bright = rgb(150, 112, 120);
                     l.Contrast = 0.8; l.RustAmt = 0.3; l.BrightAmt = 0.3; l.CraterAmt = 0.8; l.RayAmt = -0.9; break;
+                case 11: // very dark blue-grey with muted maroon-rust patches under a blue limb (real: Qiedea ZW-R d5-22 BC 2, BO-M c9-1 B 2, DJ-M c9-1 3)
+                    l.Light = rgb(72, 68, 76); l.Dark = rgb(38, 38, 46); l.Accent = rgb(112, 64, 52); l.Bright = rgb(128, 92, 84);
+                    l.Contrast = 0.8; l.RustAmt = 0.7; l.BrightAmt = 0.1; l.CraterAmt = 0.4; l.RayAmt = 0.3; l.AtmGlow = Math.Max(l.AtmGlow, 0.55); break;
+                case 12: // pale grey-white with small rust-brown streaks and many tiny craters (real: Qiedea EU-K c10-0 A 1, DJ-M c9-2 2)
+                    l.Light = rgb(198, 194, 188); l.Dark = rgb(150, 146, 140); l.Accent = rgb(118, 78, 68); l.Bright = rgb(230, 228, 222);
+                    l.Contrast = 0.5; l.RustAmt = 0.8; l.BrightAmt = 0.4; l.CraterAmt = 0.8; l.RayAmt = 0.1; break;
+                case 13: // olive-green with large bright sulphur-yellow patches and dark brown blotches (real: Qiedea GI-X b19-0 3, AH-T d4-6 B 2 a)
+                    l.Light = rgb(176, 172, 80); l.Dark = rgb(92, 100, 52); l.Accent = rgb(70, 56, 40); l.Bright = rgb(224, 218, 112);
+                    l.Contrast = 0.9; l.RustAmt = 0.5; l.BrightAmt = 0.8; l.CraterAmt = 0.3; l.RayAmt = 0.3; break;
                 default: // salmon-orange with brown mottling, rayed craters
                     l.Light = rgb(192, 148, 114); l.Dark = rgb(104, 78, 58); l.Accent = rgb(116, 86, 62); l.Bright = rgb(222, 188, 160);
                     l.Contrast = 0.75; l.RustAmt = 0.1; l.BrightAmt = 0.0; l.CraterAmt = 0.9; l.RayAmt = 0.9; break;
@@ -415,7 +434,13 @@ namespace EliteBioRadar
                 else if (denseVariant == 2) { s0 = rgb(24, 26, 32);  s1 = rgb(46, 50, 58);  contrast = 0.5; }   // near-black
                 else                        { s0 = rgb(112, 124, 140); s1 = rgb(162, 174, 188); contrast = 0.7; }   // slate
             }
-            else if (pick <= 3)     { s0 = rgb(172, 114, 60);  s1 = rgb(228, 168, 98); }                     // ochre / orange (brightened to match a real orange Mars-like body, Qiedea ZW-R d5-22 BC 4)
+            else if (iconCode == "HMC" && (detail.AtmosphereType ?? "").Contains("Nitrogen", StringComparison.OrdinalIgnoreCase))
+            {
+                // Nitrogen-dominated atmospheres on HMC planets came out ochre-gold with white cyclones in all three real examples
+                // (Qiedea ZW-R d5-22 BC 4 32 kPa and A 5 3.49 MPa; Qiedea BO-M c9-1 A 1 47 kPa, 34% oxygen) - a hypothesis from three bodies.
+                s0 = rgb(178, 120, 62); s1 = rgb(240, 194, 108); contrast = 0.55;
+            }
+            else if (pick <= 3)     { s0 = rgb(172, 114, 60);  s1 = rgb(228, 168, 98); }                   // ochre / orange (brightened to match a real orange Mars-like body, Qiedea ZW-R d5-22 BC 4)
             else if (pick == 4)     { s0 = rgb(92, 40, 30);    s1 = rgb(150, 72, 52); }                      // rust red
             else if (pick <= 6)     { s0 = rgb(66, 52, 44);    s1 = rgb(118, 96, 80); }                      // brown
             else if (pick == 7)     { s0 = rgb(74, 70, 40);    s1 = rgb(128, 120, 70); }                     // olive

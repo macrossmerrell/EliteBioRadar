@@ -349,12 +349,30 @@ namespace EliteBioRadar
             if (ta > 0.5)
             {
                 string next = _watcher?.CurrentDestination?.NextSystem ?? "";
-                var n1 = new TextBlock { Text = string.IsNullOrEmpty(next) ? "NEXT JUMP" : next, Foreground = Brushes.White, FontFamily = new FontFamily("Consolas"), FontSize = 12 };
-                Canvas.SetLeft(n1, tx + 22); Canvas.SetTop(n1, ty - 22);
-                var n2 = new TextBlock { Text = "NEXT JUMP", Foreground = InfoOrangeBrush, FontFamily = new FontFamily("Consolas"), FontSize = 10 };
-                Canvas.SetLeft(n2, tx + 22); Canvas.SetTop(n2, ty - 7);
-                if (!string.IsNullOrEmpty(next)) c.Children.Add(n2);
-                c.Children.Add(n1);
+                if (al > 0.35)
+                {
+                    var n1 = new TextBlock { Text = string.IsNullOrEmpty(next) ? "NEXT JUMP" : next, Foreground = Brushes.White, FontFamily = new FontFamily("Consolas"), FontSize = 12 };
+                    Canvas.SetLeft(n1, tx + 22); Canvas.SetTop(n1, ty - 22);
+                    var n2 = new TextBlock { Text = "NEXT JUMP", Foreground = InfoOrangeBrush, FontFamily = new FontFamily("Consolas"), FontSize = 10 };
+                    Canvas.SetLeft(n2, tx + 22); Canvas.SetTop(n2, ty - 7);
+                    if (!string.IsNullOrEmpty(next)) c.Children.Add(n2);
+                    c.Children.Add(n1);
+                }
+                else if (!string.IsNullOrEmpty(next))
+                {
+                    // Once the target has slid to the centre the lock circle and charge ring sit on top of a label placed beside it, so the
+                    // name goes below the status text instead, on a dark plate.
+                    var name = MakeCenterLabel(next, fx, fy + 106, Brushes.White, 16);
+                    name.FontWeight = FontWeights.Bold;
+                    var tag = MakeCenterLabel("NEXT JUMP", fx, fy + 126, InfoOrangeBrush, 10);
+                    double plateW = Math.Max(name.DesiredSize.Width, tag.DesiredSize.Width) + 20;
+                    var plate = new Border { Width = plateW, Height = 46, CornerRadius = new CornerRadius(3), IsHitTestVisible = false,
+                        Background = new SolidColorBrush(DAlpha(Color.FromRgb(0x0a, 0x10, 0x12), 0.72)) };
+                    Canvas.SetLeft(plate, fx - plateW / 2); Canvas.SetTop(plate, fy + 102);
+                    c.Children.Add(plate);
+                    c.Children.Add(name);
+                    c.Children.Add(tag);
+                }
             }
 
             // Charge ring and the lock / align text.
