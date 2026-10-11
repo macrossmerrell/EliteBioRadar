@@ -3249,11 +3249,35 @@ namespace EliteBioRadar
         // panel never needed this since it has no on-sphere badge convention at all beyond
         // Mining/Ring Mining; the legacy flat-icon renderer's overlay_badge_bio.png is what this
         // replaces for the terrain family). Same cyan as the Bio Signals stat text.
+        private const string BioGlyph =
+            "M 0.5 0.7 L 0.5 0.4 " +
+            "M 0.5 0.55 C 0.35 0.5 0.32 0.35 0.4 0.26 C 0.48 0.36 0.5 0.46 0.5 0.55 " +
+            "M 0.5 0.48 C 0.65 0.42 0.68 0.28 0.6 0.2 C 0.52 0.3 0.5 0.4 0.5 0.48";
+
         internal static Canvas MakeBioBadge(double centerX, double centerY, double size) =>
-            MakeSignalBadge(centerX, centerY, size, InfoValueBrush,
-                "M 0.5 0.7 L 0.5 0.4 " +
-                "M 0.5 0.55 C 0.35 0.5 0.32 0.35 0.4 0.26 C 0.48 0.36 0.5 0.46 0.5 0.55 " +
-                "M 0.5 0.48 C 0.65 0.42 0.68 0.28 0.6 0.2 C 0.52 0.3 0.5 0.4 0.5 0.48");
+            MakeSignalBadge(centerX, centerY, size, InfoValueBrush, BioGlyph);
+
+        // Every biological on the body fully sampled: the same leaf in gold, with a small green check in its lower-right corner.
+        internal static Canvas MakeBioCompleteBadge(double centerX, double centerY, double size)
+        {
+            var gold = new SolidColorBrush(Color.FromRgb(0xff, 0xd1, 0x66));
+            var canvas = MakeSignalBadge(centerX, centerY, size, gold, BioGlyph);
+            double d = size * 0.46;
+            var ok = new Ellipse { Width = d, Height = d, Fill = new SolidColorBrush(Color.FromRgb(0x2e, 0xa0, 0x43)),
+                Stroke = new SolidColorBrush(Color.FromRgb(0x0d, 0x14, 0x14)), StrokeThickness = 1.2 };
+            Canvas.SetLeft(ok, size - d * 0.85); Canvas.SetTop(ok, size - d * 0.85);
+            canvas.Children.Add(ok);
+            var tick = new System.Windows.Shapes.Path
+            {
+                Stroke = Brushes.White, StrokeThickness = Math.Max(1.4, size * 0.07),
+                StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round,
+                Data = Geometry.Parse("M 0.2 0.52 L 0.42 0.74 L 0.8 0.28"),
+                Stretch = Stretch.Uniform, Width = d * 0.58, Height = d * 0.58,
+            };
+            Canvas.SetLeft(tick, size - d * 0.85 + d * 0.21); Canvas.SetTop(tick, size - d * 0.85 + d * 0.21);
+            canvas.Children.Add(tick);
+            return canvas;
+        }
 
         // Mountain range — geo signal locations, same replacement rationale as the bio badge
         // above. Same orange as the Geo Signals stat text.

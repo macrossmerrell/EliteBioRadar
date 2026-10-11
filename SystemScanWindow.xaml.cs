@@ -310,6 +310,10 @@ namespace EliteBioRadar
         private void Populate()
         {
             rootStack.Children.Clear();
+            // Genera fully sampled (Analyse done) per body, read once per refresh for the "all biologicals scanned" badge.
+            _bioDone = ScanCache.LoadAll().ToDictionary(kv => kv.Key,
+                kv => kv.Value.Organisms.Where(o => o.IsComplete).Select(o => o.Genus).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                StringComparer.OrdinalIgnoreCase);
             var systemName = _watcher.StarSystem;
             txtSysName.Text = string.IsNullOrEmpty(systemName) ? "—" : systemName.ToUpperInvariant();
 
@@ -1480,8 +1484,14 @@ namespace EliteBioRadar
                     AttachTip(c, BuildTextTip(title, desc));
                     badges.Children.Add(c);
                 }
-                if (b.BioSignalCount > 0) AddBadge(MainWindow.MakeBioBadge(0, 0, iconSize), $"Biological signals ({b.BioSignalCount})",
-                    "Life detected on this body. Use the Surface Scanner (FSS/DSS) and Genetic Sampler to find and sample species for Exobiology payouts.");
+                if (b.BioSignalCount > 0)
+                {
+                    bool allScanned = _bioDone.TryGetValue(b.BodyName, out var done) && done >= b.BioSignalCount;
+                    if (allScanned) AddBadge(MainWindow.MakeBioCompleteBadge(0, 0, iconSize), $"All biologicals scanned ({b.BioSignalCount})",
+                        "Every biological signal on this body has been fully sampled.");
+                    else AddBadge(MainWindow.MakeBioBadge(0, 0, iconSize), $"Biological signals ({b.BioSignalCount})",
+                        "Life detected on this body. Use the Surface Scanner (FSS/DSS) and Genetic Sampler to find and sample species for Exobiology payouts.");
+                }
                 if (b.GeoSignalCount > 0) AddBadge(MainWindow.MakeGeoBadge(0, 0, iconSize), $"Geological signals ({b.GeoSignalCount})",
                     "Volcanic or geological features (vents, fumaroles, lava spouts). Can be sampled with the Geological Sampler for materials and data.");
                 if (b.MiningSignalCount > 0) AddBadge(MainWindow.MakeMiningBadge(0, 0, iconSize), $"Mining signals ({b.MiningSignalCount})",
@@ -1706,7 +1716,7 @@ namespace EliteBioRadar
         private static FrameworkElement MakeMappedRing(double size, bool front)
         {
             double c = size / 2, R = size * 0.41, rx = R * 1.2, ry = R * 0.34;
-            double w = Math.Max(1.0, size * 0.026);
+            double w = size < 40 ? 2.2 : Math.Max(1.0, size * 0.026);   // small thumbnails: a pixel or two thicker so the ring stands out
             var canvas = new Canvas { Width = size, Height = size, IsHitTestVisible = false };
             var fig = new PathFigure { StartPoint = new Point(c - rx, c) };
             fig.Segments.Add(new ArcSegment(new Point(c + rx, c), new Size(rx, ry), 0, false,
@@ -1915,6 +1925,7 @@ namespace EliteBioRadar
         // Built thumbnails are kept for the life of the window and handed out again on every repopulate (an element can only sit in one
         // place, so it is detached from the old tree first). One entry per body and size: when a re-scan changes what the render depends on
         // (the signature), the entry is rebuilt and replaces the old one, so the cache holds at most one element per body and size.
+        private Dictionary<string, int> _bioDone = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, (string signature, UIElement element)> _thumbCache = new();
 
         private UIElement? GetCachedThumb(string key, string signature, Func<UIElement?> build)
