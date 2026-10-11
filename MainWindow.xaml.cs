@@ -289,7 +289,16 @@ namespace EliteBioRadar
                 // hotspot data can arrive and mutate that same object well after it was first
                 // rendered, with nothing else about the reference itself changing.
                 svc.PlanetTargetUpdated += (_, __) => Dispatcher.InvokeAsync(() => { _manualMode = null; RefreshAll(); UpdateInfoPlanetPanel(force: true); });
-                svc.DestinationUpdated  += (_, __) => Dispatcher.InvokeAsync(() => { _manualMode = null; RefreshAll(); });
+                // DestinationUpdated also fires for things that are not the player choosing a target (a Loadout line when stepping out of
+                // or back into the ship, a NavRoute.json rewrite, fuel/jump-range updates). Only a fresh jump target clears a tab the
+                // player picked by hand; otherwise a manual Radar choice snapped back to Destination whenever one of those arrived.
+                svc.DestinationUpdated  += (_, __) => Dispatcher.InvokeAsync(() =>
+                {
+                    var targetedAt = _watcher?.FsdTargetedAt ?? default;
+                    if (targetedAt != _lastDestTargetedAtSeen || _watcher?.CurrentDestination == null) _manualMode = null;
+                    _lastDestTargetedAtSeen = targetedAt;
+                    RefreshAll();
+                });
                 svc.OrganismScanned   += (_, args) => Dispatcher.InvokeAsync(() =>
                 {
                     _activeGenus = args.Organism.Genus;
@@ -623,6 +632,7 @@ namespace EliteBioRadar
         // proper doesn't drop it until afterward — so this costs nothing for the real case.
         private bool _deorbitSeqActive;
         private bool _prevHasPositionForSeq;
+        private DateTime _lastDestTargetedAtSeen = DateTime.MinValue;
         private DateTime _positionSinceUtc = DateTime.MinValue;
         private DateTime _positionLostSince = DateTime.MinValue;
         private bool _prevIsGlidingForSeq;

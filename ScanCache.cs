@@ -110,6 +110,10 @@ namespace EliteBioRadar
 
         private static readonly object _lock = new();
 
+        // Bumped after every organism save, so a window showing scan progress (System Scan's "all biologicals scanned" badge) can tell the
+        // saved data changed and refresh.
+        public static int Version { get; private set; }
+
         // ---------------------------------------------------------------
         public static (string BodyName, LoadedBodyData Data) LoadLastActiveBody()
         {
@@ -243,6 +247,7 @@ namespace EliteBioRadar
                         };
 
                     WriteAll(all);
+                    Version++;
                     Log.Write($"ScanCache: saved '{bodyName}' bio={bioCount} genera={genera.Count} scans={toSave.Count}");
                 }
             }

@@ -173,7 +173,7 @@ namespace EliteBioRadar
                 .Select(b => $"{b.BodyName}:{b.BioSignalCount}:{b.GeoSignalCount}:{b.MiningSignalCount}:{b.IsMapped}:{b.Materials.Count}:{b.WasDiscovered}:{b.WasMapped}:{b.WasFootfalled}"))
             // Version bumps when the discovery index finishes its startup pass (or a live
             // discovery lands), so the D badges appear/disappear without needing a body to change.
-            + "#" + DiscoveryIndex.Version + "#" + MaterialInventory.Version;
+            + "#" + DiscoveryIndex.Version + "#" + MaterialInventory.Version + "#" + ScanCache.Version;
 
         public SystemScanWindow(EliteWatcherService watcher)
         {

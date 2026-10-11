@@ -4349,6 +4349,7 @@ namespace EliteBioRadar
                     // shows), using the journal line's own timestamp rather than "now" so
                     // the PLANET-vs-DESTINATION "most recently targeted" comparison in
                     // MainWindow.ComputeMode reflects true in-game chronology, not replay time.
+                    string prevTarget = CurrentDestination?.NextSystem ?? "";
                     CurrentDestination ??= new DestinationInfo();
                     CurrentDestination.NextSystem            = obj.Value<string>("Name") ?? "";
                     CurrentDestination.StarClass             = obj.Value<string>("StarClass") ?? "";
@@ -4371,7 +4372,13 @@ namespace EliteBioRadar
                     var fsdTargetTs = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
                     bool startupAnnouncement = _lastLoadGameAt != default &&
                         (fsdTargetTs - _lastLoadGameAt).TotalSeconds is >= 0 and < 120;
-                    if (!startupAnnouncement) FsdTargetedAt = fsdTargetTs;
+                    // The game also repeats the same FSDTarget line on its own while descending or gliding to a planet. A repeat of the
+                    // target we already have, with no panel open (GuiFocus 0), is not the player picking it, so it must not flip the
+                    // app to the Destination tab once they have landed.
+                    bool sameTargetRepeat = prevTarget.Length > 0 &&
+                        string.Equals(prevTarget, CurrentDestination.NextSystem, StringComparison.OrdinalIgnoreCase) &&
+                        !backfill && CurrentStatus.GuiFocus == 0;
+                    if (!startupAnnouncement && !sameTargetRepeat) FsdTargetedAt = fsdTargetTs;
                     // TotalRouteJumps/TotalRouteLy are (re)derived from the persisted route
                     // cache inside LoadNavRoute -> EnsureRouteState, not tracked here.
                     LoadNavRoute();

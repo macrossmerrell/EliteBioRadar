@@ -22,7 +22,7 @@ namespace EliteBioRadar
         // complete" if the real charge runs longer).
         // A hyperspace charge takes about 15 s. The first ~2.5 s are the align-and-lock beat; the charge ring then fills across the rest
         // of the real spool-up and holds just short of full until the drive actually fires.
-        private const double JumpChargeSeconds = 15.0, JumpLockSeconds = 2.5, JumpFlashSeconds = 1.6, JumpCountdownSeconds = 4.0;
+        private const double JumpChargeSeconds = 15.0, JumpLockSeconds = 2.5, JumpFlashSeconds = 1.6, JumpStartDelaySeconds = 5.0;
 
         private void ResetAscentState()
         {
@@ -275,11 +275,12 @@ namespace EliteBioRadar
             var now = DateTime.UtcNow;
             double t = Environment.TickCount64 / 1000.0;
             double p;
-            // Two stages that follow the game: charging (until the journal's StartJump), then the jump itself - the flash, then the tunnel
-            // until arrival - which starts the moment the jump does.
+            // Stages that follow the game: charging (until the journal's StartJump), the 3-2-1-0 countdown (the game's own, which runs after
+            // StartJump is logged: the jump really starts JumpStartDelaySeconds later), then the jump - the flash, then the tunnel until arrival.
             bool jumped = _watcher != null && _watcher.HyperspaceJumpStartedAt > _jumpChargeStart;
-            bool tunnelStarted = jumped;
-            double tt = jumped ? (now - _watcher!.HyperspaceJumpStartedAt).TotalSeconds : -1;
+            double tj = jumped ? (now - _watcher!.HyperspaceJumpStartedAt).TotalSeconds : -1;
+            bool tunnelStarted = jumped && tj >= JumpStartDelaySeconds;
+            double tt = tunnelStarted ? tj - JumpStartDelaySeconds : -1;
             if (tunnelStarted && tt >= JumpFlashSeconds)
             {
                 DrawHyperspaceTunnel(c, t, _watcher?.CurrentDestination?.NextSystem ?? "");
@@ -287,6 +288,8 @@ namespace EliteBioRadar
             }
             if (tunnelStarted)
                 p = 0.9 + 0.1 * Math.Clamp(tt / JumpFlashSeconds, 0, 1);
+            else if (jumped)
+                p = 0.895;   // counting down: the charge ring stays full
             else
             {
                 double el = (now - _jumpChargeStart).TotalSeconds;
@@ -369,12 +372,10 @@ namespace EliteBioRadar
                 }
                 arc.Freeze();
                 c.Children.Add(new Path { Data = arc, Stroke = new SolidColorBrush(lockCol), StrokeThickness = 4.5, IsHitTestVisible = false });
-                // The game counts 3..0 over the last seconds of the charge before the jump starts; the charge length is the usual ~15 s, so
-                // the count is estimated from it and holds at 0 until the real StartJump arrives.
-                double remaining = JumpChargeSeconds - (now - _jumpChargeStart).TotalSeconds;
-                if (remaining <= JumpCountdownSeconds)
+                // After StartJump: a beat, then 3, 2, 1, 0 a second apiece, then the jump.
+                if (jumped)
                 {
-                    int n = Math.Max(0, (int)Math.Ceiling(remaining - (JumpCountdownSeconds - 3)));
+                    int n = tj < 1 ? 3 : Math.Max(0, 3 - (int)Math.Floor(tj - 1));
                     var cd = MakeCenterLabel(n.ToString(), fx, fy - 14, Brushes.White, 28);
                     cd.FontWeight = FontWeights.Bold;
                     c.Children.Add(cd);
