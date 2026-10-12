@@ -34,7 +34,7 @@ namespace EliteBioRadar
             bool atmo = !gas && PlanetRenderer.IsAtmoWorld(d, iconCode);
             bool landable = !gas && !atmo && PlanetRenderer.IsLandableWorld(d, iconCode);
             bool ringed = d.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0);
-            // Terrain planets without a shader of their own (landable rocky ice, airless bodies) still get the ring shader when ringed.
+            // Terrain planets without a shader of their own still get the ring shader when ringed.
             if (!gas && !atmo && !landable && !(ringed && PlanetRenderer.IsTerrainFamily(iconCode))) return null;
             try
             {

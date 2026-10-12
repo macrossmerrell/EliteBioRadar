@@ -99,7 +99,7 @@ namespace EliteBioRadar
 
         // ---- GPU landable worlds (Shaders\LandableWorld.fx) ----
         public static bool IsLandableWorld(BodyScanDetail detail, string iconCode) =>
-            (iconCode == "HMC" || iconCode == "ICY" || iconCode == "RBD" || iconCode == "MRB") && detail.Landable;
+            (iconCode == "HMC" || iconCode == "ICY" || iconCode == "RBD" || iconCode == "MRB" || iconCode == "RIB") && detail.Landable;
 
         // Calibrated against five real landable HMC screenshots (matched to their journal scans).
         // All five carry the same composition (iron ~22%, nickel ~17%, sulphur ~16%) yet look
@@ -116,6 +116,7 @@ namespace EliteBioRadar
             if (iconCode == "ICY") return GetIcyLandableLook(detail, hash, temp);
             if (iconCode == "RBD") return GetRockyLandableLook(detail, hash);
             if (iconCode == "MRB") return GetMetalRichLandableLook(detail, hash);
+            if (iconCode == "RIB") return GetRockyIceLandableLook(detail, hash);
 
             // Colour does not follow temperature (13 real bodies from 450 K to 900 K ranged over every look), so it is
             // picked from the name hash across all eleven looks.
@@ -125,13 +126,14 @@ namespace EliteBioRadar
             int look = (hash >> 4) % 11;   // by name alone: a star-group window did not hold up against real rocky bodies
             // Three looks added from a 40-body review of real screenshots. The blue-grey one appeared only on landables with a thin
             // atmosphere (3 of 6 of those, 0 of 17 airless), so it takes about half of them; the pale grey-white and the yellow-green
-            // each turned up on about 1 in 13 bodies, so a small slice of the others is diverted to them (the rest keep their old pick).
+            // (and the warm cream one) each turned up on about 1 in 13 bodies, so a small slice of the others is diverted to them (the rest keep their old pick).
             if (detail.SurfacePressure > 0 && ((hash >> 20) & 1) == 0) look = 11;
             else
             {
                 int slice = (hash >> 18) % 13;
                 if (slice == 0) look = 12;
                 else if (slice == 1) look = 13;
+                else if (slice == 2) look = 14;
             }
 
             var l = new LandableWorldLook
@@ -157,20 +159,20 @@ namespace EliteBioRadar
                 case 3: // dim smooth grey-green
                     l.Light = rgb(84, 90, 78); l.Dark = rgb(58, 64, 56); l.Accent = rgb(84, 80, 60); l.Bright = rgb(150, 156, 144);
                     l.Contrast = 0.35; l.RustAmt = 0.0; l.BrightAmt = 0.0; l.CraterAmt = 0.4; l.RayAmt = 0.0; break;
-                case 5: // orange-tan, large smooth pale patches (real: DG-F b25-0 B 1)
-                    l.Light = rgb(190, 140, 106); l.Dark = rgb(134, 98, 78); l.Accent = rgb(170, 112, 78); l.Bright = rgb(214, 170, 120);
-                    l.Contrast = 0.55; l.RustAmt = 0.15; l.BrightAmt = 0.7; l.CraterAmt = 0.4; l.RayAmt = 0.0; break;
+                case 5: // orange-tan, large smooth pale patches, dark brown flecks and big dark-spoked craters (real: DG-F b25-0 B 1, Qiedea FX-S d4-0 4)
+                    l.Light = rgb(190, 140, 102); l.Dark = rgb(122, 90, 70); l.Accent = rgb(98, 74, 56); l.Bright = rgb(214, 172, 124);
+                    l.Contrast = 0.55; l.RustAmt = 0.3; l.BrightAmt = 0.7; l.CraterAmt = 0.8; l.RayAmt = -0.9; break;
                 case 6: // grey-brown with olive-grey basins and a dark-rayed crater (B 2)
                     l.Light = rgb(110, 100, 92); l.Dark = rgb(74, 72, 64); l.Accent = rgb(88, 78, 72); l.Bright = rgb(128, 112, 100);
                     l.Contrast = 0.65; l.RustAmt = 0.15; l.BrightAmt = 0.3; l.CraterAmt = 0.5; l.RayAmt = -0.6; break;
                 case 7: // olive-tan with green patches, dark-rayed craters (C 3)
                     l.Light = rgb(150, 138, 112); l.Dark = rgb(104, 106, 78); l.Accent = rgb(100, 112, 70); l.Bright = rgb(108, 128, 70);
                     l.Contrast = 0.7; l.RustAmt = 0.2; l.BrightAmt = 0.55; l.CraterAmt = 0.6; l.RayAmt = -0.9; break;
-                case 8: // dark brown mottled (C 4)
-                    l.Light = rgb(124, 96, 80); l.Dark = rgb(66, 54, 46); l.Accent = rgb(110, 62, 48); l.Bright = rgb(150, 124, 108);
-                    l.Contrast = 0.9; l.RustAmt = 0.4; l.BrightAmt = 0.25; l.CraterAmt = 0.4; l.RayAmt = 0.0; break;
-                case 9: // salmon with tiny dark-green flecks and big dark-rayed craters (C 2)
-                    l.Light = rgb(206, 156, 118); l.Dark = rgb(150, 118, 96); l.Accent = rgb(60, 70, 44); l.Bright = rgb(224, 184, 150);
+                case 8: // dark rust-brown with charcoal blotches and grey-tan flakes (C 4; real: Qiedea GI-X b19-0 4, TD-Z b17-0 1 - dimmer than first drawn)
+                    l.Light = rgb(112, 84, 68); l.Dark = rgb(60, 50, 45); l.Accent = rgb(78, 80, 66); l.Bright = rgb(132, 124, 106);
+                    l.Contrast = 0.9; l.RustAmt = 0.4; l.BrightAmt = 0.55; l.CraterAmt = 0.7; l.RayAmt = -0.9; break;
+                case 9: // salmon with grey-green flecks and big dark-rayed craters (C 2; darkened after TD-Z b17-0 1 was far dimmer in game)
+                    l.Light = rgb(180, 130, 100); l.Dark = rgb(118, 90, 72); l.Accent = rgb(78, 84, 60); l.Bright = rgb(190, 160, 134);
                     l.Contrast = 0.6; l.RustAmt = 0.45; l.BrightAmt = 0.25; l.CraterAmt = 0.8; l.RayAmt = -1.0; break;
                 case 10: // rust red with rayed craters (C 1)
                     l.Light = rgb(176, 88, 58); l.Dark = rgb(110, 62, 48); l.Accent = rgb(96, 64, 56); l.Bright = rgb(150, 112, 120);
@@ -184,14 +186,18 @@ namespace EliteBioRadar
                 case 13: // olive-green with large bright sulphur-yellow patches and dark brown blotches (real: Qiedea GI-X b19-0 3, AH-T d4-6 B 2 a)
                     l.Light = rgb(176, 172, 80); l.Dark = rgb(92, 100, 52); l.Accent = rgb(70, 56, 40); l.Bright = rgb(224, 218, 112);
                     l.Contrast = 0.9; l.RustAmt = 0.5; l.BrightAmt = 0.8; l.CraterAmt = 0.3; l.RayAmt = 0.3; break;
-                default: // salmon-orange with brown mottling, rayed craters
-                    l.Light = rgb(192, 148, 114); l.Dark = rgb(104, 78, 58); l.Accent = rgb(116, 86, 62); l.Bright = rgb(222, 188, 160);
-                    l.Contrast = 0.75; l.RustAmt = 0.1; l.BrightAmt = 0.0; l.CraterAmt = 0.9; l.RayAmt = 0.9; break;
+                case 14: // warm sandy cream-tan with grey-brown and rust patches and a rayed crater (real: Qiedea FX-S d4-0 1 paler, 2 more tan)
+                    l.Light = rgb(208, 178, 140); l.Dark = rgb(152, 130, 106); l.Accent = rgb(122, 92, 72); l.Bright = rgb(232, 210, 178);
+                    l.Contrast = 0.55; l.RustAmt = 0.5; l.BrightAmt = 0.5; l.CraterAmt = 0.9; l.RayAmt = 0.9; break;
+                default: // salmon-orange with brown mottling, grey-green flakes and dark-spoked craters (real: Qiedea FX-S d4-0 3 was darker and greyer)
+                    l.Light = rgb(172, 128, 98); l.Dark = rgb(88, 66, 52); l.Accent = rgb(92, 94, 72); l.Bright = rgb(150, 140, 114);
+                    l.Contrast = 0.75; l.RustAmt = 0.35; l.BrightAmt = 0.35; l.CraterAmt = 0.9; l.RayAmt = -0.9; break;
             }
 
-            // Frost on the cold bodies.
+            // Frost on the cold bodies: small polar patches at most. The first version covered whole hemispheres, but the real airless cold bodies
+            // (Qiedea FX-S d4-0 4, 5 and 6 at 232 / 196 / 173 K) showed none or one small polar patch.
             if (temp > 0 && temp < 250)
-                l.IceAmt = 0.20 + 0.35 * (((hash >> 9) % 100) / 100.0);
+                l.IceAmt = 0.08 + 0.22 * (((hash >> 9) % 100) / 100.0);
             // No glowing flecks on hot magma-volcanic landable bodies: two real ones (Qiedea ZW-R d5-22 C 1, 864 K, and the Metal-rich B 1, 1153 K) show none in
             // game. (The non-landable lava worlds above 1,500 K keep their glow - that one was matched to a real body.)
             return l;
@@ -272,6 +278,38 @@ namespace EliteBioRadar
                 default: // dark rust-pink with gold flecks
                     l.Light = rgb(136, 98, 92); l.Dark = rgb(86, 64, 60); l.Accent = rgb(74, 62, 48); l.Bright = rgb(214, 176, 96);
                     l.Contrast = 0.90; l.RustAmt = 0.30; l.BrightAmt = 0.25; l.CraterAmt = 0.5; l.RayAmt = 0.1; l.SpecAmt = 0.9; break;
+            }
+            return l;
+        }
+
+        // Landable ROCKY ICE bodies (composition about 43-49% ice, 34-38% rock, 17-19% metal), airless, 128-238 K. Four real examples, four different
+        // looks (Qiedea FX-S d4-0 7; Qiedea TD-Z b17-0 3, 4 and 5), so a name hash picks one of four. All four carry frost at the poles.
+        private static LandableWorldLook GetRockyIceLandableLook(BodyScanDetail detail, int hash)
+        {
+            Color rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
+            var l = new LandableWorldLook
+            {
+                Ice = rgb(226, 230, 236), Hot = rgb(255, 120, 40),
+                Seed = (hash % 5000) / 100.0 + 1.0,
+                Tilt = (((hash >> 3) % 100) / 100.0 - 0.5) * 0.35,
+                Pitch = (((hash >> 12) % 9) - 4) * 0.08,
+                Mottle = 0.85 + ((hash >> 7) % 40) / 100.0,
+                AtmGlow = 0.0, HotAmt = 0.0, SpecAmt = 0.25,
+            };
+            switch ((hash >> 4) % 4)
+            {
+                case 0: // sandy orange-tan with grey-brown patches, fine white speckles and a large polar cap (real: FX-S d4-0 7)
+                    l.Light = rgb(198, 150, 108); l.Dark = rgb(142, 108, 82); l.Accent = rgb(104, 82, 66); l.Bright = rgb(236, 230, 222);
+                    l.Contrast = 0.6; l.RustAmt = 0.35; l.BrightAmt = 0.2; l.CraterAmt = 0.5; l.RayAmt = 0.0; l.IceAmt = 0.50; break;
+                case 1: // dark chocolate-brown, fine grain, faint pinkish streaks, small frost caps (real: TD-Z b17-0 3)
+                    l.Light = rgb(98, 72, 62); l.Dark = rgb(62, 50, 46); l.Accent = rgb(128, 92, 82); l.Bright = rgb(150, 112, 104);
+                    l.Contrast = 0.45; l.RustAmt = 0.6; l.BrightAmt = 0.1; l.CraterAmt = 0.2; l.RayAmt = 0.0; l.IceAmt = 0.36; break;
+                case 2: // pale grey-white frost with green-grey wavy ridges and large dark grey basins (real: TD-Z b17-0 4)
+                    l.Light = rgb(192, 200, 196); l.Dark = rgb(92, 98, 98); l.Accent = rgb(128, 146, 134); l.Bright = rgb(234, 238, 236);
+                    l.Contrast = 1.0; l.RustAmt = 0.8; l.BrightAmt = 0.6; l.CraterAmt = 0.3; l.RayAmt = 0.0; l.IceAmt = 0.0; l.AtmGlow = 0.2; break;
+                default: // rust-brown with a network of pale vein-like cracks and a strong blue limb (real: TD-Z b17-0 5)
+                    l.Light = rgb(134, 86, 72); l.Dark = rgb(80, 58, 54); l.Accent = rgb(120, 80, 72); l.Bright = rgb(150, 112, 104);
+                    l.Ice = rgb(168, 162, 168); l.Contrast = 0.7; l.RustAmt = 0.4; l.BrightAmt = 0.15; l.CraterAmt = 0.2; l.RayAmt = 0.0; l.LineAmt = 1.0; l.IceAmt = 0.3; l.AtmGlow = 0.45; break;
             }
             return l;
         }
