@@ -22,12 +22,12 @@ There are multiple windows you can use: the **main window**, which follows whate
 
 The tab bar switches automatically between six modes based on what you're actually doing. Click a tab to override it manually — it stays put until something real changes (a new target, a jump, landing).
 
-- **🛰️ RADAR** — your boots-on-the-ground and low-altitude instrument. Colony-exclusion range rings around organisms you've scanned, scan dots that change color through the Log → Sample → Sample → Analyse sequence, geological site markers, and a dashed ship-departure-range ring so you know how far you can wander before losing the ability to call your ship back.
-- **☀️ STAR** — class, solar mass, age, temperature, radius, rings, habitable zone.
-- **🪐 PLANET** — a rendered scene instead of a flat icon: terrain worlds get procedural craters, fissures, material-tinted surface, rings when present, and an atmosphere glow that scales with actual surface pressure. Class, gravity, atmosphere, bio/geo/mining signal counts, scan-state tag, DSS composition once mapped. A "D" badge marks a body someone else discovered first; an "M" badge marks one someone else already mapped — both read from your own journal history, so they never credit another commander for something you did yourself. An optional **Gravity Warning** flags a landable body's gravity in a caution colour once it meets or exceeds a threshold you set.
-- **⛛ DEORBIT / ⤒ LAUNCH** — takes over while you're descending or launching: a glide-path scene using the same rendered planet as the Planet tab, with a ship that follows your telemetry-derived altitude and vertical speed instead of a fixed-duration animation. Holds on a neutral state until it actually knows which direction you're going.
-- **📡 FSS SCANNER** — takes over while the FSS scanner is open: an orbital overview with the star at center and every resolved planet placed on a distance-ranked ring, zooming into a planet's own moons once you resolve one.
-- **🧭 DESTINATION** — live jump range from your ship's actual stats and current fuel, the full plotted route, a hop counter and progress bar, and route progress that survives a restart.
+- **🛰️ RADAR** — your boots-on-the-ground and low-altitude instrument. Colony-exclusion range rings around organisms you've scanned, scan dots that change color through the Log → Sample → Sample → Analyse sequence, geological site markers, and a dashed ship-departure-range ring so you know how far you can wander before losing the ability to call your ship back. A **ship event chip** at the top centre announces what you just did (gear, lights, cargo scoop, hardpoints, night vision, SRV drive assist and brake, boarding, liftoff and more), and on foot a persistent **hazard chip** shows overheating, freezing, low oxygen or low health with the live reading until the danger passes.
+- **☀️ STAR** — class, solar mass, age, temperature, radius, rings, habitable zone. Shows a "fuel scooping" title while you're scooping.
+- **🪐 PLANET** — a live, GPU-rendered planet instead of a flat icon: gas giants, thick-atmosphere worlds, landable and airless worlds (including rocky ice) and rings are drawn by pixel shaders, with craters and rays, frost, atmosphere glow scaled to actual surface pressure, and colour that follows the star's light for hot blue-white stars. Class, gravity, atmosphere, bio/geo/mining signal counts, scan-state tag, DSS composition once mapped. A "D" badge marks a body someone else discovered first; an "M" badge marks one someone else already mapped — both read from your own journal history, so they never credit another commander for something you did yourself. An optional **Gravity Warning** flags a landable body's gravity in a caution colour once it meets or exceeds a threshold you set. On software-only rendering it falls back to the older CPU render. See [Planet rendering](#planet-rendering).
+- **⛛ DEORBIT / ⤒ LAUNCH** — takes over while you're descending or launching: a glide-path scene using the same rendered planet as the Planet tab, with a ship that follows your telemetry-derived altitude and vertical speed instead of a fixed-duration animation (drawn once per display frame, so it stays smooth). Holds on a neutral state until it actually knows which direction you're going. A **hyperspace jump from a planet** plays here too: target alignment and lock, the charge ring, the 3-2-1-0 countdown once the jump starts, then the flash and the hyperspace tunnel until you arrive.
+- **📡 FSS SCANNER** — takes over while the FSS scanner is open: an orbital overview with the star at center and every resolved planet placed on a distance-ranked ring, zooming into a planet's own moons once you resolve one. The manifest sorts live by real designation (stars first, then planets by star letter and number).
+- **🧭 DESTINATION** — live jump range from your ship's actual stats and current fuel, the full plotted route, a hop counter and progress bar, and route progress that survives a restart. Choosing the next system while you're on a planet, or from the cockpit panel in space, brings it up; clearing the route sends a planet back to the radar.
 
 A left-side **Biological & Geological Sites** panel and a right-side **Bio Survey** sidebar stay available throughout, with per-organism payout figures, wiki links, and a First Footfall indicator.
 
@@ -35,6 +35,10 @@ A left-side **Biological & Geological Sites** panel and a right-side **Bio Surve
 
 Everything scanned in the current system, opened from the top bar. Every body gets a card: a real render, class, bio/geo/mining signal badges with hover tooltips, a habitable-zone chip, a "high value" chip, and material chips you can hover for a full breakdown.
 
+- **Live thumbnails** — planets, moons and stars are drawn with the same shaders as the Planet tab (rings and all), not flat icons; each star card also shows its **distance from the primary star**.
+- **Mapped marker** — a body you've DSS-mapped gets a small tilted orbit ring around its thumbnail (the planet stays fully visible).
+- **All-scanned badge** — the leaf badge turns gold with a green check once every biological signal on a body is fully sampled, and it updates as you finish the last species.
+- **Revisited systems** — jumping back to a system you've already scanned restores its bodies instead of leaving the window blank (the game doesn't re-send scans for bodies you already have).
 - **Colored outlines** on the cards mark terraformable, water world, earthlike, and ammonia-world bodies, and habitable-zone placement, at a glance.
 - **Current value updates live** as you scan and map bodies — the figure on each card is the body's actual current worth, not a one-time estimate frozen at first scan.
 - **Discovery and mapping notifications** — the "D" and "M" badges flag a body already discovered or mapped by another commander, worked out from your own journal history so it only fires when it genuinely wasn't you.
@@ -88,6 +92,8 @@ Scan locations, First Footfall status, earnings, route progress, trip value, and
   - ⚫ Grey — fully logged, shown as a faint reference marker
 - **Off-screen indicators** — dots outside the current zoom range are clamped to the radar edge
 - **Geological scan markers** — discovered geological sites are shown on the radar as distinct markers separate from biological scan dots
+- **Ship event chip** — a small chip at the top centre of the radar announces ship, SRV and suit events as they happen (landing gear, headlights, cargo scoop, hardpoints, flight assist, silent running, shields, night vision, SRV drive assist / brake / high beam, boarding and leaving the ship or SRV, liftoff and touchdown, low fuel, overheating, being interdicted). Events queue so none is lost, with a tone for each (on, off, movement, caution, danger).
+- **On-foot hazard chip** — while on foot, an overheating, freezing, low-oxygen or low-health condition stays on screen with its live reading (temperature in K, oxygen and health as a percentage) until it clears, with cold shown in blues and heat in ambers and reds that deepen with severity; an **Injury Detected** event fires when your health drops.
 - Automatically takes over the info panel the instant Latitude/Longitude becomes available (on foot, ship on the surface, SRV, etc.)
 
 ### Star / Planet / Destination / Deorbit / FSS Scanner Info Panel
@@ -98,7 +104,7 @@ The RADAR tab only means something while you have Lat/Long. The rest of the time
   - **DEORBIT/LAUNCH** wins while you're descending toward or launching from a body but don't yet have (or have just lost) a real ground position
   - **RADAR** wins the instant Lat/Long is available (landing always takes priority)
   - **FSS SCANNER** wins while the FSS scanner is open
-  - **DESTINATION** wins the instant the FSD starts charging for a real hyperspace jump — read directly from `Status.json`, so it's immediate even from within a landable atmosphere, and never triggers for a plain or SCO-boosted supercruise charge
+  - **DESTINATION** wins the instant the FSD starts charging for a real hyperspace jump from open space — read directly from `Status.json`, so it's immediate, and never triggers for a plain or SCO-boosted supercruise charge. A hyperspace charge that begins on or just above a planet gets the jump scene on the DEORBIT / LAUNCH tab instead (see below)
   - **STAR** or **PLANET** shows whichever body is currently targeted (including a secondary/tertiary star, or a nav-panel signal resolved to its real parent body)
   - Falls back to **STAR** (the primary star) when nothing else applies
   - **Click any tab manually** to override the automatic choice — it stays there until a genuine new event clears the override, so you can check something on another tab and it won't snap back on its own
@@ -328,6 +334,8 @@ Elite Dangerous writes `Status.json` every ~250ms. The app polls every 300ms wit
 
 FSD hyperdrive charging (which drives the automatic switch to the DESTINATION tab) is read directly from `Flags2` bit 19 (`FsdHyperdriveCharging`) rather than the journal's `StartJump` event — that journal write can lag or occasionally not land promptly, while `Status.json` reflects the charge the instant it starts and clears the instant it stops. `Flags` bit 17 (`FsdCharging`) is set for both a real hyperspace charge and a plain supercruise charge and so isn't specific enough on its own; `Flags2` bit 19 only fires for an actual jump.
 
+The same file also feeds the ship event chip and the on-foot hazard chip: `Flags` bits for gear, lights, cargo scoop, hardpoints, flight assist, silent running, shields, scooping, SRV drive assist / handbrake / high beam, night vision and low fuel; `Flags2` for on-foot state, cold / hot / very cold / very hot, low oxygen and low health; and, on foot, the suit's `Temperature`, `Oxygen` and `Health`. Every flag change is edge-triggered, so starting the app or switching between ship, SRV and on foot never announces the current state of the switches.
+
 ### NavRoute.json / route persistence
 `NavRoute.json` only ever shows the route from your current position onward — it shrinks every jump and never lists hops already passed. Its **last** entry (the final destination) is the one thing that stays constant for a route's entire lifetime, so it's used as the identity key for the persisted route cache (`EliteBioRadar.route.json`): as long as the final destination still matches, the cached full route/hop position/total distance are reused; the moment it changes, that's treated as a new route and the cache resets.
 
@@ -336,6 +344,17 @@ A signal picked in the nav panel (e.g. a Planetary Mining Location Signal) repor
 
 ### Deorbit/Launch telemetry
 Altitude and vertical speed are derived from `Status.json` updates that only actually change a few times a second, dead-reckoned forward between updates using the last known sink rate, bounded so one noisy reading can't fling the estimate off course. Progress along the glide arc is monotonic — it can only move forward, never backward, however the underlying estimate jitters. Direction (ascending vs descending) requires a sustained reading before committing to either the launch or descent scene, and the animation state is fully reset on every entry to and exit from the mode, so a stale leftover from a previous glide can't bleed into the next one.
+
+### Hyperspace jump scene
+The jump screen only plays for a hyperspace charge that begins at a planet (latitude/longitude present, not in supercruise); a charge begun in space or supercruise never arms it. It follows the game's own sequence: while `Flags2` bit 19 reports the charge, it shows target alignment and lock and a filling charge ring; once the journal logs `StartJump` (Hyperspace) the ring holds full for about 5 seconds with a 3-2-1-0 countdown, then the flash and the hyperspace tunnel play until the `FSDJump` arrival. The countdown length is measured from real jumps, not read from the game, which doesn't report it. The arming survives a momentary dip of the charge flag and lapses a few seconds after the charge state ends.
+
+### Planet rendering
+Planets are drawn live by compiled pixel shaders (`Shaders\*.fx`, compiled to `.ps` with `fxc` and checked in, so a normal build needs no Windows SDK; `Shaders\compile.ps1` rebuilds them after an edit). One shared scene builder feeds the Planet tab, the System Scan thumbnails and the landing scene: gas giants, thick-atmosphere worlds, and a landable-world shader that also draws airless and Metal-rich worlds, rocky ice and icy moons, with a separate ring shader. On software-only rendering, or if a shader fails to set up, the older CPU renderer is used instead.
+
+- **Looks are per body, not computed from conditions.** The game gives bodies with identical class, composition, temperature and star very different surfaces, and no journal field has been found that predicts it (BodyID, SystemAddress, temperature, gravity, materials and star type were all tested), so the look is chosen from a curated set by a stable hash of the body name, with the set itself built from real in-game screenshots.
+- **Rules that held up against real bodies:** a thin atmosphere on a landable body shifts it toward a dark blue-grey look with a blue rim; nitrogen atmospheres draw ochre-gold; hot bodies (about 1130 K and up) draw near-black with glowing lava patches, and very hot thick-atmosphere bodies (about 2500 K and up, including silicate vapour) draw a pale marbled cloud layer; frost is limited to small polar patches on cold airless bodies.
+- **Starlight tint.** A surface looks like its albedo times the star's light: the same Metal-rich class is brick red under an M0 star and blue-grey under a B7 star. For hot stars (A, B and O) the landable looks and the rings are tinted by the star's light colour, and Metal-rich bodies start from a neutral grey. Cooler stars are not tinted, because the existing looks were tuned from bodies of those stars.
+- **Latitude/longitude mapping** pinches at the poles, so the shader fades its fine detail out toward them, and the landing scene turns the planet a quarter turn so the visible ground sits on the equator.
 
 ### Journal events used
 
@@ -348,8 +367,11 @@ Altitude and vertical speed are derived from `Status.json` updates that only act
 | `Scan` | Star/planet/asteroid-belt scan — provides `WasFootfalled`/`WasDiscovered`/`WasMapped` for payout and discovery-credit calculation, and the physical detail shown on the STAR/PLANET/System Scan views |
 | `FSDTarget` | Nav-panel/galaxy-map target set — drives the DESTINATION tab's next-system info |
 | `Loadout` / `LoadGame` | Ship jump range/fuel capacity, FSD module stats, and current ship type/ID — used for live jump range and EDSM attribution |
-| `StartJump` | Backup signal for FSD charging (see Status.json polling above) |
+| `StartJump` | Backup signal for FSD charging (see Status.json polling above), and the moment a hyperspace jump begins - starts the jump scene's countdown |
 | `Disembark` | Confirms First Footfall when player steps off ship on an unvisited planet |
+| `Liftoff` / `Touchdown` / `LaunchSRV` / `DockSRV` / `Embark` | Ship event chip on the Radar tab (live lines only, never replayed at startup) || `NavRouteClear` | Route cleared or next system un-selected - forgets the destination so a planet goes back to the radar || `CodexEntry` | A geological site scan on the current body, so Geo Survey registers it (a live scan switches the display to its body if another planet was being previewed) |
+| `NavRouteClear` | Route cleared or next system un-selected - forgets the destination so a planet goes back to the radar |
+| `CodexEntry` | A geological site scan on the current body, so Geo Survey registers it (a live scan switches the display to its body if another planet was being previewed) |
 | `Touchdown` | Body detection — loads cached scan history |
 | `LeaveBody` | Clears radar display, preserves cache |
 | `FSDJump` / `CarrierJump` | Clears display, wipes cache for old body, clears and rebuilds planet lists for new system |
@@ -398,7 +420,7 @@ These files are created next to the exe and are excluded from the repository:
 | `EliteBioRadar.trip.json` | Persistent trip-value total (System Scan's Trip Scans bar), independent of lifetime Earnings |
 | `EliteBioRadar.regions.json` | System-to-galactic-region lookup cache, used by the Scan Log's Region grouping |
 | `EliteBioRadar.route.json` | Persisted full plotted route (DESTINATION tab), so hop count/progress survive an app or game restart mid-route |
-| `EliteBioRadar.log` | Diagnostic log (overwritten each launch) |
+| `EliteBioRadar.log` | Diagnostic log (overwritten each launch). Set the `BIORADAR_DIAG` environment variable to add flag-change and frame-rate lines for troubleshooting |
 | `EliteBioRadar_YYYY-MM-DD_HH-MM-SS.log` | Timestamped log snapshot — created automatically each time the ⟳ Refresh button is clicked |
 
 ---

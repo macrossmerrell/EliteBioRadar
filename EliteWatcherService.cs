@@ -397,6 +397,27 @@ namespace EliteBioRadar
         // live reference into state this service keeps mutating.
         public List<BodyScanDetail> GetCurrentSystemBodyDetails() => _bodyScanDetails.Values.ToList();
 
+        // Surface temperature of the star a body really orbits (walks up the parent chain: moon -> planet -> star), so a body around a cool secondary
+        // star is not tinted by the primary's light. Falls back to the primary star when the chain can't be followed (bodies on a barycentre, or a
+        // parent not scanned yet). 0 when no star is known.
+        public double ParentStarTemperature(BodyScanDetail d)
+        {
+            try
+            {
+                var all = GetCurrentSystemBodyDetails();
+                var cur = d;
+                for (int i = 0; i < 6 && cur != null; i++)
+                {
+                    if (cur.IsStar) return cur.SurfaceTemperature;
+                    if (cur.ParentBodyID < 0) break;
+                    int pid = cur.ParentBodyID;
+                    cur = all.FirstOrDefault(x => x.BodyID == pid) ?? (CurrentStarDetail?.BodyID == pid ? CurrentStarDetail : null)!;
+                }
+            }
+            catch { /* fall through to the primary star */ }
+            return CurrentStarDetail?.SurfaceTemperature ?? 0;
+        }
+
         // A "Belt Cluster" body's own Scan event carries almost nothing (BodyName/BodyID/
         // Parents/SemiMajorAxis at most — no RingClass, no composition) — that real data lives
         // on the parent RING's own entry instead, inside whichever star/planet it orbits' own

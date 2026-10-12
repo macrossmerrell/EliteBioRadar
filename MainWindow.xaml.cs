@@ -1426,7 +1426,7 @@ namespace EliteBioRadar
         // the body isn't covered, on software-only rendering, or on any setup failure.
         private bool TryAddPlanetShaderScene(BodyScanDetail detail, string iconCode, int sceneW, int sceneH, int sceneX, int sceneY)
         {
-            var scene = PlanetShaderScenes.Build(detail, iconCode, sceneW, sceneH, null, _watcher?.SystemPopulation ?? 0, _watcher?.CurrentStarDetail?.SurfaceTemperature ?? 0);
+            var scene = PlanetShaderScenes.Build(detail, iconCode, sceneW, sceneH, null, _watcher?.SystemPopulation ?? 0, _watcher?.ParentStarTemperature(detail) ?? 0);
             if (scene == null) return false;
             foreach (var el in scene.Layers)
             { Canvas.SetLeft(el, sceneX); Canvas.SetTop(el, sceneY); planetPanelCanvas.Children.Add(el); }

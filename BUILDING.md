@@ -57,3 +57,5 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 
 - The `BioRadar-App\` folder is the only thing end users need — no .NET installation required on their machine
 - Do not run `dotnet clean` if you have unsaved cache data in `bin\`
+- The planet shaders (`Shaders\*.fx`) are compiled to `.ps` bytecode that is checked in, so a normal build needs no extra tools. After editing a `.fx` file, run `Shaders\compile.ps1` (it needs `fxc.exe` from the Windows SDK) and commit the regenerated `.ps`
+- Set the `BIORADAR_DIAG` environment variable before launching to add flag-change and frame-rate lines to `EliteBioRadar.log` while troubleshooting

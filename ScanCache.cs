@@ -110,7 +110,7 @@ namespace EliteBioRadar
 
         private static readonly object _lock = new();
 
-        // Bumped after every organism save, so a window showing scan progress (System Scan's "all biologicals scanned" badge) can tell the
+        // Bumped when a save changes how many genera on a body are fully sampled, so a window showing scan progress (System Scan's "all biologicals scanned" badge) can tell the
         // saved data changed and refresh.
         public static int Version { get; private set; }
 
@@ -247,7 +247,9 @@ namespace EliteBioRadar
                         };
 
                     WriteAll(all);
-                    Version++;
+                    int doneBefore = existing?.Scans.Where(o => o.IsComplete).Select(o => o.Genus).Distinct(StringComparer.OrdinalIgnoreCase).Count() ?? 0;
+                    int doneAfter  = toSave.Select(o => o.Genus).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+                    if (doneAfter != doneBefore) Version++;   // only a change in fully-sampled genera matters to the windows that watch this
                     Log.Write($"ScanCache: saved '{bodyName}' bio={bioCount} genera={genera.Count} scans={toSave.Count}");
                 }
             }

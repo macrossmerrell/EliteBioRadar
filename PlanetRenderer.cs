@@ -103,7 +103,7 @@ namespace EliteBioRadar
             iconCode == "HMC" || iconCode == "ICY" || iconCode == "RBD" || iconCode == "MRB" || iconCode == "RIB";
 
         public static bool IsLandableWorld(BodyScanDetail detail, string iconCode) =>
-            (iconCode == "HMC" || iconCode == "ICY" || iconCode == "RBD" || iconCode == "MRB" || iconCode == "RIB") && detail.Landable;
+            HasLandableShader(iconCode) && detail.Landable;
 
         // Calibrated against five real landable HMC screenshots (matched to their journal scans).
         // All five carry the same composition (iron ~22%, nickel ~17%, sulphur ~16%) yet look
@@ -183,10 +183,15 @@ namespace EliteBioRadar
             if (detail.SurfacePressure > 0 && ((hash >> 20) & 1) == 0) look = 11;
             else
             {
-                int slice = (hash >> 18) % 13;
-                if (slice == 0) look = 12;
-                else if (slice == 1) look = 13;
-                else if (slice == 2) look = 14;
+                // The share of bodies diverted to the looks added from the real-screenshot reviews (pale grey-cream, pale with big dark basins, yellow-green,
+                // warm cream, very dark, olive-lavender camouflage); the other 60% keep the original eleven.
+                int slice = (hash >> 18) % 20;
+                if (slice <= 1) look = 12;
+                else if (slice == 2) look = 13;
+                else if (slice == 3) look = 14;
+                else if (slice <= 5) look = 16;
+                else if (slice == 6) look = 15;
+                else if (slice == 7) look = 17;
             }
 
             var l = new LandableWorldLook
@@ -202,7 +207,7 @@ namespace EliteBioRadar
             {
                 case 0: // dark rust brown, tan patches
                     l.Light = rgb(150, 110, 88); l.Dark = rgb(62, 40, 32); l.Accent = rgb(140, 64, 40); l.Bright = rgb(190, 170, 155);
-                    l.Contrast = 1.0; l.RustAmt = 0.6; l.BrightAmt = 0.2; l.CraterAmt = 0.7; l.RayAmt = 0.3; break;
+                    l.Contrast = 0.7; l.RustAmt = 0.6; l.BrightAmt = 0.2; l.CraterAmt = 0.7; l.RayAmt = 0.3; break;
                 case 1: // grey with pale regolith patches and rust streaks (dimmed: real greys such as UH-V B 2 / B 4 and Qiedea ZW-R d5-22 BC 1 are much darker and flatter)
                     l.Light = rgb(116, 108, 102); l.Dark = rgb(66, 60, 57); l.Accent = rgb(104, 48, 42); l.Bright = rgb(158, 152, 146);
                     l.Contrast = 0.8; l.RustAmt = 0.7; l.BrightAmt = 0.45; l.CraterAmt = 0.6; l.RayAmt = 0.2; break;
@@ -223,7 +228,7 @@ namespace EliteBioRadar
                     l.Contrast = 0.7; l.RustAmt = 0.2; l.BrightAmt = 0.55; l.CraterAmt = 0.6; l.RayAmt = -0.9; break;
                 case 8: // dark rust-brown with charcoal blotches and grey-tan flakes (C 4; real: Qiedea GI-X b19-0 4, TD-Z b17-0 1 - dimmer than first drawn)
                     l.Light = rgb(112, 84, 68); l.Dark = rgb(60, 50, 45); l.Accent = rgb(78, 80, 66); l.Bright = rgb(132, 124, 106);
-                    l.Contrast = 0.9; l.RustAmt = 0.4; l.BrightAmt = 0.55; l.CraterAmt = 0.7; l.RayAmt = -0.9; break;
+                    l.Contrast = 0.6; l.RustAmt = 0.4; l.BrightAmt = 0.55; l.CraterAmt = 0.7; l.RayAmt = -0.9; break;
                 case 9: // salmon with grey-green flecks and big dark-rayed craters (C 2; darkened after TD-Z b17-0 1 was far dimmer in game)
                     l.Light = rgb(180, 130, 100); l.Dark = rgb(118, 90, 72); l.Accent = rgb(78, 84, 60); l.Bright = rgb(190, 160, 134);
                     l.Contrast = 0.6; l.RustAmt = 0.45; l.BrightAmt = 0.25; l.CraterAmt = 0.8; l.RayAmt = -1.0; break;
@@ -232,7 +237,20 @@ namespace EliteBioRadar
                     l.Contrast = 0.8; l.RustAmt = 0.3; l.BrightAmt = 0.3; l.CraterAmt = 0.8; l.RayAmt = -0.9; break;
                 case 11: // very dark blue-grey with muted maroon-rust patches under a blue limb (real: Qiedea ZW-R d5-22 BC 2, BO-M c9-1 B 2, DJ-M c9-1 3)
                     l.Light = rgb(72, 68, 76); l.Dark = rgb(38, 38, 46); l.Accent = rgb(112, 64, 52); l.Bright = rgb(128, 92, 84);
-                    l.Contrast = 0.8; l.RustAmt = 0.7; l.BrightAmt = 0.1; l.CraterAmt = 0.4; l.RayAmt = 0.3; l.AtmGlow = Math.Max(l.AtmGlow, 0.55); break;
+                    l.Contrast = 0.8; l.RustAmt = 0.7; l.BrightAmt = 0.1; l.CraterAmt = 0.4; l.RayAmt = 0.3; l.AtmGlow = Math.Max(l.AtmGlow, 0.55);
+                    if (((hash >> 8) & 1) == 1)   // the browner end of the family (real: Qiedea AU-Y b17-0 A 4, maroon-brown with a navy limb)
+                    { l.Light = rgb(86, 66, 62); l.Dark = rgb(46, 38, 38); l.Accent = rgb(124, 72, 56); }
+                    l.NoFrost = true;   // none of the real thin-atmosphere ones had any (PK-L c9-1 B 2, AU-Y b17-0 A 4)
+                    break;
+                case 15: // very dark, near-black grey-brown, almost featureless (real: Qiedea SU-M c8-1 C 4 and C 5, dim and flat)
+                    l.Light = rgb(76, 72, 66); l.Dark = rgb(50, 48, 44); l.Accent = rgb(68, 56, 50); l.Bright = rgb(92, 88, 82);
+                    l.Contrast = 0.35; l.RustAmt = 0.2; l.BrightAmt = 0.1; l.CraterAmt = 0.25; l.RayAmt = 0.0; break;
+                case 16: // pale warm grey-white ground with large sharp-edged dark basins and swirling dark flow lines (real: SU-M c8-1 C 6)
+                    l.Light = rgb(206, 200, 192); l.Dark = rgb(84, 76, 66); l.Accent = rgb(68, 60, 52); l.Bright = rgb(226, 222, 214);
+                    l.Contrast = 1.3; l.RustAmt = 0.55; l.BrightAmt = 0.2; l.CraterAmt = 0.25; l.RayAmt = 0.0; break;
+                case 17: // olive base with lavender-grey and tan-pink patches, a fine camouflage pattern (real: SU-M c8-1 B 2)
+                    l.Light = rgb(128, 126, 94); l.Dark = rgb(94, 98, 68); l.Accent = rgb(118, 108, 128); l.Bright = rgb(160, 140, 114);
+                    l.Contrast = 0.6; l.RustAmt = 0.5; l.BrightAmt = 0.6; l.CraterAmt = 0.2; l.RayAmt = 0.0; break;
                 case 12: // pale grey-white with small rust-brown streaks and many tiny craters (real: Qiedea EU-K c10-0 A 1, DJ-M c9-2 2)
                     l.Light = rgb(198, 194, 188); l.Dark = rgb(150, 146, 140); l.Accent = rgb(118, 78, 68); l.Bright = rgb(230, 228, 222);
                     l.Contrast = 0.5; l.RustAmt = 0.8; l.BrightAmt = 0.4; l.CraterAmt = 0.8; l.RayAmt = 0.1; break;
@@ -244,12 +262,12 @@ namespace EliteBioRadar
                     l.Contrast = 0.55; l.RustAmt = 0.5; l.BrightAmt = 0.5; l.CraterAmt = 0.9; l.RayAmt = 0.9; break;
                 default: // salmon-orange with brown mottling, grey-green flakes and dark-spoked craters (real: Qiedea FX-S d4-0 3 was darker and greyer)
                     l.Light = rgb(172, 128, 98); l.Dark = rgb(88, 66, 52); l.Accent = rgb(92, 94, 72); l.Bright = rgb(150, 140, 114);
-                    l.Contrast = 0.75; l.RustAmt = 0.35; l.BrightAmt = 0.35; l.CraterAmt = 0.9; l.RayAmt = -0.9; break;
+                    l.Contrast = 0.6; l.RustAmt = 0.35; l.BrightAmt = 0.35; l.CraterAmt = 0.9; l.RayAmt = -0.9; break;
             }
 
             // Frost on the cold bodies: small polar patches at most. The first version covered whole hemispheres, but the real airless cold bodies
             // (Qiedea FX-S d4-0 4, 5 and 6 at 232 / 196 / 173 K) showed none or one small polar patch.
-            if (temp > 0 && temp < 250)
+            if (temp > 0 && temp < 250 && !l.NoFrost)
                 l.IceAmt = 0.08 + 0.22 * (((hash >> 9) % 100) / 100.0);
             // No glowing flecks on hot magma-volcanic landable bodies: two real ones (Qiedea ZW-R d5-22 C 1, 864 K, and the Metal-rich B 1, 1153 K) show none in
             // game. (The non-landable lava worlds above 1,500 K keep their glow - that one was matched to a real body.)
@@ -538,16 +556,16 @@ namespace EliteBioRadar
                 // (Qiedea ZW-R d5-22 BC 4 32 kPa and A 5 3.49 MPa; Qiedea BO-M c9-1 A 1 47 kPa, 34% oxygen) - a hypothesis from three bodies.
                 s0 = rgb(178, 120, 62); s1 = rgb(240, 194, 108); contrast = 0.55;
             }
-            else if (pick <= 3)     { s0 = rgb(172, 114, 60);  s1 = rgb(228, 168, 98); }                   // ochre / orange (brightened to match a real orange Mars-like body, Qiedea ZW-R d5-22 BC 4)
+            else if (pick <= 3)     { s0 = rgb(176, 106, 56);  s1 = rgb(232, 152, 92); }                   // ochre / orange (brightened to match a real orange Mars-like body, Qiedea ZW-R d5-22 BC 4)
             else if (pick == 4)     { s0 = rgb(92, 40, 30);    s1 = rgb(150, 72, 52); }                      // rust red
             else if (pick <= 6)     { s0 = rgb(66, 52, 44);    s1 = rgb(118, 96, 80); }                      // brown
             else if (pick == 7)     { s0 = rgb(74, 70, 40);    s1 = rgb(128, 120, 70); }                     // olive
             else                    { s0 = rgb(30, 24, 26);    s1 = rgb(64, 60, 68); contrast = 1.2; }       // dark charcoal with a faint rust undertone (real: PW-N d6-2 6, 63 kPa, 242 K)
 
-            // Ice caps: ~40% of bodies, larger on the cold ones.
-            bool hasCap = ((hash >> 5) % 10) < 4;
+            // Ice caps: about one body in five, larger on the cold ones (the first version gave 40% a big one; real ones such as K: B 3, C 8 and C 3 had none).
+            bool hasCap = ((hash >> 5) % 10) < 2;
             double cold = detail.SurfaceTemperature > 0 ? Math.Clamp((330 - detail.SurfaceTemperature) / 200.0, 0, 1) : 0;
-            double cap = hasCap ? 0.35 + 0.40 * (((hash >> 9) % 100) / 100.0) + 0.20 * cold : 0.0;
+            double cap = hasCap ? 0.22 + 0.28 * (((hash >> 9) % 100) / 100.0) + 0.14 * cold : 0.0;
 
             // Hot bodies. Real: Qiedea EB-X e1-0 3 (sulphur dioxide, 404 kPa, 1176 K) is near-black with scattered glowing red patches, as are the hot
             // Metal-rich body 2 (1427 K) and RR-N d6-47 A 1 (2154 K); Qiedea GI-X b19-0 5 at 1086 K was still a smooth orange-red, so the line is taken
@@ -562,6 +580,17 @@ namespace EliteBioRadar
                 {
                     denseVariant = 4; s0 = rgb(14, 14, 17); s1 = rgb(34, 33, 38); contrast = 0.8;
                 }
+            }
+
+            // Thick water atmospheres (about 0.1-0.6 MPa) come in three real looks with no pressure or temperature rule between them: a dusty brown
+            // (AU-Y b17-0 A 2), rust-orange under a pale blue-grey veil (SU-M c8-1 B 5; C 3 without the veil) and very dark with white cyclones (SU-M c8-1 B 6).
+            // B 5 and B 6 were a near-identical pair with opposite looks, so the body name picks. The thickest steam (ZW-R d5-22 A 3) keeps its pale veil.
+            if (iconCode == "HMC" && !detail.Landable && haze <= 0.80 && detail.SurfacePressure >= 100000 && detail.SurfaceTemperature < 1130
+                && (detail.AtmosphereType ?? "").IndexOf("Water", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                int wv = (hash >> 3) % 3;
+                if (wv == 1) { s0 = rgb(150, 70, 40); s1 = rgb(206, 104, 58); contrast = 0.5; denseVariant = 1; }
+                else if (wv == 2) { s0 = rgb(30, 24, 26); s1 = rgb(64, 60, 68); contrast = 1.2; }
             }
 
             var atmoLook = new AtmoWorldLook
@@ -653,7 +682,7 @@ namespace EliteBioRadar
                 atmoLook.Cloud = rgb(150, 158, 190); atmoLook.CycloneAmt = 0.0; atmoLook.CloudAmt = 0.15; atmoLook.CapAmt = 0;
                 atmoLook.HazeAmt = 0.8;
             }
-            if (rocky && haze <= 0.80)
+            if (rocky && haze <= 0.80 && denseVariant != 4 && denseVariant != 8)
             {
                 // Rocky bodies with a thin-to-moderate atmosphere (real: PW-N d6-2 8 a, RR-N d6-47 A 2 b/c/d, 28-84 kPa): tan or grey-tan ground
                 // under puffy white cloud and cyclones; dense ones fall through to the pale blue-grey shell below.

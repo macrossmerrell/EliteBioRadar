@@ -11,6 +11,7 @@ namespace EliteBioRadar
     {
         public Color Light, Dark, Accent, Bright, Ice, Hot;
         public double Contrast, CraterAmt, RayAmt, RustAmt, BrightAmt, IceAmt, HotAmt, AtmGlow, Tilt, Pitch, Mottle, Seed, SpecAmt, LineAmt;
+        public bool NoFrost;   // the frost rule leaves this look alone
         public Vector3D LightDir = new Vector3D(-0.55, 0.55, 0.63);   // view space; more frontal = softer terminator
     }
 

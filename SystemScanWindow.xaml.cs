@@ -311,9 +311,13 @@ namespace EliteBioRadar
         {
             rootStack.Children.Clear();
             // Genera fully sampled (Analyse done) per body, read once per refresh for the "all biologicals scanned" badge.
-            _bioDone = ScanCache.LoadAll().ToDictionary(kv => kv.Key,
+            if (_bioDoneVersion != ScanCache.Version || _bioDone.Count == 0)
+            {
+                _bioDoneVersion = ScanCache.Version;
+                _bioDone = ScanCache.LoadAll().ToDictionary(kv => kv.Key,
                 kv => kv.Value.Organisms.Where(o => o.IsComplete).Select(o => o.Genus).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
                 StringComparer.OrdinalIgnoreCase);
+            }
             var systemName = _watcher.StarSystem;
             txtSysName.Text = string.IsNullOrEmpty(systemName) ? "—" : systemName.ToUpperInvariant();
 
@@ -1904,7 +1908,7 @@ namespace EliteBioRadar
                     ? (ringed ? (int)size : (int)Math.Floor(size * 0.8 / 0.46))     // ringed: whole scene; ringless: sphere fills ~80%
                     : (ringed ? (int)size : (int)Math.Floor(size * 0.82 / 0.68));
                 double t = PlanetRenderer.StableHash(b.BodyName) % 900;
-                var scene = PlanetShaderScenes.Build(b, iconCode, box, box, t, _watcher.SystemPopulation, _watcher.CurrentStarDetail?.SurfaceTemperature ?? 0);
+                var scene = PlanetShaderScenes.Build(b, iconCode, box, box, t, _watcher.SystemPopulation, _watcher.ParentStarTemperature(b));
                 if (scene == null) return null;
                 var clip = new Canvas { Width = size, Height = size, ClipToBounds = true };
                 foreach (var el in scene.Layers)
@@ -1926,6 +1930,7 @@ namespace EliteBioRadar
         // place, so it is detached from the old tree first). One entry per body and size: when a re-scan changes what the render depends on
         // (the signature), the entry is rebuilt and replaces the old one, so the cache holds at most one element per body and size.
         private Dictionary<string, int> _bioDone = new(StringComparer.OrdinalIgnoreCase);
+        private int _bioDoneVersion = -1;
         private readonly Dictionary<string, (string signature, UIElement element)> _thumbCache = new();
 
         private UIElement? GetCachedThumb(string key, string signature, Func<UIElement?> build)
@@ -1948,8 +1953,8 @@ namespace EliteBioRadar
             return built;
         }
 
-        private static string ThumbSignature(BodyScanDetail b, double size) =>
-            $"{b.BodyName}|{size}|{b.PlanetClass}|{b.StarType}|{b.Landable}|{b.AtmosphereType}|{b.SurfacePressure:F0}|{b.SurfaceTemperature:F0}|{b.Radius:F0}|" +
+        private static string ThumbSignature(BodyScanDetail b, double size, double starK = 0) =>
+            $"{b.BodyName}|{size}|{b.PlanetClass}|{b.StarType}|{b.Landable}|{b.AtmosphereType}|{b.SurfacePressure:F0}|{b.SurfaceTemperature:F0}|{b.Radius:F0}|{starK:F0}|" +
             string.Join(",", b.Rings.Select(r => $"{r.RingClass}:{r.InnerRad:F0}:{r.OuterRad:F0}"));
 
         // Real scaled-down renders — the original ask ("use our planet/star/asteroid renders,
@@ -1968,7 +1973,7 @@ namespace EliteBioRadar
                     return new Image { Source = frame, Width = size, Height = size, Stretch = Stretch.UniformToFill, ClipToBounds = true };
                 }
                 var iconCode = MainWindow.MapPlanetClassToIconCode(b.PlanetClass);
-                if (iconCode != null && GetCachedThumb("p|" + b.BodyName + "|" + size, ThumbSignature(b, size), () => TryBuildShaderThumb(b, iconCode, size)) is UIElement shaderThumb) return shaderThumb;
+                if (iconCode != null && GetCachedThumb("p|" + b.BodyName + "|" + size, ThumbSignature(b, size, _watcher.ParentStarTemperature(b)), () => TryBuildShaderThumb(b, iconCode, size)) is UIElement shaderThumb) return shaderThumb;
                 if (iconCode != null && PlanetRenderer.IsGasGiantFamily(iconCode))
                 {
                     // GetGasGiantLayers turned out to already BE 4 static bitmaps — the
