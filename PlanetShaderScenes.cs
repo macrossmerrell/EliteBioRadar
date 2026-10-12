@@ -36,7 +36,7 @@ namespace EliteBioRadar
             // Metal-rich body used to get the old CPU planet inside the new rings).
             bool landable = !gas && !atmo && PlanetRenderer.HasLandableShader(iconCode);
             bool ringed = d.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0);
-            (double, double, double)? ringTint = starK >= PlanetRenderer.StarTintMinK ? PlanetRenderer.StarLightTint(starK) : null;
+            (double, double, double)? ringTint = starK >= PlanetRenderer.RingTintMinK ? PlanetRenderer.StarLightTint(starK) : null;
             // Terrain planets without a shader of their own still get the ring shader when ringed.
             if (!gas && !atmo && !landable && !(ringed && PlanetRenderer.IsTerrainFamily(iconCode))) return null;
             try

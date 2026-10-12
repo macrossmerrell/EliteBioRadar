@@ -115,7 +115,11 @@ namespace EliteBioRadar
         // Starlight tint. In game the surface colour looks like albedo x the star's light colour: one Metal-rich class was brick red under an M0 star and
         // blue-grey under a B7 star. The colour of a blackbody at the star's temperature is raised to 1.2 and scaled to keep the overall brightness. Only
         // stars hot enough to matter (A, B, O) are applied to the existing looks, since those were tuned from bodies of F, G, K and M stars.
-        public const double StarTintMinK = 7500;
+        // Hot B and O stars only (10000 K and up). Two bodies of the same A5 star (8642 K) at Qiedea JC-U d3-1 looked different: A 1 neutral dark grey and A 2 a warm
+        // cream-tan, so A stars are not tinted; the four bodies of the B7 star (16430 K) were all blue-grey.
+        public const double StarTintMinK = 10000;
+        // Rings are tinted from A stars up: the rocky rings of Qiedea JC-U d3-1 A 3 (A5 star) read cream-white and tan in game, lighter than their class colours.
+        public const double RingTintMinK = 7500;
         // The coolest stars (L dwarfs, about 1500 K): the body is lit almost purely red and reads monochrome red-pink (real: Qiedea TU-M c8-0 B 1, an L6 star at 1521 K, 6 ls away).
         public const double LowStarTintMaxK = 1800;
 
@@ -493,6 +497,7 @@ namespace EliteBioRadar
             double haze = Math.Pow(Math.Clamp((logP - 5.1) / 0.8, 0.0, 1.0), 1.5);
 
             int denseVariant = 0;
+            bool darkCyclone = false;   // the very dark navy cyclone look (real: five mid-pressure bodies, plus Qiedea JC-U d3-1 B 3): navy ground, teal-green limb
             int pick = hash % 10;
             Color s0, s1;
             double contrast = 1.0;
@@ -567,7 +572,9 @@ namespace EliteBioRadar
                 bool veryHot = detail.SurfaceTemperature >= 1500;
                 // Methane-rich: one real example (PW-N d6-2 8, 2.9 MPa, 372 K) was olive-green under a teal haze - a guess
                 // that methane tints the surface that way, to be confirmed with more methane bodies.
-                if ((detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase)) denseVariant = 3;
+                // Two real methane bodies, two looks: PW-N d6-2 8 was olive-green under a teal haze, Qiedea JC-U d3-1 A 10 (hot thick methane-rich, 11.5 MPa, 577 K)
+                // a pale blue-grey veil with pink and blue patches and a pale cap. The body name picks.
+                if ((detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase)) denseVariant = ((hash >> 6) & 1) == 0 ? 3 : 6;
                 if (rocky) denseVariant = 0;   // real dense rocky bodies (RR-N d6-47 A 2 a, 3.3 MPa) were a pale blue-grey shell
                 // Cold thick atmospheres (real: Qiedea ZW-R d5-22 A 5, 3.49 MPa nitrogen/argon, 214 K): a Mars-like ochre-tan surface under a thin
                 // lavender haze with white polar caps. One data point - a hypothesis that the cold ones look like this.
@@ -585,18 +592,30 @@ namespace EliteBioRadar
                 else if (denseVariant == 2) { s0 = rgb(24, 26, 32);  s1 = rgb(46, 50, 58);  contrast = 0.5; }   // near-black
                 else                        { s0 = rgb(112, 124, 140); s1 = rgb(162, 174, 188); contrast = 0.7; }   // slate
             }
-            else if (iconCode == "HMC" && ((detail.AtmosphereType ?? "").Contains("Nitrogen", StringComparison.OrdinalIgnoreCase)
-                || ((detail.AtmosphereType ?? "").Contains("CarbonDioxide", StringComparison.OrdinalIgnoreCase) && detail.SurfacePressure is >= 5000 and <= 100000 && ((hash >> 4) & 1) == 0)))
+            else if (iconCode == "HMC" && (detail.AtmosphereType ?? "").Contains("Nitrogen", StringComparison.OrdinalIgnoreCase))
             {
-                // Nitrogen-dominated atmospheres on HMC planets came out ochre-gold with white cyclones in all three real examples
-                // (Qiedea ZW-R d5-22 BC 4 32 kPa and A 5 3.49 MPa; Qiedea BO-M c9-1 A 1 47 kPa, 34% oxygen) - a hypothesis from three bodies.
+                // Nitrogen atmospheres on HMC planets are one of two looks, picked by the body name: ochre-gold with white cyclones (Qiedea ZW-R d5-22 BC 4 and A 5,
+                // BO-M c9-1 A 1) or very dark navy with white cyclones (Qiedea JC-U d3-1 A 7, 196 kPa); no pressure separates them.
+                if (((hash >> 4) & 1) == 0) { s0 = rgb(178, 120, 62); s1 = rgb(240, 194, 108); contrast = 0.55; }
+                else { s0 = rgb(18, 24, 34); s1 = rgb(46, 58, 74); contrast = 1.2; darkCyclone = true; }
+            }
+            else if (iconCode == "HMC" && (detail.AtmosphereType ?? "").Contains("CarbonDioxide", StringComparison.OrdinalIgnoreCase)
+                && detail.SurfacePressure is >= 5000 and <= 100000 && ((hash >> 4) & 3) == 0)
+            {
+                // Mid-pressure CO2: gold-ochre for about a quarter (Qiedea TU-M c8-0 C 5); the rest keep the ordinary pick.
                 s0 = rgb(178, 120, 62); s1 = rgb(240, 194, 108); contrast = 0.55;
+            }
+            else if (iconCode == "HMC" && !detail.Landable && haze <= 0.80 && detail.SurfacePressure is >= 20000 and <= 600000 && ((hash >> 5) % 10) < 3)
+            {
+                // The very dark navy cyclone look turned up on five bodies of mid pressure and very different gas (CO2 36 and 132 kPa, argon 44, nitrogen 196, water 499:
+                // Qiedea DJ-M c9-1 5, PK-L c9-1 B 3, JC-U d3-1 A 7 and B 1, SU-M c8-1 B 6), so about three in ten of them draw it.
+                s0 = rgb(18, 24, 34); s1 = rgb(46, 58, 74); contrast = 1.2; darkCyclone = true;
             }
             else if (pick <= 3)     { s0 = rgb(176, 106, 56);  s1 = rgb(232, 152, 92); }                   // ochre / orange (brightened to match a real orange Mars-like body, Qiedea ZW-R d5-22 BC 4)
             else if (pick == 4)     { s0 = rgb(92, 40, 30);    s1 = rgb(150, 72, 52); }                      // rust red
             else if (pick <= 6)     { s0 = rgb(66, 52, 44);    s1 = rgb(118, 96, 80); }                      // brown
             else if (pick == 7)     { s0 = rgb(94, 76, 40);    s1 = rgb(164, 130, 72); }                     // olive-gold (was greener; real: Qiedea TU-M c8-0 C 5, golden ochre)
-            else                    { s0 = rgb(30, 24, 26);    s1 = rgb(64, 60, 68); contrast = 1.2; }       // dark charcoal with a faint rust undertone (real: PW-N d6-2 6, 63 kPa, 242 K)
+            else                    { s0 = rgb(18, 24, 34);    s1 = rgb(46, 58, 74); contrast = 1.2; darkCyclone = true; }       // dark charcoal with a faint rust undertone (real: PW-N d6-2 6, 63 kPa, 242 K)
 
             // Ice caps: about one body in five, larger on the cold ones (the first version gave 40% a big one; real ones such as K: B 3, C 8 and C 3 had none).
             bool hasCap = ((hash >> 5) % 10) < 2;
@@ -626,7 +645,7 @@ namespace EliteBioRadar
             {
                 int wv = (hash >> 3) % 3;
                 if (wv == 1) { s0 = rgb(150, 70, 40); s1 = rgb(206, 104, 58); contrast = 0.5; denseVariant = 1; }
-                else if (wv == 2) { s0 = rgb(30, 24, 26); s1 = rgb(64, 60, 68); contrast = 1.2; }
+                else if (wv == 2) { s0 = rgb(18, 24, 34); s1 = rgb(46, 58, 74); contrast = 1.2; darkCyclone = true; }
             }
 
             var atmoLook = new AtmoWorldLook
@@ -642,6 +661,7 @@ namespace EliteBioRadar
                 Pitch = (((hash >> 12) % 9) - 4) * 0.08,
                 Seed = (hash % 5000) / 100.0 + 1.0,
             };
+if (darkCyclone && !icy && !rockyIce) { atmoLook.Haze = rgb(96, 128, 150); atmoLook.Glow = rgb(92, 168, 186); }   // the teal-green limb of the dark navy look
             if (!icy && !rockyIce && denseVariant == 7)
             {
                 // Thin lavender-blue haze that shows mostly at the limb, soft low-contrast dark spots, and white caps (cold).
@@ -709,7 +729,8 @@ namespace EliteBioRadar
                 // veil that lets the surface show in patches, with a distinct pale rim all the way round and an even, frontal light.
                 atmoLook.Haze = rgb(156, 172, 194); atmoLook.Glow = rgb(178, 202, 226);
                 atmoLook.Cloud = rgb(160, 178, 202); atmoLook.CycloneAmt = 0.0; atmoLook.CloudAmt = 0.85; atmoLook.CapAmt = 0;   // the blue-grey comes in streaky patches over the orange
-                atmoLook.HazeAmt = 0.28; atmoLook.SurfContrast = 1.1;
+                // The veil thickness varies by body: patchy (Eafots JJ-B c13-2 A 1) to almost total (Qiedea JC-U d3-1 B 2, 9.5 MPa, a pale pink-grey cloud layer).
+                atmoLook.HazeAmt = 0.28 + 0.38 * (((hash >> 7) % 100) / 100.0); atmoLook.SurfContrast = 1.1;
                 atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.20, 0.20, 0.96);
             }
             else if (!icy && !rockyIce && denseVariant == 2)
@@ -736,8 +757,9 @@ namespace EliteBioRadar
                 atmoLook.Cloud = rgb(226, 234, 242);
                 atmoLook.HazeAmt = Math.Min(haze, 0.25);
                 atmoLook.CycloneAmt = 0.85; atmoLook.CloudAmt = 0.70; atmoLook.CrackAmt = 0.0;
-                double wcold = detail.SurfaceTemperature > 0 ? 0.20 + (300.0 - detail.SurfaceTemperature) / 160.0 : 0.3;
-                atmoLook.Cap = rgb(226, 232, 236); atmoLook.CapAmt = Math.Clamp(wcold, 0.15, 0.85);
+                // Caps grow steeply with cold: the 223 K world had large caps at both poles, the 251 K one (Qiedea JC-U d3-1 B 4) showed none from the front.
+                double wcold = detail.SurfaceTemperature > 0 ? 0.55 * Math.Clamp((265.0 - detail.SurfaceTemperature) / 45.0, 0.0, 1.3) : 0.2;
+                atmoLook.Cap = rgb(226, 232, 236); atmoLook.CapAmt = Math.Clamp(wcold, 0.0, 0.72);
                 atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.40, 0.38, 0.84);
             }
             else if (elw)
@@ -881,7 +903,7 @@ namespace EliteBioRadar
                     look.C0 = rgb(0x4a, 0x70, 0xc8); look.C1 = rgb(0x52, 0x84, 0xee); look.C2 = rgb(0x6a, 0x9a, 0xf4);
                     look.C3 = rgb(0x28, 0x86, 0xff); look.Band4 = rgb(0x48, 0x62, 0xa8); look.Glow = rgb(0xa8, 0xd0, 0xff);
                     look.BandCount = 9; look.Turb = 0.9; look.StormAmt = 0.0; look.Contrast = 0.30; look.Tilt = 0.45 + tiltJitter;
-                    if (variantB)   // deep navy (real: a ringed Class III, game blue about 22,24,65 in shade and ~30,40,125 lit)
+                    if (variantB || ((hash >> 8) % 4) != 0)   // deep navy, now the common one (real: two ringed Class IIIs, Qiedea JC-U d3-1 A 6 too; game blue about 22,24,65 in shade and ~30,40,125 lit)
                     {
                         look.C0 = rgb(0x14, 0x1c, 0x6a); look.C1 = rgb(0x1c, 0x28, 0x86); look.C2 = rgb(0x26, 0x36, 0xa2);
                         look.C3 = rgb(0x18, 0x34, 0xb4); look.Band4 = rgb(0x0e, 0x14, 0x52); look.Glow = rgb(0x5a, 0x7a, 0xd0);
@@ -897,8 +919,8 @@ namespace EliteBioRadar
                     }
                     else
                     {   // dark maroon (checked against an earlier real screenshot)
-                        look.C0 = rgb(0x3a, 0x1c, 0x14); look.C1 = rgb(0x6a, 0x30, 0x22); look.C2 = rgb(0x8a, 0x48, 0x36);
-                        look.C3 = rgb(0x9a, 0x58, 0x44); look.Band4 = rgb(0x1a, 0x0c, 0x08); look.Glow = rgb(0x8a, 0x48, 0x36);
+                        look.C0 = rgb(0x44, 0x1a, 0x12); look.C1 = rgb(0x80, 0x32, 0x24); look.C2 = rgb(0xa4, 0x4a, 0x38);
+                        look.C3 = rgb(0xc4, 0x8a, 0x78); look.Band4 = rgb(0x1a, 0x0c, 0x08); look.Glow = rgb(0xa4, 0x4a, 0x38);
                         look.BandCount = 10; look.Turb = 1.0; look.StormAmt = 0.4; look.Contrast = 0.7;
                     }
                     break;
@@ -955,7 +977,7 @@ namespace EliteBioRadar
             if (detail.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0 && !r.Name.Contains("Belt", StringComparison.OrdinalIgnoreCase)))
             {
                 look.Tilt = RingTilt;
-                look.Pitch = 0;   // never pole-on with rings: concentric bands would contradict the ring plane
+                look.Pitch = -Math.Asin(RingSquash);   // bands bow like the ring ellipse (near side lower), matching the ring plane; never pole-on
             }
             return look;
         }
