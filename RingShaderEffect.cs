@@ -65,7 +65,7 @@ namespace EliteBioRadar
         };
 
         // lightDir is the planet shader's view-space light (x right, y up, z toward viewer); it is rotated into the ring-aligned frame here.
-        public static RingShaderEffect Create(BodyScanDetail detail, int sceneW, int sceneH, bool frontPass, Vector3D lightDir, double? planetRadius = null)
+        public static RingShaderEffect Create(BodyScanDetail detail, int sceneW, int sceneH, bool frontPass, Vector3D lightDir, double? planetRadius = null, (double r, double g, double b)? starTint = null)
         {
             var (cx, cy, sphereR, bands) = PlanetRenderer.GetRingShaderGeometry(detail, sceneW, sceneH);
             var e = new RingShaderEffect();
@@ -91,7 +91,16 @@ namespace EliteBioRadar
                 var b = bands[i];
                 var (dens, contrast, grain) = ClassLook(b.RingClass);
                 e.SetValue(spanProps[i], new Point4D(b.InnerPx, b.OuterPx, dens, contrast));
-                e.SetValue(colProps[i], new Point4D(b.Color.R / 255.0, b.Color.G / 255.0, b.Color.B / 255.0, grain));
+                // Rings lit by a hot blue-white star read steel blue-grey whatever their class colour (real: the rocky rings of Qiedea EB-X e1-0 2 and 5, B7 star):
+                // pull the class colour mostly to grey, then apply the star's light colour (see PlanetRenderer.StarLightTint).
+                double wr = b.Color.R / 255.0, wg = b.Color.G / 255.0, wb = b.Color.B / 255.0;
+                if (starTint.HasValue)
+                {
+                    double lum = 0.30 * wr + 0.59 * wg + 0.11 * wb;
+                    var k = starTint.Value;
+                    wr = Math.Min(1.0, (wr + (lum - wr) * 0.7) * k.r); wg = Math.Min(1.0, (wg + (lum - wg) * 0.7) * k.g); wb = Math.Min(1.0, (wb + (lum - wb) * 0.7) * k.b);
+                }
+                e.SetValue(colProps[i], new Point4D(wr, wg, wb, grain));
             }
             return e;
         }

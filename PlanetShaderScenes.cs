@@ -27,13 +27,16 @@ namespace EliteBioRadar
 
         // frozenTime null = animate (Time runs forever); a value = still frame at that time. Returns null when the planet isn't covered by a
         // shader, on software-only rendering, or on any failure - the caller then keeps the CPU render (rings included).
-        internal static Scene? Build(BodyScanDetail d, string iconCode, int w, int h, double? frozenTime, long systemPopulation)
+        internal static Scene? Build(BodyScanDetail d, string iconCode, int w, int h, double? frozenTime, long systemPopulation, double starK = 0)
         {
             if ((RenderCapability.Tier >> 16) == 0) return null;
             bool gas = PlanetRenderer.IsGasGiantFamily(iconCode);
             bool atmo = !gas && PlanetRenderer.IsAtmoWorld(d, iconCode);
-            bool landable = !gas && !atmo && PlanetRenderer.IsLandableWorld(d, iconCode);
+            // Any rocky/metal/icy terrain body that is not an atmosphere world draws with the landable-world shader, landable or not (a ringed non-landable
+            // Metal-rich body used to get the old CPU planet inside the new rings).
+            bool landable = !gas && !atmo && PlanetRenderer.HasLandableShader(iconCode);
             bool ringed = d.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0);
+            (double, double, double)? ringTint = starK >= PlanetRenderer.StarTintMinK ? PlanetRenderer.StarLightTint(starK) : null;
             // Terrain planets without a shader of their own still get the ring shader when ringed.
             if (!gas && !atmo && !landable && !(ringed && PlanetRenderer.IsTerrainFamily(iconCode))) return null;
             try
@@ -71,7 +74,7 @@ namespace EliteBioRadar
                     }
                     else if (landable)
                     {
-                        var e = LandableWorldShaderEffect.Create(PlanetRenderer.GetLandableWorldLook(d, iconCode), centre, radius);
+                        var e = LandableWorldShaderEffect.Create(PlanetRenderer.GetLandableWorldLook(d, iconCode, starK), centre, radius);
                         Clock(e, LandableWorldShaderEffect.TimeProperty);
                         planet = Host(e);
                     }
@@ -84,9 +87,9 @@ namespace EliteBioRadar
                     // Built before anything is returned: if the ring shader can't be set up the whole scene is abandoned (caller falls back to the
                     // CPU render with its own rings) rather than showing a ringless planet.
                     double? terrainR = gas ? null : planetR;
-                    scene.Layers.Add(Host(RingShaderEffect.Create(d, w, h, false, Light, terrainR)));
+                    scene.Layers.Add(Host(RingShaderEffect.Create(d, w, h, false, Light, terrainR, ringTint)));
                     scene.Layers.Add(planet);
-                    scene.Layers.Add(Host(RingShaderEffect.Create(d, w, h, true, Light, terrainR)));
+                    scene.Layers.Add(Host(RingShaderEffect.Create(d, w, h, true, Light, terrainR, ringTint)));
                 }
                 else
                 {

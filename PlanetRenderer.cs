@@ -98,6 +98,10 @@ namespace EliteBioRadar
         }
 
         // ---- GPU landable worlds (Shaders\LandableWorld.fx) ----
+        // Classes the landable-world shader has a look for. Used for non-landable bodies that no atmosphere shader covers (airless, or Metal-rich).
+        public static bool HasLandableShader(string iconCode) =>
+            iconCode == "HMC" || iconCode == "ICY" || iconCode == "RBD" || iconCode == "MRB" || iconCode == "RIB";
+
         public static bool IsLandableWorld(BodyScanDetail detail, string iconCode) =>
             (iconCode == "HMC" || iconCode == "ICY" || iconCode == "RBD" || iconCode == "MRB" || iconCode == "RIB") && detail.Landable;
 
@@ -108,14 +112,63 @@ namespace EliteBioRadar
         // are grey/beige, the cold ammonia ones are grey-green or salmon) and then a stable hash of
         // the name picks within that group - treat the temperature mapping as a hypothesis to refine
         // as more bodies come in.
-        public static LandableWorldLook GetLandableWorldLook(BodyScanDetail detail, string iconCode = "HMC")
+        // Starlight tint. In game the surface colour looks like albedo x the star's light colour: one Metal-rich class was brick red under an M0 star and
+        // blue-grey under a B7 star. The colour of a blackbody at the star's temperature is raised to 1.2 and scaled to keep the overall brightness. Only
+        // stars hot enough to matter (A, B, O) are applied to the existing looks, since those were tuned from bodies of F, G, K and M stars.
+        public const double StarTintMinK = 7500;
+
+        public static (double r, double g, double b) StarLightTint(double kelvin)
+        {
+            if (kelvin <= 0) return (1, 1, 1);
+            double t = Math.Clamp(kelvin, 1000, 40000) / 100.0;
+            double r = t <= 66 ? 255 : 329.698727446 * Math.Pow(t - 60, -0.1332047592);
+            double g = t <= 66 ? 99.4708025861 * Math.Log(t) - 161.1195681661 : 288.1221695283 * Math.Pow(t - 60, -0.0755148492);
+            double b = t >= 66 ? 255 : t <= 19 ? 0 : 138.5177312231 * Math.Log(t - 10) - 305.0447927307;
+            r = Math.Pow(Math.Clamp(r, 0, 255) / 255.0, 1.2); g = Math.Pow(Math.Clamp(g, 0, 255) / 255.0, 1.2); b = Math.Pow(Math.Clamp(b, 0, 255) / 255.0, 1.2);
+            double lum = 0.30 * r + 0.59 * g + 0.11 * b;
+            return (Math.Min(r / lum, 1.5), Math.Min(g / lum, 1.5), Math.Min(b / lum, 1.5));
+        }
+
+        private static Color Tinted(Color c, (double r, double g, double b) k) => Color.FromRgb(
+            (byte)Math.Clamp(c.R * k.r, 0, 255), (byte)Math.Clamp(c.G * k.g, 0, 255), (byte)Math.Clamp(c.B * k.b, 0, 255));
+
+        private static void ApplyStarTint(LandableWorldLook l, double starK)
+        {
+            if (starK < StarTintMinK) return;
+            var k = StarLightTint(starK);
+            l.Light = Tinted(l.Light, k); l.Dark = Tinted(l.Dark, k); l.Accent = Tinted(l.Accent, k); l.Bright = Tinted(l.Bright, k); l.Ice = Tinted(l.Ice, k);
+        }
+
+        // The look for a landable-world body, tinted by the colour of its star when the star is hot (see StarLightTint).
+        public static LandableWorldLook GetLandableWorldLook(BodyScanDetail detail, string iconCode = "HMC", double starK = 0)
+        {
+            var look = GetLandableWorldLookCore(detail, iconCode, starK);
+            ApplyStarTint(look, starK);
+            return look;
+        }
+
+        private static LandableWorldLook GetLandableWorldLookCore(BodyScanDetail detail, string iconCode, double starK)
         {
             int hash = StableHash(detail.BodyName);
             Color rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
             double temp = detail.SurfaceTemperature;
+            // Non-landable bodies this shader draws (airless, or Metal-rich) and are very hot: near-black navy with glowing red lava patches (real: Qiedea
+            // EB-X e1-0 2, Metal-rich, 1427 K, thin silicate vapour; the landable Metal-rich body at 1153 K had no glow, so the line is somewhere between).
+            if (!detail.Landable && temp >= 1130)
+                return new LandableWorldLook
+                {
+                    Light = rgb(34, 38, 52), Dark = rgb(16, 18, 28), Accent = rgb(44, 42, 54), Bright = rgb(52, 58, 72),
+                    Ice = rgb(206, 226, 238), Hot = rgb(255, 64, 28),
+                    Seed = (hash % 5000) / 100.0 + 1.0,
+                    Tilt = (((hash >> 3) % 100) / 100.0 - 0.5) * 0.35,
+                    Pitch = (((hash >> 12) % 9) - 4) * 0.08,
+                    Mottle = 0.85 + ((hash >> 7) % 40) / 100.0,
+                    AtmGlow = detail.SurfacePressure > 0 ? 0.25 : 0.0,
+                    Contrast = 0.4, RustAmt = 0.0, BrightAmt = 0.15, CraterAmt = 0.3, RayAmt = 0.0, HotAmt = 0.9, SpecAmt = 0.0,
+                };
             if (iconCode == "ICY") return GetIcyLandableLook(detail, hash, temp);
             if (iconCode == "RBD") return GetRockyLandableLook(detail, hash);
-            if (iconCode == "MRB") return GetMetalRichLandableLook(detail, hash);
+            if (iconCode == "MRB") return GetMetalRichLandableLook(detail, hash, starK);
             if (iconCode == "RIB") return GetRockyIceLandableLook(detail, hash);
 
             // Colour does not follow temperature (13 real bodies from 450 K to 900 K ranged over every look), so it is
@@ -207,7 +260,7 @@ namespace EliteBioRadar
         // 26% / chromium 16%, metallic magma volcanism): a deep red-brown surface with dark charcoal patches, a cracked polygon texture and one big
         // crater with long soft rays - and no glowing flecks even though it is far above 1000 K. Treated as the default look for the class
         // (a hypothesis), with a small name-hash shift in redness so neighbours do not look cloned.
-        private static LandableWorldLook GetMetalRichLandableLook(BodyScanDetail detail, int hash)
+        private static LandableWorldLook GetMetalRichLandableLook(BodyScanDetail detail, int hash, double starK = 0)
         {
             Color rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
             int shift = (hash >> 5) % 5 - 2;   // -2..2: redder or browner
@@ -222,6 +275,13 @@ namespace EliteBioRadar
                 AtmGlow = detail.SurfacePressure > 0 ? 0.30 : 0.0,
                 Contrast = 0.5, RustAmt = 0.55, BrightAmt = 0.0, CraterAmt = 0.6, RayAmt = 0.9, HotAmt = 0.0,
             };
+            // The brick red is a grey metal seen under an M0 star's red light (Qiedea ZW-R d5-22 B 1). Under a hot blue-white star the same class is blue-grey
+            // (Qiedea EB-X e1-0 3 a and 3 b, B7), so for hot stars start from the neutral grey and let ApplyStarTint colour it.
+            if (starK >= StarTintMinK)
+            {
+                l.Light = rgb(150, 146, 142); l.Dark = rgb(96, 92, 90); l.Accent = rgb(62, 60, 60); l.Bright = rgb(176, 172, 168);
+                l.Contrast = 0.55; l.RustAmt = 0.2; l.CraterAmt = 0.7; l.RayAmt = 0.4;
+            }
             if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 250)
                 l.IceAmt = 0.20 + 0.35 * (((hash >> 9) % 100) / 100.0);
             return l;
@@ -489,6 +549,21 @@ namespace EliteBioRadar
             double cold = detail.SurfaceTemperature > 0 ? Math.Clamp((330 - detail.SurfaceTemperature) / 200.0, 0, 1) : 0;
             double cap = hasCap ? 0.35 + 0.40 * (((hash >> 9) % 100) / 100.0) + 0.20 * cold : 0.0;
 
+            // Hot bodies. Real: Qiedea EB-X e1-0 3 (sulphur dioxide, 404 kPa, 1176 K) is near-black with scattered glowing red patches, as are the hot
+            // Metal-rich body 2 (1427 K) and RR-N d6-47 A 1 (2154 K); Qiedea GI-X b19-0 5 at 1086 K was still a smooth orange-red, so the line is taken
+            // at 1130 K. Silicate-vapour atmospheres are the exception: their cloud layer is pale (EB-X e1-0 1 at 6879 K, GH-U d3-6 1 at 4007 K).
+            if (!icy && !rockyIce && !water && !elw)
+            {
+                bool silicate = (detail.AtmosphereType ?? "").IndexOf("Silicate", StringComparison.OrdinalIgnoreCase) >= 0;
+                // Above about 2500 K the cloud layer is pale whatever the gas (Qiedea EB-X e1-0 13, water with silicates, 3002 K: white; GH-U d3-6 1, 4007 K: cream;
+                // EB-X e1-0 1, 6879 K: yellow-green), while RR-N d6-47 A 1 at 2154 K and EB-X e1-0 3 at 1176 K were near-black.
+                if (silicate || detail.SurfaceTemperature >= 2500) denseVariant = 8;
+                else if (detail.SurfaceTemperature >= 1130)
+                {
+                    denseVariant = 4; s0 = rgb(14, 14, 17); s1 = rgb(34, 33, 38); contrast = 0.8;
+                }
+            }
+
             var atmoLook = new AtmoWorldLook
             {
                 Surf0 = s0, Surf1 = s1,
@@ -533,6 +608,28 @@ namespace EliteBioRadar
                 atmoLook.Cloud = rgb(120, 100, 82); atmoLook.CycloneAmt = 0.0; atmoLook.CloudAmt = 0.18; atmoLook.CapAmt = 0;
                 atmoLook.HazeAmt = 0.35;
                 atmoLook.HotAmt = Math.Clamp((detail.SurfaceTemperature - 1300.0) / 900.0, 0.45, 1.0);
+            }
+            else if (!icy && !rockyIce && denseVariant == 8)
+            {
+                // Silicate vapour atmosphere (real: Qiedea EB-X e1-0 1, 6879 K: smooth pale yellow-green cream with olive cloud blotches and a few dark flecks;
+                // Qiedea GH-U d3-6 1, 4007 K: pale cream with dark veins and a few red patches). Even frontal light, no rim, no storms, no caps.
+                // The hue varies per body: cream, yellow-green or white-grey.
+                switch ((hash >> 6) % 3)
+                {
+                    case 0:  // cream (GH-U d3-6 1)
+                        atmoLook.Surf0 = rgb(120, 102, 80); atmoLook.Surf1 = rgb(214, 198, 160);
+                        atmoLook.Haze = rgb(214, 200, 166); atmoLook.Glow = rgb(220, 208, 180); atmoLook.Cloud = rgb(238, 230, 208); break;
+                    case 1:  // yellow-green (EB-X e1-0 1)
+                        atmoLook.Surf0 = rgb(122, 122, 84); atmoLook.Surf1 = rgb(208, 208, 160);
+                        atmoLook.Haze = rgb(206, 206, 164); atmoLook.Glow = rgb(214, 216, 176); atmoLook.Cloud = rgb(232, 234, 204); break;
+                    default: // white-grey (EB-X e1-0 13)
+                        atmoLook.Surf0 = rgb(104, 104, 108); atmoLook.Surf1 = rgb(226, 228, 230);
+                        atmoLook.Haze = rgb(214, 218, 224); atmoLook.Glow = rgb(200, 212, 228); atmoLook.Cloud = rgb(242, 244, 246); break;
+                }
+                atmoLook.CycloneAmt = 0.0; atmoLook.CloudAmt = 0.45; atmoLook.CapAmt = 0;
+                atmoLook.HazeAmt = 0.50; atmoLook.SurfContrast = 0.9; atmoLook.FleckAmt = 0.6;
+                atmoLook.HotAmt = detail.SurfaceTemperature < 5000 ? 0.5 : 0.0;
+                atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.20, 0.20, 0.96);
             }
             else if (!icy && !rockyIce && denseVariant == 3)
             {

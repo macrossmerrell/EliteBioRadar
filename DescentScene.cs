@@ -85,8 +85,13 @@ namespace EliteBioRadar
             {
                 if (PlanetRenderer.IsLandableWorld(body, iconCode) && (System.Windows.Media.RenderCapability.Tier >> 16) != 0)
                 {
-                    var look = PlanetRenderer.GetLandableWorldLook(body, iconCode);
+                    var look = PlanetRenderer.GetLandableWorldLook(body, iconCode, _watcher?.CurrentStarDetail?.SurfaceTemperature ?? 0);
                     look.AtmGlow = 0;   // the haze is drawn separately, in the atmosphere's own colour
+                    // The visible ground here is the TOP of a very large sphere, and the top of the sphere is the shader's pole, where its
+                    // latitude/longitude texture mapping pinches into a star of converging streaks. Pitching the planet a quarter turn puts that top
+                    // cap on the equator instead (the pole ends up at the sphere's near side, which is off screen); the body's own small pitch stays
+                    // as a gentle variation.
+                    look.Pitch = Math.PI / 2 + look.Pitch * 0.5;
                     var effect = LandableWorldShaderEffect.Create(look, new Point(0.5, 3), new Point(2, 2));
                     effect.BeginAnimation(LandableWorldShaderEffect.TimeProperty,
                         new DoubleAnimation(0, 36000, TimeSpan.FromSeconds(36000)));
@@ -219,7 +224,8 @@ namespace EliteBioRadar
 
             // ---- neon terrain grid, only on the planet's face ----
             var grid = new Canvas { Width = W, Height = H, IsHitTestVisible = false, Clip = new EllipseGeometry(new Point(CX, cyp), R, R) };
-            double gridAlpha = 0.10 + 0.22 * DSmooth(0.1, 0.7, e);
+            // A quarter of the original strength: with the terrain now showing more detail under it, the full-strength cyan grid swamped the surface.
+            double gridAlpha = (0.10 + 0.22 * DSmooth(0.1, 0.7, e)) * 0.25;
             var vg = new StreamGeometry();
             using (var gc = vg.Open())
             {

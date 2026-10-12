@@ -4401,11 +4401,13 @@ namespace EliteBioRadar
                     bool startupAnnouncement = _lastLoadGameAt != default &&
                         (fsdTargetTs - _lastLoadGameAt).TotalSeconds is >= 0 and < 120;
                     // The game also repeats the same FSDTarget line on its own while descending or gliding to a planet. A repeat of the
-                    // target we already have, with no panel open (GuiFocus 0), is not the player picking it, so it must not flip the
-                    // app to the Destination tab once they have landed.
+                    // target we already have, with no panel open (GuiFocus 0) and the ship at a planet (latitude/longitude present), is not
+                    // the player picking it, so it must not flip the app to the Destination tab once they have landed. In open space the
+                    // same repeat IS how choosing the next system from the cockpit panel arrives (the route had already targeted it), so
+                    // it still counts there.
                     bool sameTargetRepeat = prevTarget.Length > 0 &&
                         string.Equals(prevTarget, CurrentDestination.NextSystem, StringComparison.OrdinalIgnoreCase) &&
-                        !backfill && CurrentStatus.GuiFocus == 0;
+                        !backfill && CurrentStatus.GuiFocus == 0 && CurrentStatus.HasPosition;
                     if (!startupAnnouncement && !sameTargetRepeat) FsdTargetedAt = fsdTargetTs;
                     // TotalRouteJumps/TotalRouteLy are (re)derived from the persisted route
                     // cache inside LoadNavRoute -> EnsureRouteState, not tracked here.

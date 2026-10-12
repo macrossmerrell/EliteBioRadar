@@ -1904,7 +1904,7 @@ namespace EliteBioRadar
                     ? (ringed ? (int)size : (int)Math.Floor(size * 0.8 / 0.46))     // ringed: whole scene; ringless: sphere fills ~80%
                     : (ringed ? (int)size : (int)Math.Floor(size * 0.82 / 0.68));
                 double t = PlanetRenderer.StableHash(b.BodyName) % 900;
-                var scene = PlanetShaderScenes.Build(b, iconCode, box, box, t, _watcher.SystemPopulation);
+                var scene = PlanetShaderScenes.Build(b, iconCode, box, box, t, _watcher.SystemPopulation, _watcher.CurrentStarDetail?.SurfaceTemperature ?? 0);
                 if (scene == null) return null;
                 var clip = new Canvas { Width = size, Height = size, ClipToBounds = true };
                 foreach (var el in scene.Layers)

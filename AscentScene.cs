@@ -17,6 +17,9 @@ namespace EliteBioRadar
         private double _ascentP, _ascentGatePhase;
         private DateTime _ascentLastTick = DateTime.MinValue;
         private DateTime _jumpChargeStart = DateTime.MinValue, _jumpLastCharging = DateTime.MinValue;
+        private bool _jumpArmed;                       // a hyperspace charge was made at a planet and its screen may still be needed
+        private DateTime _jumpLastChargeFlag = DateTime.MinValue;
+        private const double JumpDisarmSeconds = 4.0;   // charge state must stay off this long before the planetary arming lapses
 
         // Expected seconds an atmospheric jump charge takes; the scene's timeline is stretched to it (and holds at "charge
         // complete" if the real charge runs longer).
@@ -36,7 +39,23 @@ namespace EliteBioRadar
         private bool JumpSceneActive(EliteStatus status)
         {
             var now = DateTime.UtcNow;
-            bool charging = _watcher != null && _watcher.IsChargingJump && status.HasPosition;
+            // Only a charge made at a planet (latitude/longitude present, not in supercruise) is a planetary jump: it arms the screen. A charge in
+            // space or supercruise never arms it, and the arming lapses a few seconds after the charge state ends, so a later jump from space cannot
+            // pick up an earlier planetary jump's leftover timestamps. The arming is not undone by a momentary dip of the charge flag.
+            bool chargeFlag = _watcher != null && _watcher.IsChargingJump;
+            if (chargeFlag)
+            {
+                _jumpLastChargeFlag = now;
+                if (status.HasPosition && !status.Supercruise) _jumpArmed = true;
+            }
+            else if (_jumpArmed && (now - _jumpLastChargeFlag).TotalSeconds > JumpDisarmSeconds)
+            {
+                _jumpArmed = false;
+                _jumpLastCharging = DateTime.MinValue;
+            }
+            if (!_jumpArmed) return false;
+
+            bool charging = chargeFlag && status.HasPosition;
             if (charging)
             {
                 if (_jumpLastCharging == DateTime.MinValue || (now - _jumpLastCharging).TotalSeconds > 3)
@@ -47,8 +66,8 @@ namespace EliteBioRadar
                 return true;
             }
             // Keep the screen through the jump itself even if position data drops out during hyperspace.
-            return _watcher != null && _watcher.IsChargingJump && _jumpLastCharging != DateTime.MinValue
-                && _watcher.HyperspaceJumpStartedAt > _jumpChargeStart
+            return chargeFlag && _jumpLastCharging != DateTime.MinValue
+                && _watcher!.HyperspaceJumpStartedAt > _jumpChargeStart
                 && (now - _watcher.HyperspaceJumpStartedAt).TotalSeconds < 90;
         }
 

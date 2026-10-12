@@ -60,12 +60,13 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     float lonW = atan2(Pt.x, Pt.z) - Time * 0.006;
     float2 ps = float2(lonW / PI, lat / PI * 2.0);
     float polar = smoothstep(1.20, 1.45, abs(lat));       // hide the lat/lon pinch at the poles
+    float polar2 = smoothstep(0.85, 1.30, abs(lat));      // fade the fine detail out before it, where the mapping already streaks into a star
 
     // ---------------- terrain ----------------
     float big   = Tex(ps * 0.8 * Mottle + Seed * 0.13).x;
-    float mid   = Tex(ps * 2.2 * Mottle + 0.31).y;
-    float fine  = Tex(ps * 9.0 + 0.7).z;
-    float fine2 = Tex(ps * 17.0 + 0.2).x;
+    float mid   = lerp(Tex(ps * 2.2 * Mottle + 0.31).y, 0.5, polar2);
+    float fine  = lerp(Tex(ps * 9.0 + 0.7).z, 0.5, polar2);
+    float fine2 = lerp(Tex(ps * 17.0 + 0.2).x, 0.5, polar2);
     float reg   = lerp(big * 0.6 + mid * 0.4, 0.5, polar);
 
     // Sharp-edged highlands vs basins.
@@ -79,7 +80,7 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     // Rust streaks: contour lines of a warped field.
     float rz = Tex(ps * 3.0 * Mottle + float2(0.5, 0.1) + (mid - 0.5) * 0.6).z;
     float ridge = 1.0 - abs(rz * 2.0 - 1.0);
-    float rust = smoothstep(0.86, 0.96, ridge) * RustAmt * (1.0 - hl * 0.4) * (1.0 - polar);
+    float rust = smoothstep(0.86, 0.96, ridge) * RustAmt * (1.0 - hl * 0.4) * (1.0 - polar2);
     base = lerp(base, ColAccent.rgb, rust * 0.85);
 
     // Long fracture lines (icy crevasses): arcs of random great circles, wobbled by noise, broken into
@@ -103,11 +104,11 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     // Pale regolith patches, concentrated in the lighter ground.
     float bp = Tex(ps * 1.6 * Mottle + 0.9).x * 0.6 + Tex(ps * 5.5 + 0.4).y * 0.4;
     float bthr = 0.78 - 0.20 * BrightAmt;
-    float bmask = smoothstep(bthr, bthr + 0.07, bp) * step(0.001, BrightAmt) * (0.55 + 0.45 * hl);
+    float bmask = smoothstep(bthr, bthr + 0.07, bp) * step(0.001, BrightAmt) * (0.55 + 0.45 * hl) * (1.0 - polar2);
     base = lerp(base, ColBright.rgb * (0.90 + 0.10 * fine2), bmask * 0.90);
 
     // Frost: favours the poles and low ground, ragged edges.
-    float iceN = (Tex(ps * 3.0 + 0.6).x - 0.5) * 0.8 + (Tex(ps * 9.0 + 0.1).y - 0.5) * 0.25;
+    float iceN = (Tex(ps * 3.0 + 0.6).x - 0.5) * 0.8 + (Tex(ps * 9.0 + 0.1).y - 0.5) * 0.25;   // not faded toward the poles: that is where the frost must show, and its coarse noise is not what streaks
     float ice = smoothstep(0.0, 0.10, IceAmt * (0.45 + abs(Pt.y) * 0.95) - 0.55 + iceN - hl * 0.10) * step(0.001, IceAmt);
     base = lerp(base, ColIce.rgb * (0.92 + 0.10 * fine2), ice * 0.92);
 
@@ -145,12 +146,12 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
 
     // ---------------- relief (cheap bump shading from the mid-scale noise) ----------------
     float e = 0.012;
-    float mx = Tex((ps + float2(e, 0.0)) * 2.2 * Mottle + 0.31).y;
-    float my = Tex((ps + float2(0.0, e)) * 2.2 * Mottle + 0.31).y;
+    float mx = lerp(Tex((ps + float2(e, 0.0)) * 2.2 * Mottle + 0.31).y, 0.5, polar2);
+    float my = lerp(Tex((ps + float2(0.0, e)) * 2.2 * Mottle + 0.31).y, 0.5, polar2);
     float2 grad = float2(mx - mid, my - mid) / e;
     float2 L2 = normalize(LightDir.xy + 1e-4);
     float relief = saturate(0.5 + 0.5 * dot(grad * float2(1.0, -1.0), L2) * 0.06) * 2.0 - 1.0;
-    base *= 1.0 + relief * (0.10 + 0.20 * saturate(Contrast));
+    base *= 1.0 + relief * (0.10 + 0.20 * saturate(Contrast)) * (1.0 - polar2);
 
     // ---------------- lighting ----------------
     float ndl  = dot(P, normalize(LightDir));
