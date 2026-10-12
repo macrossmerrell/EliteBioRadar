@@ -1908,7 +1908,7 @@ namespace EliteBioRadar
                     ? (ringed ? (int)size : (int)Math.Floor(size * 0.8 / 0.46))     // ringed: whole scene; ringless: sphere fills ~80%
                     : (ringed ? (int)size : (int)Math.Floor(size * 0.82 / 0.68));
                 double t = PlanetRenderer.StableHash(b.BodyName) % 900;
-                var scene = PlanetShaderScenes.Build(b, iconCode, box, box, t, _watcher.SystemPopulation, _watcher.ParentStarTemperature(b));
+                var scene = PlanetShaderScenes.Build(b, iconCode, box, box, t, _watcher.SystemPopulation, _watcher.ParentStarTemperature(b), _watcher.ParentStarDistanceM(b));
                 if (scene == null) return null;
                 var clip = new Canvas { Width = size, Height = size, ClipToBounds = true };
                 foreach (var el in scene.Layers)
@@ -1954,7 +1954,7 @@ namespace EliteBioRadar
         }
 
         private static string ThumbSignature(BodyScanDetail b, double size, double starK = 0) =>
-            $"{b.BodyName}|{size}|{b.PlanetClass}|{b.StarType}|{b.Landable}|{b.AtmosphereType}|{b.SurfacePressure:F0}|{b.SurfaceTemperature:F0}|{b.Radius:F0}|{starK:F0}|" +
+            $"{b.BodyName}|{size}|{b.PlanetClass}|{b.StarType}|{b.Landable}|{b.AtmosphereType}|{b.SurfacePressure:F0}|{b.SurfaceTemperature:F0}|{b.Radius:F0}|{starK:F2}|" +
             string.Join(",", b.Rings.Select(r => $"{r.RingClass}:{r.InnerRad:F0}:{r.OuterRad:F0}"));
 
         // Real scaled-down renders — the original ask ("use our planet/star/asteroid renders,
@@ -1973,7 +1973,7 @@ namespace EliteBioRadar
                     return new Image { Source = frame, Width = size, Height = size, Stretch = Stretch.UniformToFill, ClipToBounds = true };
                 }
                 var iconCode = MainWindow.MapPlanetClassToIconCode(b.PlanetClass);
-                if (iconCode != null && GetCachedThumb("p|" + b.BodyName + "|" + size, ThumbSignature(b, size, _watcher.ParentStarTemperature(b)), () => TryBuildShaderThumb(b, iconCode, size)) is UIElement shaderThumb) return shaderThumb;
+                if (iconCode != null && GetCachedThumb("p|" + b.BodyName + "|" + size, ThumbSignature(b, size, _watcher.ParentStarTemperature(b) + _watcher.ParentStarDistanceM(b) * 1e-9), () => TryBuildShaderThumb(b, iconCode, size)) is UIElement shaderThumb) return shaderThumb;
                 if (iconCode != null && PlanetRenderer.IsGasGiantFamily(iconCode))
                 {
                     // GetGasGiantLayers turned out to already BE 4 static bitmaps — the

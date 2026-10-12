@@ -116,6 +116,8 @@ namespace EliteBioRadar
         // blue-grey under a B7 star. The colour of a blackbody at the star's temperature is raised to 1.2 and scaled to keep the overall brightness. Only
         // stars hot enough to matter (A, B, O) are applied to the existing looks, since those were tuned from bodies of F, G, K and M stars.
         public const double StarTintMinK = 7500;
+        // The coolest stars (L dwarfs, about 1500 K): the body is lit almost purely red and reads monochrome red-pink (real: Qiedea TU-M c8-0 B 1, an L6 star at 1521 K, 6 ls away).
+        public const double LowStarTintMaxK = 1800;
 
         public static (double r, double g, double b) StarLightTint(double kelvin)
         {
@@ -124,6 +126,7 @@ namespace EliteBioRadar
             double r = t <= 66 ? 255 : 329.698727446 * Math.Pow(t - 60, -0.1332047592);
             double g = t <= 66 ? 99.4708025861 * Math.Log(t) - 161.1195681661 : 288.1221695283 * Math.Pow(t - 60, -0.0755148492);
             double b = t >= 66 ? 255 : t <= 19 ? 0 : 138.5177312231 * Math.Log(t - 10) - 305.0447927307;
+            if (kelvin < 3000) { g = Math.Max(g, 0.45 * 255); b = Math.Max(b, 0.50 * 255); }   // a real red star is not pure red in game: a floor keeps the pink
             r = Math.Pow(Math.Clamp(r, 0, 255) / 255.0, 1.2); g = Math.Pow(Math.Clamp(g, 0, 255) / 255.0, 1.2); b = Math.Pow(Math.Clamp(b, 0, 255) / 255.0, 1.2);
             double lum = 0.30 * r + 0.59 * g + 0.11 * b;
             return (Math.Min(r / lum, 1.5), Math.Min(g / lum, 1.5), Math.Min(b / lum, 1.5));
@@ -132,18 +135,31 @@ namespace EliteBioRadar
         private static Color Tinted(Color c, (double r, double g, double b) k) => Color.FromRgb(
             (byte)Math.Clamp(c.R * k.r, 0, 255), (byte)Math.Clamp(c.G * k.g, 0, 255), (byte)Math.Clamp(c.B * k.b, 0, 255));
 
+        // Around an L dwarf the light falls off visibly with distance: at Qiedea TU-M c8-0 the bodies went from a light red-pink (6 light-seconds from the L6)
+        // to red-pink (17) to a deep dark red (23). Brightness is scaled by the square root of (reference distance / distance), floored, for bodies whose
+        // orbit round the star is known (a pair on a barycentre reports only its own tiny orbit, so it is left alone).
+        private const double RedDwarfReferenceDistM = 1.86e9;
+        private static void ApplyRedDwarfDistance(LandableWorldLook l, double starK, double starDistM)
+        {
+            if (!(starK > 0 && starK < LowStarTintMaxK) || starDistM < 3e8) return;
+            double k = Math.Clamp(Math.Sqrt(RedDwarfReferenceDistM / starDistM), 0.45, 1.0);
+            (double, double, double) m = (k, k, k);
+            l.Light = Tinted(l.Light, m); l.Dark = Tinted(l.Dark, m); l.Accent = Tinted(l.Accent, m); l.Bright = Tinted(l.Bright, m);
+        }
+
         private static void ApplyStarTint(LandableWorldLook l, double starK)
         {
-            if (starK < StarTintMinK) return;
+            if (starK < StarTintMinK && !(starK > 0 && starK < LowStarTintMaxK)) return;
             var k = StarLightTint(starK);
             l.Light = Tinted(l.Light, k); l.Dark = Tinted(l.Dark, k); l.Accent = Tinted(l.Accent, k); l.Bright = Tinted(l.Bright, k); l.Ice = Tinted(l.Ice, k);
         }
 
         // The look for a landable-world body, tinted by the colour of its star when the star is hot (see StarLightTint).
-        public static LandableWorldLook GetLandableWorldLook(BodyScanDetail detail, string iconCode = "HMC", double starK = 0)
+        public static LandableWorldLook GetLandableWorldLook(BodyScanDetail detail, string iconCode = "HMC", double starK = 0, double starDistM = 0)
         {
             var look = GetLandableWorldLookCore(detail, iconCode, starK);
             ApplyStarTint(look, starK);
+            ApplyRedDwarfDistance(look, starK, starDistM);
             return look;
         }
 
@@ -192,7 +208,12 @@ namespace EliteBioRadar
                 else if (slice <= 5) look = 16;
                 else if (slice == 6) look = 15;
                 else if (slice == 7) look = 17;
+                else if (slice >= 10 && slice <= 11) look = 18;
+                else if (slice <= 9) look = 8;   // the dark rust-brown family keeps turning up in game (TD-Z 1, SU-M C 7, TU-M A 2), so it gets a larger share
             }
+            // Around an L dwarf the body reads monochrome red (see LowStarTintMaxK): start from the flat neutral grey-brown and let the tint colour it.
+            bool redLit = starK > 0 && starK < LowStarTintMaxK;
+            if (redLit) look = 18;
 
             var l = new LandableWorldLook
             {
@@ -227,7 +248,7 @@ namespace EliteBioRadar
                     l.Light = rgb(150, 138, 112); l.Dark = rgb(104, 106, 78); l.Accent = rgb(100, 112, 70); l.Bright = rgb(108, 128, 70);
                     l.Contrast = 0.7; l.RustAmt = 0.2; l.BrightAmt = 0.55; l.CraterAmt = 0.6; l.RayAmt = -0.9; break;
                 case 8: // dark rust-brown with charcoal blotches and grey-tan flakes (C 4; real: Qiedea GI-X b19-0 4, TD-Z b17-0 1 - dimmer than first drawn)
-                    l.Light = rgb(112, 84, 68); l.Dark = rgb(60, 50, 45); l.Accent = rgb(78, 80, 66); l.Bright = rgb(132, 124, 106);
+                    l.Light = rgb(98, 74, 62); l.Dark = rgb(52, 44, 40); l.Accent = rgb(74, 76, 62); l.Bright = rgb(118, 110, 96);   // darker and less orange again after Qiedea TU-M c8-0 C 1 and C 2
                     l.Contrast = 0.6; l.RustAmt = 0.4; l.BrightAmt = 0.55; l.CraterAmt = 0.7; l.RayAmt = -0.9; break;
                 case 9: // salmon with grey-green flecks and big dark-rayed craters (C 2; darkened after TD-Z b17-0 1 was far dimmer in game)
                     l.Light = rgb(180, 130, 100); l.Dark = rgb(118, 90, 72); l.Accent = rgb(78, 84, 60); l.Bright = rgb(190, 160, 134);
@@ -247,7 +268,13 @@ namespace EliteBioRadar
                     l.Contrast = 0.35; l.RustAmt = 0.2; l.BrightAmt = 0.1; l.CraterAmt = 0.25; l.RayAmt = 0.0; break;
                 case 16: // pale warm grey-white ground with large sharp-edged dark basins and swirling dark flow lines (real: SU-M c8-1 C 6)
                     l.Light = rgb(206, 200, 192); l.Dark = rgb(84, 76, 66); l.Accent = rgb(68, 60, 52); l.Bright = rgb(226, 222, 214);
-                    l.Contrast = 1.3; l.RustAmt = 0.55; l.BrightAmt = 0.2; l.CraterAmt = 0.25; l.RayAmt = 0.0; break;
+                    l.Contrast = 1.3; l.RustAmt = 0.55; l.BrightAmt = 0.2; l.CraterAmt = 0.25; l.RayAmt = 0.0; 
+                    if (((hash >> 9) & 1) == 1)   // the warm-tan version: tan ground with the same hard dark basins (real: Qiedea TU-M c8-0 C 4; FX-S d4-0 1 and 2)
+                    { l.Light = rgb(192, 150, 108); l.Dark = rgb(94, 68, 52); l.Accent = rgb(78, 58, 46); l.Bright = rgb(214, 176, 134); }
+                    break;
+                case 18: // flat medium grey-brown with soft darker blotches, strong relief and one small dark-rayed crater, no colour (real: Qiedea TU-M c8-0 A 5 and A 6, SU-M c8-1 B 1 and B 4)
+                    l.Light = rgb(112, 104, 98); l.Dark = rgb(86, 80, 76); l.Accent = rgb(96, 80, 74); l.Bright = rgb(126, 118, 112);
+                    l.Contrast = 0.45; l.RustAmt = 0.15; l.BrightAmt = 0.1; l.CraterAmt = 0.35; l.RayAmt = -0.8; break;
                 case 17: // olive base with lavender-grey and tan-pink patches, a fine camouflage pattern (real: SU-M c8-1 B 2)
                     l.Light = rgb(128, 126, 94); l.Dark = rgb(94, 98, 68); l.Accent = rgb(118, 108, 128); l.Bright = rgb(160, 140, 114);
                     l.Contrast = 0.6; l.RustAmt = 0.5; l.BrightAmt = 0.6; l.CraterAmt = 0.2; l.RayAmt = 0.0; break;
@@ -261,10 +288,11 @@ namespace EliteBioRadar
                     l.Light = rgb(208, 178, 140); l.Dark = rgb(152, 130, 106); l.Accent = rgb(122, 92, 72); l.Bright = rgb(232, 210, 178);
                     l.Contrast = 0.55; l.RustAmt = 0.5; l.BrightAmt = 0.5; l.CraterAmt = 0.9; l.RayAmt = 0.9; break;
                 default: // salmon-orange with brown mottling, grey-green flakes and dark-spoked craters (real: Qiedea FX-S d4-0 3 was darker and greyer)
-                    l.Light = rgb(172, 128, 98); l.Dark = rgb(88, 66, 52); l.Accent = rgb(92, 94, 72); l.Bright = rgb(150, 140, 114);
+                    l.Light = rgb(156, 116, 90); l.Dark = rgb(80, 60, 48); l.Accent = rgb(90, 92, 70); l.Bright = rgb(138, 128, 104);
                     l.Contrast = 0.6; l.RustAmt = 0.35; l.BrightAmt = 0.35; l.CraterAmt = 0.9; l.RayAmt = -0.9; break;
             }
 
+            if (redLit) l.NoFrost = true;
             // Frost on the cold bodies: small polar patches at most. The first version covered whole hemispheres, but the real airless cold bodies
             // (Qiedea FX-S d4-0 4, 5 and 6 at 232 / 196 / 173 K) showed none or one small polar patch.
             if (temp > 0 && temp < 250 && !l.NoFrost)
@@ -300,8 +328,15 @@ namespace EliteBioRadar
                 l.Light = rgb(150, 146, 142); l.Dark = rgb(96, 92, 90); l.Accent = rgb(62, 60, 60); l.Bright = rgb(176, 172, 168);
                 l.Contrast = 0.55; l.RustAmt = 0.2; l.CraterAmt = 0.7; l.RayAmt = 0.4;
             }
+            // About half of them are patchy (real: Qiedea TU-M c8-0 A 1, 1167 K): a darker brick-red base with charcoal basins and scattered bright
+            // orange-salmon patches, a big shallow crater and no rays; the other half stay plain (ZW-R d5-22 B 1). Not under hot blue-white stars (neutral base above).
+            if (starK < StarTintMinK && ((hash >> 10) & 1) == 1)
+            {
+                l.Light = rgb(114, 58, 48); l.Dark = rgb(62, 40, 38); l.Accent = rgb(50, 46, 46); l.Bright = rgb(216, 134, 94);
+                l.Contrast = 0.85; l.RustAmt = 0.3; l.BrightAmt = 0.2; l.CraterAmt = 0.5; l.RayAmt = 0.0;
+            }
             if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 250)
-                l.IceAmt = 0.20 + 0.35 * (((hash >> 9) % 100) / 100.0);
+                l.IceAmt = 0.08 + 0.22 * (((hash >> 9) % 100) / 100.0);   // small polar patches only (the first version gave a big cap: Qiedea TU-M c8-0 C 5 a has none)
             return l;
         }
 
@@ -432,7 +467,7 @@ namespace EliteBioRadar
                     l.Contrast = 0.7; l.RustAmt = 0.3; l.BrightAmt = 0.4; l.CraterAmt = 0.9; l.RayAmt = -0.4; break;
             }
             double temp = detail.SurfaceTemperature;
-            if (temp > 0 && temp < 160) l.IceAmt = 0.25 + 0.30 * (((hash >> 9) % 100) / 100.0);   // frost cap on the coldest ones
+            if (temp > 0 && temp < 160) l.IceAmt = 0.10 + 0.20 * (((hash >> 9) % 100) / 100.0);   // frost cap on the coldest ones
             return l;
         }
 
@@ -550,7 +585,8 @@ namespace EliteBioRadar
                 else if (denseVariant == 2) { s0 = rgb(24, 26, 32);  s1 = rgb(46, 50, 58);  contrast = 0.5; }   // near-black
                 else                        { s0 = rgb(112, 124, 140); s1 = rgb(162, 174, 188); contrast = 0.7; }   // slate
             }
-            else if (iconCode == "HMC" && (detail.AtmosphereType ?? "").Contains("Nitrogen", StringComparison.OrdinalIgnoreCase))
+            else if (iconCode == "HMC" && ((detail.AtmosphereType ?? "").Contains("Nitrogen", StringComparison.OrdinalIgnoreCase)
+                || ((detail.AtmosphereType ?? "").Contains("CarbonDioxide", StringComparison.OrdinalIgnoreCase) && detail.SurfacePressure is >= 5000 and <= 100000 && ((hash >> 4) & 1) == 0)))
             {
                 // Nitrogen-dominated atmospheres on HMC planets came out ochre-gold with white cyclones in all three real examples
                 // (Qiedea ZW-R d5-22 BC 4 32 kPa and A 5 3.49 MPa; Qiedea BO-M c9-1 A 1 47 kPa, 34% oxygen) - a hypothesis from three bodies.
@@ -559,13 +595,13 @@ namespace EliteBioRadar
             else if (pick <= 3)     { s0 = rgb(176, 106, 56);  s1 = rgb(232, 152, 92); }                   // ochre / orange (brightened to match a real orange Mars-like body, Qiedea ZW-R d5-22 BC 4)
             else if (pick == 4)     { s0 = rgb(92, 40, 30);    s1 = rgb(150, 72, 52); }                      // rust red
             else if (pick <= 6)     { s0 = rgb(66, 52, 44);    s1 = rgb(118, 96, 80); }                      // brown
-            else if (pick == 7)     { s0 = rgb(74, 70, 40);    s1 = rgb(128, 120, 70); }                     // olive
+            else if (pick == 7)     { s0 = rgb(94, 76, 40);    s1 = rgb(164, 130, 72); }                     // olive-gold (was greener; real: Qiedea TU-M c8-0 C 5, golden ochre)
             else                    { s0 = rgb(30, 24, 26);    s1 = rgb(64, 60, 68); contrast = 1.2; }       // dark charcoal with a faint rust undertone (real: PW-N d6-2 6, 63 kPa, 242 K)
 
             // Ice caps: about one body in five, larger on the cold ones (the first version gave 40% a big one; real ones such as K: B 3, C 8 and C 3 had none).
             bool hasCap = ((hash >> 5) % 10) < 2;
             double cold = detail.SurfaceTemperature > 0 ? Math.Clamp((330 - detail.SurfaceTemperature) / 200.0, 0, 1) : 0;
-            double cap = hasCap ? 0.22 + 0.28 * (((hash >> 9) % 100) / 100.0) + 0.14 * cold : 0.0;
+            double cap = hasCap ? (0.22 + 0.28 * (((hash >> 9) % 100) / 100.0) + 0.14 * cold) * (haze < 0.6 ? 0.6 : 1.0) : 0.0;
 
             // Hot bodies. Real: Qiedea EB-X e1-0 3 (sulphur dioxide, 404 kPa, 1176 K) is near-black with scattered glowing red patches, as are the hot
             // Metal-rich body 2 (1427 K) and RR-N d6-47 A 1 (2154 K); Qiedea GI-X b19-0 5 at 1086 K was still a smooth orange-red, so the line is taken

@@ -400,6 +400,29 @@ namespace EliteBioRadar
         // Surface temperature of the star a body really orbits (walks up the parent chain: moon -> planet -> star), so a body around a cool secondary
         // star is not tinted by the primary's light. Falls back to the primary star when the chain can't be followed (bodies on a barycentre, or a
         // parent not scanned yet). 0 when no star is known.
+        // Orbital distance (metres) from the star it orbits, from the body's own semi-major axis when its parent is a star (or that of the planet it
+        // orbits). 0 when unknown: a body on a barycentre reports only its tiny orbit round that, and a moon the planet's orbit through its parent.
+        public double ParentStarDistanceM(BodyScanDetail d)
+        {
+            try
+            {
+                var all = GetCurrentSystemBodyDetails();
+                var cur = d;
+                for (int i = 0; i < 6 && cur != null; i++)
+                {
+                    if (cur.IsStar) return 0;
+                    int pid = cur.ParentBodyID;
+                    if (pid < 0) return 0;
+                    var parent = all.FirstOrDefault(x => x.BodyID == pid) ?? (CurrentStarDetail?.BodyID == pid ? CurrentStarDetail : null);
+                    if (parent == null) return 0;
+                    if (parent.IsStar) return cur.SemiMajorAxis;
+                    cur = parent;
+                }
+            }
+            catch { /* unknown */ }
+            return 0;
+        }
+
         public double ParentStarTemperature(BodyScanDetail d)
         {
             try

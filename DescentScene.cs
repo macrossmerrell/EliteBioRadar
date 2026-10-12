@@ -85,7 +85,7 @@ namespace EliteBioRadar
             {
                 if (PlanetRenderer.IsLandableWorld(body, iconCode) && (System.Windows.Media.RenderCapability.Tier >> 16) != 0)
                 {
-                    var look = PlanetRenderer.GetLandableWorldLook(body, iconCode, _watcher?.ParentStarTemperature(body) ?? 0);
+                    var look = PlanetRenderer.GetLandableWorldLook(body, iconCode, _watcher?.ParentStarTemperature(body) ?? 0, _watcher?.ParentStarDistanceM(body) ?? 0);
                     look.AtmGlow = 0;   // the haze is drawn separately, in the atmosphere's own colour
                     // The visible ground here is the TOP of a very large sphere, and the top of the sphere is the shader's pole, where its
                     // latitude/longitude texture mapping pinches into a star of converging streaks. Pitching the planet a quarter turn puts that top
