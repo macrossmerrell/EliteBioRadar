@@ -232,6 +232,23 @@ namespace EliteBioRadar
             return (cx, cy, R);
         }
 
+        // Brown dwarfs (L, T, Y) read as banded magenta gas-giant-like discs in game, not granulated stars (real: Qiedea MX-T d3-2 AB 2, Y5, 349 K: hot-pink
+        // and purple-magenta bands with salmon-pink streaks and a thin violet rim). They draw with the gas giant shader and a face-on light.
+        public static GasGiantLook GetBrownDwarfGasLook(BodyScanDetail detail)
+        {
+            Color rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
+            double seed = BodySeed(detail.BodyName) % 97 / 10.0 + 0.5;
+            bool hotter = detail.StarType == "L";   // L dwarfs: the same family, paler pink streaks (the earlier L reference had a near-white hotspot)
+            return new GasGiantLook
+            {
+                Seed = seed, BandCount = 12, Turb = 0.8, StormAmt = -1.0, BigStorm = 0, Contrast = 1.1, Pitch = 0,   // no storms on any brown dwarf (user, from the real AB 2 and AB 1); 0 still lets about 1 in 5 slots draw one in the shader (step(0.80 - 0.62*amt, ...)), so it goes negative
+                Tilt = -0.12 + (BodySeed(detail.BodyName) % 7 - 3) * 0.02,
+                C0 = rgb(0x92, 0x1a, 0x78), C1 = rgb(0xc8, 0x18, 0x88), C2 = rgb(0xe8, 0x30, 0x78),
+                C3 = hotter ? rgb(0xff, 0xb4, 0xc8) : rgb(0xf0, 0x78, 0x82),
+                Band4 = rgb(0x6a, 0x10, 0x6a), Glow = rgb(0x7a, 0x40, 0xd0),
+            };
+        }
+
         public static StarLook GetStarLook(BodyScanDetail detail)
         {
             var (core, mid, edge) = GetStarColors(detail.SurfaceTemperature, detail.StarType);

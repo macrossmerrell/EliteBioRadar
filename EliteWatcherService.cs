@@ -397,49 +397,36 @@ namespace EliteBioRadar
         // live reference into state this service keeps mutating.
         public List<BodyScanDetail> GetCurrentSystemBodyDetails() => _bodyScanDetails.Values.ToList();
 
-        // Surface temperature of the star a body really orbits (walks up the parent chain: moon -> planet -> star), so a body around a cool secondary
-        // star is not tinted by the primary's light. Falls back to the primary star when the chain can't be followed (bodies on a barycentre, or a
-        // parent not scanned yet). 0 when no star is known.
-        // Orbital distance (metres) from the star it orbits, from the body's own semi-major axis when its parent is a star (or that of the planet it
-        // orbits). 0 when unknown: a body on a barycentre reports only its tiny orbit round that, and a moon the planet's orbit through its parent.
+        // Surface temperature of the star that lights a body. The game lights every body from the system's PRIMARY star only (a real moon of a brown
+        // dwarf, Qiedea MX-T d3-2 AB 2 d, was not red-tinted by its Y-dwarf parent but lit by the A7 primary 1862 ls away), so this is the primary
+        // star's temperature for any body, and a star reports its own. 0 when no star is known.
+        // Distance (metres) from that primary star: the body's own semi-major axis when its parent chain ends at the primary, otherwise its
+        // light-second distance from arrival (which is the primary). 0 when unknown.
         public double ParentStarDistanceM(BodyScanDetail d)
         {
             try
             {
+                if (d.IsStar || CurrentStarDetail == null) return 0;
                 var all = GetCurrentSystemBodyDetails();
                 var cur = d;
                 for (int i = 0; i < 6 && cur != null; i++)
                 {
-                    if (cur.IsStar) return 0;
                     int pid = cur.ParentBodyID;
-                    if (pid < 0) return 0;
-                    var parent = all.FirstOrDefault(x => x.BodyID == pid) ?? (CurrentStarDetail?.BodyID == pid ? CurrentStarDetail : null);
-                    if (parent == null) return 0;
-                    if (parent.IsStar) return cur.SemiMajorAxis;
+                    if (pid < 0) break;
+                    var parent = all.FirstOrDefault(x => x.BodyID == pid) ?? (CurrentStarDetail.BodyID == pid ? CurrentStarDetail : null);
+                    if (parent == null) break;
+                    if (parent.IsStar) return parent.BodyID == CurrentStarDetail.BodyID ? cur.SemiMajorAxis : DistanceFromArrivalM(d);
                     cur = parent;
                 }
+                return DistanceFromArrivalM(d);
             }
             catch { /* unknown */ }
             return 0;
         }
 
-        public double ParentStarTemperature(BodyScanDetail d)
-        {
-            try
-            {
-                var all = GetCurrentSystemBodyDetails();
-                var cur = d;
-                for (int i = 0; i < 6 && cur != null; i++)
-                {
-                    if (cur.IsStar) return cur.SurfaceTemperature;
-                    if (cur.ParentBodyID < 0) break;
-                    int pid = cur.ParentBodyID;
-                    cur = all.FirstOrDefault(x => x.BodyID == pid) ?? (CurrentStarDetail?.BodyID == pid ? CurrentStarDetail : null)!;
-                }
-            }
-            catch { /* fall through to the primary star */ }
-            return CurrentStarDetail?.SurfaceTemperature ?? 0;
-        }
+        private static double DistanceFromArrivalM(BodyScanDetail d) => d.DistanceFromArrivalLS * 299792458.0;
+
+        public double ParentStarTemperature(BodyScanDetail d) => d.IsStar ? d.SurfaceTemperature : CurrentStarDetail?.SurfaceTemperature ?? 0;
 
         // A "Belt Cluster" body's own Scan event carries almost nothing (BodyName/BodyID/
         // Parents/SemiMajorAxis at most — no RingClass, no composition) — that real data lives

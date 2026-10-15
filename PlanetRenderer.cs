@@ -950,9 +950,11 @@ if (darkCyclone && !icy && !rockyIce && ((hash >> 9) & 1) == 1)   // navy-teal (
                     look.BandCount = 20; look.Turb = 0.35; look.StormAmt = 0.08; look.Contrast = 0.85; look.Tilt = -0.2 + tiltJitter * 0.3;
                     break;
                 case "GGH":
-                    look.C0 = rgb(0x1c, 0x16, 0x10); look.C1 = rgb(0x44, 0x38, 0x28); look.C2 = rgb(0xa8, 0x98, 0x80);
-                    look.C3 = rgb(0xd0, 0xc4, 0xb0); look.Band4 = rgb(0x10, 0x0c, 0x08); look.Glow = rgb(0xa8, 0x98, 0x80);
-                    look.BandCount = 4; look.Turb = 1.7; look.StormAmt = 0.3; look.Contrast = 0.55;
+                    // Dark mauve-brown belts between cream-grey zones, nearly horizontal, with chunky pale storm swirls (real: Qiedea MX-T d3-2 A 1, 3668 K,
+                    // 8 ls from its star; the first helium-rich giant seen - the earlier dark sandy, streaky look was a guess)
+                    look.C0 = rgb(0x3a, 0x26, 0x26); look.C1 = rgb(0x5e, 0x42, 0x42); look.C2 = rgb(0xb4, 0xae, 0x9c);
+                    look.C3 = rgb(0xd2, 0xcc, 0xb8); look.Band4 = rgb(0x2a, 0x1a, 0x1a); look.Glow = rgb(0xb4, 0xaa, 0x98);
+                    look.BandCount = 9; look.Turb = 0.45; look.StormAmt = 0.6; look.Contrast = 1.3; look.Tilt = 0.02 + tiltJitter * 0.2;
                     break;
                 case "GGA":
                     look.C0 = rgb(0x08, 0x06, 0x04); look.C1 = rgb(0x1c, 0x16, 0x10); look.C2 = rgb(0x6a, 0x58, 0x3c);

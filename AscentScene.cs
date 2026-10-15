@@ -369,24 +369,21 @@ namespace EliteBioRadar
             {
                 string next = _watcher?.CurrentDestination?.NextSystem ?? "";
                 string nextClass = _watcher?.CurrentDestination?.StarClass ?? "";
-                string tagText = string.IsNullOrEmpty(nextClass) ? "NEXT JUMP" : $"NEXT JUMP  ·  CLASS {nextClass.ToUpperInvariant()}";
-                bool scoopNext = IsScoopableStar(nextClass);
+                string tagText = string.IsNullOrEmpty(nextClass) ? "" : $"CLASS {nextClass.ToUpperInvariant()}";
+                bool scoopNext = IsScoopableStar(nextClass) && tagText.Length > 0;
                 if (al > 0.35)
                 {
                     var n1 = new TextBlock { Text = string.IsNullOrEmpty(next) ? "NEXT JUMP" : next, Foreground = Brushes.White, FontFamily = new FontFamily("Consolas"), FontSize = 12 };
                     Canvas.SetLeft(n1, tx + 22); Canvas.SetTop(n1, ty - 22);
-                    var n2 = new TextBlock { Text = tagText, Foreground = InfoOrangeBrush, FontFamily = new FontFamily("Consolas"), FontSize = 10 };
-                    Canvas.SetLeft(n2, tx + 22); Canvas.SetTop(n2, ty - 7);
-                    if (!string.IsNullOrEmpty(next))
-                    {
-                        c.Children.Add(n2);
-                        if (scoopNext)
-                        {
-                            n2.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-                            c.Children.Add(MakeScoopDrop(tx + 22 + n2.DesiredSize.Width + 6, ty - 6));
-                        }
-                    }
                     c.Children.Add(n1);
+                    if (!string.IsNullOrEmpty(next) && tagText.Length > 0)
+                    {
+                        var n2 = new TextBlock { Text = tagText, Foreground = InfoOrangeBrush, FontFamily = new FontFamily("Consolas"), FontSize = 12 };
+                        Canvas.SetLeft(n2, tx + 22); Canvas.SetTop(n2, ty - 6);
+                        c.Children.Add(n2);
+                        n2.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                        if (scoopNext) c.Children.Add(MakeScoopDrop(tx + 22 + n2.DesiredSize.Width + 6, ty - 4, 1.0));
+                    }
                 }
                 else if (!string.IsNullOrEmpty(next))
                 {
@@ -394,17 +391,20 @@ namespace EliteBioRadar
                     // name goes below the status text instead, on a dark plate.
                     var name = MakeCenterLabel(next, fx, fy + 106, Brushes.White, 16);
                     name.FontWeight = FontWeights.Bold;
-                    var tag = MakeCenterLabel(tagText, fx, fy + 126, InfoOrangeBrush, 10);
-                    double dropW = scoopNext ? 16 : 0;
-                    if (scoopNext) Canvas.SetLeft(tag, Canvas.GetLeft(tag) - dropW / 2);   // keep text + drop centred together
-                    double plateW = Math.Max(name.DesiredSize.Width, tag.DesiredSize.Width + dropW) + 20;
-                    var plate = new Border { Width = plateW, Height = 46, CornerRadius = new CornerRadius(3), IsHitTestVisible = false,
+                    var tag = tagText.Length > 0 ? MakeCenterLabel(tagText, fx, fy + 128, InfoOrangeBrush, 16) : null;
+                    tag?.SetValue(TextBlock.FontWeightProperty, FontWeights.Bold);
+                    if (tag != null) tag.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    double dropW = scoopNext ? 16 : 0;   // drop plus its gap
+                    double tagW = tag == null ? 0 : tag.DesiredSize.Width + dropW;
+                    if (tag != null) Canvas.SetLeft(tag, fx - tagW / 2);   // class text + drop centred together
+                    double plateW = Math.Max(name.DesiredSize.Width, tagW) + 20;
+                    var plate = new Border { Width = plateW, Height = tag == null ? 28 : 52, CornerRadius = new CornerRadius(3), IsHitTestVisible = false,
                         Background = new SolidColorBrush(DAlpha(Color.FromRgb(0x0a, 0x10, 0x12), 0.72)) };
                     Canvas.SetLeft(plate, fx - plateW / 2); Canvas.SetTop(plate, fy + 102);
                     c.Children.Add(plate);
                     c.Children.Add(name);
-                    c.Children.Add(tag);
-                    if (scoopNext) c.Children.Add(MakeScoopDrop(Canvas.GetLeft(tag) + tag.DesiredSize.Width + 6, fy + 127));
+                    if (tag != null) c.Children.Add(tag);
+                    if (scoopNext) c.Children.Add(MakeScoopDrop(fx - tagW / 2 + tag!.DesiredSize.Width + 6, fy + 131, 1.25));
                 }
             }
 

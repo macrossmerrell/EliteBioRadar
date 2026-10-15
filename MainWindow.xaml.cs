@@ -1019,6 +1019,18 @@ namespace EliteBioRadar
             if ((RenderCapability.Tier >> 16) == 0) return false;
             try
             {
+                if (detail.StarType is "L" or "T" or "Y")
+                {
+                    var (bx, by, bR) = StarRenderer.GetStarShaderDisc(detail, sceneW, sceneH);
+                    var ge = GasGiantShaderEffect.Create(StarRenderer.GetBrownDwarfGasLook(detail),
+                        new Point(bx / sceneW, by / sceneH), new Point(bR / sceneW, bR / sceneH));
+                    ge.SetValue(GasGiantShaderEffect.LightDirProperty, new System.Windows.Media.Media3D.Vector3D(-0.12, 0.12, 0.99));
+                    ge.BeginAnimation(GasGiantShaderEffect.TimeProperty, new DoubleAnimation(0, 36000, TimeSpan.FromSeconds(36000)));
+                    var dwarf = new System.Windows.Shapes.Rectangle { Width = sceneW, Height = sceneH, Fill = Brushes.Black, Effect = ge };
+                    var dwarfHost = Supersample(dwarf); Canvas.SetLeft(dwarfHost, sceneX); Canvas.SetTop(dwarfHost, sceneY);
+                    starPanelCanvas.Children.Add(dwarfHost);
+                    return true;
+                }
                 var look = StarRenderer.GetStarLook(detail);
                 var (cx, cy, R) = StarRenderer.GetStarShaderDisc(detail, sceneW, sceneH);
                 var effect = StarShaderEffect.Create(look,
@@ -3139,12 +3151,12 @@ namespace EliteBioRadar
             "O", "B", "A", "F", "G", "K", "M", "W", "WN", "WNC", "WC", "WO"
         };
         // The fuel-drop symbol (same shape as the Destination route list) placed on a canvas at (left, top).
-        private static System.Windows.Shapes.Path MakeScoopDrop(double left, double top)
+        private static System.Windows.Shapes.Path MakeScoopDrop(double left, double top, double scale = 1.0)
         {
             var drop = new System.Windows.Shapes.Path
             {
                 Data = Geometry.Parse("M5,0 C5,0 0,6.4 0,9 A5,5 0 1,0 10,9 C10,6.4 5,0 5,0 Z"),
-                Fill = InfoValueBrush, Width = 8, Height = 10, Stretch = Stretch.Uniform, IsHitTestVisible = false,
+                Fill = InfoValueBrush, Width = 8 * scale, Height = 10 * scale, Stretch = Stretch.Uniform, IsHitTestVisible = false,
             };
             Canvas.SetLeft(drop, left); Canvas.SetTop(drop, top);
             return drop;
