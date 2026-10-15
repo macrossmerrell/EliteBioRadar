@@ -370,6 +370,7 @@ namespace EliteBioRadar
             int look = hash % 7;
             if (((hash >> 16) % 7) == 0) look = 7;   // ~1 in 7 bodies: white ice with blue crevasses (kept off the main modulus so existing bodies keep their look)
             if (temp > 0 && temp < 35 && (hash % 10) < 7) look = 2;   // the coldest lean towards light grey, cratered
+            if (((hash >> 19) % 5) == 0) look = 8;   // about 1 in 5: plain pale grey with fine dark flecks (three real bodies of Qiedea ZK-M c8-0 A 2, none with the big teal blotches)
             switch (look)
             {
                 case 0: // white with teal-green blotches
@@ -393,6 +394,9 @@ namespace EliteBioRadar
                 case 7: // white ice with long blue crevasses and small blue patches (real: DG-F b25-0 A 2 a)
                     l.Light = rgb(238, 240, 240); l.Dark = rgb(226, 229, 230); l.Accent = rgb(150, 156, 160); l.Bright = rgb(120, 170, 200); l.Ice = rgb(66, 128, 176);
                     l.Contrast = 0.12; l.RustAmt = 0.10; l.BrightAmt = 0.05; l.CraterAmt = 0.25; l.RayAmt = 0.1; l.LineAmt = 1.0; l.SpecAmt = 0.3; break;
+                case 8: // pale grey, fine darker-grey mottling and small dark teal-charcoal flecks, thin scratches, no colour (real: ZK-M c8-0 A 2 a, b and c)
+                    l.Light = rgb(172, 172, 170); l.Dark = rgb(138, 138, 136); l.Accent = rgb(44, 58, 56); l.Bright = rgb(150, 152, 148);
+                    l.Contrast = 0.55; l.RustAmt = 0.45; l.BrightAmt = 0.25; l.CraterAmt = 0.4; l.RayAmt = 0.3; l.SpecAmt = 0.6; break;
                 default: // dark rust-pink with gold flecks
                     l.Light = rgb(136, 98, 92); l.Dark = rgb(86, 64, 60); l.Accent = rgb(74, 62, 48); l.Bright = rgb(214, 176, 96);
                     l.Contrast = 0.90; l.RustAmt = 0.30; l.BrightAmt = 0.25; l.CraterAmt = 0.5; l.RayAmt = 0.1; l.SpecAmt = 0.9; break;

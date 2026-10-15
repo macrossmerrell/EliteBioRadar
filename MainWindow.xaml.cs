@@ -3138,6 +3138,18 @@ namespace EliteBioRadar
         {
             "O", "B", "A", "F", "G", "K", "M", "W", "WN", "WNC", "WC", "WO"
         };
+        // The fuel-drop symbol (same shape as the Destination route list) placed on a canvas at (left, top).
+        private static System.Windows.Shapes.Path MakeScoopDrop(double left, double top)
+        {
+            var drop = new System.Windows.Shapes.Path
+            {
+                Data = Geometry.Parse("M5,0 C5,0 0,6.4 0,9 A5,5 0 1,0 10,9 C10,6.4 5,0 5,0 Z"),
+                Fill = InfoValueBrush, Width = 8, Height = 10, Stretch = Stretch.Uniform, IsHitTestVisible = false,
+            };
+            Canvas.SetLeft(drop, left); Canvas.SetTop(drop, top);
+            return drop;
+        }
+
         private static bool IsScoopableStar(string starClass) =>
             !string.IsNullOrEmpty(starClass) && ScoopableStarClasses.Contains(starClass);
 
