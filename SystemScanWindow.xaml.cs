@@ -1554,13 +1554,6 @@ namespace EliteBioRadar
             var info = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             info.Children.Add(new TextBlock { Text = EliteWatcherService.GetShortBodyName(m.BodyName, _watcher.StarSystem).ToUpperInvariant(), Foreground = TextBright, FontWeight = FontWeights.Bold, FontSize = 11.5, TextTrimming = TextTrimming.CharacterEllipsis });
             info.Children.Add(new TextBlock { Text = FormatClass(m), Foreground = ClassText, FontSize = 10 });
-            // Moons can be binary too — no bracket room inside the nested list, so a dim note.
-            if (_baryGroups.TryGetValue(m.BodyName, out var moonMates))
-            {
-                var others = moonMates.Where(o => !string.Equals(o.BodyName, m.BodyName, StringComparison.OrdinalIgnoreCase))
-                    .Select(o => EliteWatcherService.GetShortBodyName(o.BodyName, _watcher.StarSystem).ToUpperInvariant());
-                info.Children.Add(new TextBlock { Text = $"{GroupWord(moonMates.Count)} with {string.Join(", ", others)}", Foreground = AccentDim, FontSize = 9.5 });
-            }
             dock.Children.Add(info);
             outer.Children.Add(dock);
 

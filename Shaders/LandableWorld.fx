@@ -60,7 +60,7 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     float lonW = atan2(Pt.x, Pt.z) - Time * 0.006;
     float2 ps = float2(lonW / PI, lat / PI * 2.0);
     float polar = smoothstep(1.20, 1.45, abs(lat));       // hide the lat/lon pinch at the poles
-    float polar2 = smoothstep(0.85, 1.30, abs(lat));      // fade the fine detail out before it, where the mapping already streaks into a star
+    float polar2 = smoothstep(1.05, 1.42, abs(lat)) * 0.85;   // fade the fine detail out toward the pole, where the mapping streaks into a star: later and not fully, so the top is not a flat smooth cap
 
     // ---------------- terrain ----------------
     float big   = Tex(ps * 0.8 * Mottle + Seed * 0.13).x;
@@ -115,6 +115,8 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     // ---------------- craters ----------------
     float shade = 1.0;
     float rays = 0.0;
+    float paleBody = step(0.7, frac(Seed * 0.6180339));          // 30% of bodies draw pale rays even on a dark-ray look (real: Qiedea KC-U d3-1 8)
+    float darkRaysG = step(RayAmt, 0.0) * (1.0 - paleBody);
     for (int i = 0; i < 9; i++)
     {
         float3 h = frac(sin(float3(Seed * 9.1 + i * 13.3, Seed * 4.7 + i * 27.9, Seed * 1.9 + i * 19.1))
@@ -131,14 +133,14 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
 
         float bowl = smoothstep(1.0, 0.45, rr);
         float rim  = smoothstep(0.78, 1.0, rr) * smoothstep(1.28, 1.0, rr);
-        shade *= 1.0 - bowl * 0.30 * exists;
-        shade += rim * 0.15 * exists;
+        shade *= 1.0 - bowl * 0.36 * exists;
+        shade += rim * 0.20 * exists;
 
         // Rays: many thin straight spokes, each with its own random length (a real rayed crater has about 40 of them, 1-3 px wide, running 2-3 crater
         // radii; the first version drew a few wide soft wedges). Negative RayAmt = dark spokes (HMC), positive = pale ones.
         float ang = atan2(dy, dx);
-        float darkRays = step(RayAmt, 0.0);
-        float nSp = lerp(30.0, 44.0, darkRays);
+        float darkRays = darkRaysG;
+        float nSp = 42.0;
         float tSp = ang / TAU * nSp + 0.5;                     // spoke cells are centred on whole numbers
         float iSp = floor(tSp);
         float3 rs = frac(sin(float3(iSp * 12.9898 + h.x * 78.233, iSp * 39.346 + h.y * 11.135, iSp * 73.156 + h.z * 51.7)) * 43758.5453);
@@ -148,13 +150,14 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
         // Spokes come in random groups of about 3-8: some groups are missing, some bunched, with their own length scale (the real ones are uneven).
         float gSp = floor(tSp / 5.5);
         float gr = frac(sin(gSp * 91.17 + h.y * 37.9 + h.x * 5.3) * 43758.5453);
-        float lenSp = (1.2 + 2.4 * rs.y) * (0.55 + 0.9 * gr);
-        float spoke = smoothstep(wSp, wSp * 0.35, dperp) * step(0.30, rs.x) * step(0.25, gr) * smoothstep(lenSp, lenSp * 0.55, rr) * smoothstep(0.9, 1.3, rr);
+        float lenSp = (2.0 + 4.0 * rs.y) * (0.6 + 0.8 * gr);   // up to about 8 crater radii, as in the close-up of a real one
+        float wTap = wSp * lerp(1.7, 0.3, saturate((rr - 1.0) / max(lenSp - 1.0, 0.5)));   // each ray is wide at the crater and tapers to a point
+        float spoke = smoothstep(wTap, wTap * 0.35, dperp) * step(0.30, rs.x) * step(0.25, gr) * smoothstep(lenSp, lenSp * 0.55, rr) * smoothstep(0.9, 1.3, rr);
         float rayOn = step(1.0 - abs(RayAmt) * 0.55, frac(h.y * 3.7 + 0.11));   // only some craters carry rays
         rays += spoke * rayOn * exists;
     }
     base *= shade;
-    base = (RayAmt < 0.0) ? lerp(base, base * 0.68, saturate(rays) * 0.70)
+    base = (darkRaysG > 0.5) ? lerp(base, base * 0.68, saturate(rays) * 0.70)
                           : lerp(base, base * 1.55 + 0.06, saturate(rays) * 0.85);
 
     // ---------------- relief (cheap bump shading from the mid-scale noise) ----------------
