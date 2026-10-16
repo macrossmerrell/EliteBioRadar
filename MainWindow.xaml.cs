@@ -636,6 +636,11 @@ namespace EliteBioRadar
         private DateTime _positionSinceUtc = DateTime.MinValue;
         private DateTime _positionLostSince = DateTime.MinValue;
         private bool _prevIsGlidingForSeq;
+        private DateTime _noScNoGlideSince = DateTime.MinValue;
+        private string _lastBioGapLog = "";
+        private string _bioTopUpBody = "";
+        private DateTime _bioTopUpAt = DateTime.MinValue;
+        private List<string> _bioTopUpGenera = new();
         private void UpdateDeorbitSequenceState(EliteStatus status)
         {
             // When the ship came within reach of a planet (lat/long appeared) - a next-system pick counts for the Destination tab only if it
@@ -664,6 +669,16 @@ namespace EliteBioRadar
             // Glide actually engaged in the first place.
             if (!status.HasPosition && !status.IsGliding)
                 _deorbitSeqActive = false;
+
+            // A hard drop out of supercruise into atmosphere (real report: came in too fast, got kicked out of the approach, flew down to 210 m
+            // and the screen kept playing) never glides, so neither reset above fires while the ship is still low enough to have a position.
+            // Neither supercruise nor glide for a few seconds means the approach is over.
+            if (_deorbitSeqActive && !status.Supercruise && !status.IsGliding)
+            {
+                if (_noScNoGlideSince == DateTime.MinValue) _noScNoGlideSince = DateTime.UtcNow;
+                else if ((DateTime.UtcNow - _noScNoGlideSince).TotalSeconds > 4) _deorbitSeqActive = false;
+            }
+            else _noScNoGlideSince = DateTime.MinValue;
 
             _prevHasPositionForSeq = status.HasPosition;
             _prevIsGlidingForSeq = status.IsGliding;
@@ -3742,6 +3757,30 @@ namespace EliteBioRadar
             lock (organisms)            snap        = organisms.ToList();
             lock (_watcher.KnownGenera) knownGenera = _watcher.KnownGenera.ToList();
             lock (_watcher.CompletedGenera) completed = _watcher.CompletedGenera.ToList();
+
+            // Safety net for a real report (Qiedea MX-T d3-2 AB 7 c, bio 2: Bacterium + Recepta): after the DSS the sidebar listed only the
+            // Bacterium, with no Recepta row or pips until the first sample. Whenever fewer genera are shown than the body is known to have,
+            // top up from the body's cache (which the DSS event writes) and the signal count.
+            var shownBody = _watcher.DisplayedBody;
+            if (!string.IsNullOrEmpty(shownBody))
+            {
+                int expected = Math.Max(totalBio, _watcher.KnownBioCount(shownBody));
+                if (knownGenera.Count < expected)
+                {
+                    // Read the cache file at most every 3 s per body: this runs on every sidebar refresh, and a body with bio signals but no DSS yet
+                    // (the common case) would otherwise re-read the whole cache file each time.
+                    if (!string.Equals(_bioTopUpBody, shownBody, StringComparison.OrdinalIgnoreCase) || (DateTime.UtcNow - _bioTopUpAt).TotalSeconds > 3)
+                    { _bioTopUpBody = shownBody; _bioTopUpAt = DateTime.UtcNow; _bioTopUpGenera = ScanCache.LoadForBody(shownBody).KnownGenera.ToList(); }
+                    foreach (var g in _bioTopUpGenera)
+                        if (!knownGenera.Contains(g, StringComparer.OrdinalIgnoreCase)) knownGenera.Add(g);
+                    if (knownGenera.Count < expected)
+                    {
+                        var gapMsg = $"BIO SURVEY: '{shownBody}' shows {knownGenera.Count} genera but expects {expected} (known: {string.Join(", ", knownGenera)}; CurrentBody '{_watcher.CurrentBody}')";
+                        if (gapMsg != _lastBioGapLog) { _lastBioGapLog = gapMsg; Log.Write(gapMsg); }
+                    }
+                }
+                totalBio = Math.Max(totalBio, expected);
+            }
 
             // Build the display list:
             // 1. Known genera from DSS scan (SAASignalsFound Genuses) — authoritative names

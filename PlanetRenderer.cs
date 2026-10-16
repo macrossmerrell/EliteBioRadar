@@ -464,6 +464,7 @@ namespace EliteBioRadar
                 AtmGlow = detail.SurfacePressure > 0 ? 0.35 : 0.0, SpecAmt = 0.0,
             };
             int look = (hash >> 4) % 6;   // by name alone: a star-group window did not hold up (4E was grey beside orange 3 moons)
+            if (detail.SurfacePressure > 0 && ((hash >> 20) % 20) < 5) look = 6;   // about a quarter of the thin-atmosphere ones: the very dark blue-grey (AB 6 f a)
             switch (look)
             {
                 case 0: // pale grey, pink-brown patches, frost (cold bodies)
@@ -478,9 +479,12 @@ namespace EliteBioRadar
                 case 3: // salmon-tan with grey-brown patches
                     l.Light = rgb(206, 152, 114); l.Dark = rgb(150, 128, 108); l.Accent = rgb(124, 102, 86); l.Bright = rgb(224, 182, 142);
                     l.Contrast = 0.6; l.RustAmt = 0.2; l.BrightAmt = 0.3; l.CraterAmt = 0.8; l.RayAmt = 0.0; break;
-                case 4: // dark olive-green with red-brown and yellow-green patches
-                    l.Light = rgb(82, 86, 64); l.Dark = rgb(44, 46, 36); l.Accent = rgb(98, 50, 46); l.Bright = rgb(142, 150, 72);
-                    l.Contrast = 0.7; l.RustAmt = 0.6; l.BrightAmt = 0.3; l.CraterAmt = 0.5; l.RayAmt = 0.0; break;
+                case 4: // pale silvery blue-grey with lighter frost-like patches, pink-brown mottling and small craters (real: Qiedea MX-T d3-2 AB 7 a, SO2 0.2 kPa, 153 K; replaces a dark olive look no real body had)
+                    l.Light = rgb(150, 154, 160); l.Dark = rgb(116, 112, 116); l.Accent = rgb(126, 106, 104); l.Bright = rgb(202, 208, 216);
+                    l.Contrast = 0.8; l.RustAmt = 0.4; l.BrightAmt = 0.8; l.CraterAmt = 0.5; l.RayAmt = 0.0; break;
+                case 6: // very dark dim blue-grey with grey-green and cream-grey patches under a thick blue limb (real: AB 6 f a, CO2 1.7 kPa, 166 K, far from its star)
+                    l.Light = rgb(74, 82, 94); l.Dark = rgb(46, 50, 58); l.Accent = rgb(84, 90, 76); l.Bright = rgb(122, 126, 130);
+                    l.Contrast = 0.6; l.RustAmt = 0.3; l.BrightAmt = 0.4; l.CraterAmt = 0.4; l.RayAmt = 0.0; l.AtmGlow = 0.6; break;
                 default: // tan-orange, crumpled
                     l.Light = rgb(202, 142, 102); l.Dark = rgb(148, 102, 78); l.Accent = rgb(160, 112, 82); l.Bright = rgb(224, 178, 134);
                     l.Contrast = 0.7; l.RustAmt = 0.3; l.BrightAmt = 0.4; l.CraterAmt = 0.9; l.RayAmt = -0.4; break;

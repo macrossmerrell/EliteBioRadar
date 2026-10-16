@@ -239,6 +239,9 @@ namespace EliteBioRadar
         // in Parents. Bodies sharing one (and having a real parent) orbit each other — binary,
         // trinary, ... -1 when the body orbits its parent directly.
         public int  BarycenterID { get; set; } = -1;
+        // The LAST {"Null":N} in Parents: the outermost barycenter, e.g. the whole system's own centre for a star that itself orbits a smaller barycenter
+        // (real: Qiedea MX-T d3-2 AB 3, Parents [{"Null":21},{"Null":0}], pairs with AB 4 around 21, and 21 orbits 0 with the other stars). -1 when none.
+        public int  OuterBarycenterID { get; set; } = -1;
         public string ScanType { get; set; } = ""; // informational tag only ("AutoScan"/"Detailed"), not a completeness signal
         public bool   IsMapped { get; set; } // DSS-mapped this session (SAAScanComplete) — a later, distinct milestone than a Detailed scan
 

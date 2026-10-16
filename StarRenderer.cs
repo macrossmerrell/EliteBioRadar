@@ -160,7 +160,7 @@ namespace EliteBioRadar
                     (2300,  Color.FromRgb(0xf4,0x8c,0x66), Color.FromRgb(0xe8,0x72,0x58), Color.FromRgb(0xac,0x48,0x34)), // M (cool)
                     (3700,  Color.FromRgb(0xff,0xcc,0x8c), Color.FromRgb(0xf2,0xa4,0x70), Color.FromRgb(0xc4,0x6c,0x42)), // M (warm)
                     (4100,  Color.FromRgb(0xff,0xda,0x76), Color.FromRgb(0xf6,0xbc,0x60), Color.FromRgb(0xd6,0x8a,0x3c)), // K (cool)
-                    (5200,  Color.FromRgb(0xff,0xe2,0x8c), Color.FromRgb(0xf8,0xc4,0x68), Color.FromRgb(0xda,0x96,0x44)), // K
+                    (5200,  Color.FromRgb(0xff,0xe8,0xb2), Color.FromRgb(0xfa,0xcc,0x84), Color.FromRgb(0xde,0x76,0x3a)), // K (real K0, 5,149 K, Qiedea FW-L c8-0: pale peach-cream body with white patches and a deep orange-red halo, less yellow than the first anchor)
                     (6000,  Color.FromRgb(0xff,0xf6,0xdc), Color.FromRgb(0xf4,0xe4,0xb6), Color.FromRgb(0xd4,0xb0,0x68)), // G/F (real F8 6,184 K samples a pale cream, about 244,235,209)
                     (7500,  Color.FromRgb(0xff,0xfb,0xf2), Color.FromRgb(0xf0,0xec,0xd8), Color.FromRgb(0xc8,0xc0,0xa0)), // F
                     (10000, Color.FromRgb(0xff,0xff,0xff), Color.FromRgb(0xe4,0xea,0xff), Color.FromRgb(0xb0,0xbe,0xe0)), // A
@@ -270,7 +270,8 @@ namespace EliteBioRadar
                 Hot = hot || detail.SurfaceTemperature > 7500 ? Mix(core, Colors.White, 0.45)
                     : detail.StarType is "L" or "T" or "Y" ? Mix(core, Colors.White, 0.30)
                     : detail.SurfaceTemperature >= 5600 ? Mix(core, Color.FromRgb(0xff, 0xf0, 0xc8), 0.55)   // G/F: patches stay pale cream
-                    : Mix(core, Mix(Color.FromRgb(0xff, 0xe6, 0x82), Color.FromRgb(0xff, 0xdc, 0x48), coolT), 0.60 + 0.25 * (1 - coolT)),
+                    : Mix(Mix(core, Mix(Color.FromRgb(0xff, 0xe6, 0x82), Color.FromRgb(0xff, 0xdc, 0x48), coolT), 0.60 + 0.25 * (1 - coolT)),
+                          Mix(core, Color.FromRgb(0xff, 0xf0, 0xc8), 0.55), Math.Clamp((detail.SurfaceTemperature - 4500) / 1100.0, 0, 1)),   // K stars turn from golden to cream patches as they get hotter (the real 5,149 K K0 had white-cream ones)
                 PatchCover = hot ? 1.0 : brownDwarf ? 0.5 : detail.StarType == "TTS" ? 1.0 : 0.2 + 0.8 * coolT,
                 Seed = seed,
                 Activity = activity,

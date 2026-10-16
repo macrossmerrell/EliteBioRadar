@@ -342,6 +342,12 @@ namespace EliteBioRadar
         }
 
         public readonly List<PlanetBioInfo> SystemBioPlanets = new();
+        // Biological signal count for a body of this system (0 when unknown), read under the same lock the writers use.
+        public int KnownBioCount(string fullBodyName)
+        {
+            lock (_planetLock)
+                return SystemBioPlanets.FirstOrDefault(p => string.Equals(p.FullBodyName, fullBodyName, StringComparison.OrdinalIgnoreCase))?.BioCount ?? 0;
+        }
         public readonly List<PlanetGeoInfo> SystemGeoPlanets = new();
         public readonly List<PlanetMiningInfo> SystemMiningPlanets = new();
 
@@ -1480,6 +1486,7 @@ namespace EliteBioRadar
                     // its co-orbiting siblings (first one only — later Nulls are further up the tree).
                     var baryId = po.Value<int?>("Null");
                     if (baryId.HasValue && detail.BarycenterID < 0) detail.BarycenterID = baryId.Value;
+                    if (baryId.HasValue) detail.OuterBarycenterID = baryId.Value;
                     var planetParent = po.Value<int?>("Planet");
                     if (planetParent.HasValue)
                     {

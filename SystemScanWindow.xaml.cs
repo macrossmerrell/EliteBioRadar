@@ -420,8 +420,8 @@ namespace EliteBioRadar
                 // these rendered as fully independent sections with nothing at all connecting
                 // them, even though they're gravitationally bound. Grouped and rendered together
                 // under one shared left-edge bracket instead of individually.
-                var rootStarBaryGroups = rootStars.Where(s => s.BarycenterID >= 0 && s.ParentBodyID < 0)
-                    .GroupBy(s => s.BarycenterID)
+                var rootStarBaryGroups = rootStars.Where(s => s.OuterBarycenterID >= 0 && s.ParentBodyID < 0)
+                    .GroupBy(s => s.OuterBarycenterID)
                     .Where(g => g.Count() > 1)
                     .ToDictionary(g => g.Key, g => g.ToList());
 
@@ -431,7 +431,7 @@ namespace EliteBioRadar
                 {
                     if (placedRootStars.Contains(star.BodyName)) continue;
 
-                    List<BodyScanDetail> group = star.BarycenterID >= 0 && rootStarBaryGroups.TryGetValue(star.BarycenterID, out var mates)
+                    List<BodyScanDetail> group = star.OuterBarycenterID >= 0 && rootStarBaryGroups.TryGetValue(star.OuterBarycenterID, out var mates)
                         ? mates
                         : new List<BodyScanDetail> { star };
 
