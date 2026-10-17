@@ -4670,20 +4670,24 @@ namespace EliteBioRadar
         // SITES sidebar the same way the game numbers bodies, in place of a plain alphabetical
         // string sort (which put "10 B" before "2" — real report: mining sites listed 1, 10 B,
         // 10 C, 10 D, 11, 11 A, 2, 3, 7, 8, 9).
-        // The planet number is the first token that parses as an integer, wherever it falls —
+        // The star letters before it now sort first (see below). The planet number is the first token that parses as an integer, wherever it falls —
         // matching SystemScanWindow.BodyOrderKey's already-correct approach — NOT just the first
         // token (which would treat "B" as unparseable and dump every secondary-star body at the
         // end regardless of its real number). A token immediately after the number is a moon
         // letter (base-26, so multi-letter designations still order correctly); a token BEFORE
         // it (the star letter) is never misread as one. Anything unparseable sorts last rather
         // than crashing.
-        private static (int planetNum, int moonLetter) ShortNameOrderKey(string shortName)
+        private static (int prefixLen, string prefix, int planetNum, int moonLetter) ShortNameOrderKey(string shortName)
         {
-            if (string.IsNullOrEmpty(shortName)) return (int.MaxValue, int.MaxValue);
+            if (string.IsNullOrEmpty(shortName)) return (int.MaxValue, "", int.MaxValue, int.MaxValue);
             var parts = shortName.Split(' ');
             int planetNum = int.MaxValue, numIdx = -1;
             for (int i = 0; i < parts.Length; i++)
                 if (int.TryParse(parts[i], out var n)) { planetNum = n; numIdx = i; break; }
+
+            // The star letters ahead of the number ("B" in "B 3", "AB" in "AB 2") come first, so every body of one star stays together
+            // (B 3, B 6, B 7, then C 3) instead of interleaving by planet number across stars. No star letters (the primary) sorts first.
+            string prefix = numIdx > 0 ? string.Join(" ", parts.Take(numIdx)).ToUpperInvariant() : "";
 
             int moonLetter = 0;
             if (numIdx >= 0 && numIdx == parts.Length - 2)
@@ -4694,7 +4698,7 @@ namespace EliteBioRadar
                     moonLetter = moonLetter * 26 + (ch - 'a' + 1);
                 }
             }
-            return (planetNum, moonLetter);
+            return (prefix.Length, prefix, planetNum, moonLetter);
         }
 
         private void UpdatePlanetPanel()

@@ -119,7 +119,7 @@ namespace EliteBioRadar
         // cream-tan, so A stars are not tinted; the four bodies of the B7 star (16430 K) were all blue-grey.
         public const double StarTintMinK = 10000;
         // Rings are tinted from A stars up: the rocky rings of Qiedea JC-U d3-1 A 3 (A5 star) read cream-white and tan in game, lighter than their class colours.
-        public const double RingTintMinK = 7500;
+        public const double RingTintMinK = 8000;   // an A9 (7712 K, Qiedea OS-T d3-2) had plain brown-tan rings
         // The coolest stars (L dwarfs, about 1500 K): the body is lit almost purely red and reads monochrome red-pink (real: Qiedea TU-M c8-0 B 1, an L6 star at 1521 K, 6 ls away).
         public const double LowStarTintMaxK = 1800;
 
@@ -348,9 +348,16 @@ namespace EliteBioRadar
                 l.Light = rgb(150, 146, 142); l.Dark = rgb(96, 92, 90); l.Accent = rgb(62, 60, 60); l.Bright = rgb(176, 172, 168);
                 l.Contrast = 0.55; l.RustAmt = 0.2; l.CraterAmt = 0.7; l.RayAmt = 0.4;
             }
+            // Under an A star cooler than the tint line (a real A9, 7712 K: Qiedea OS-T d3-2 1, 1030 K, 68 ls away) the body is neither brick red nor blue-grey but a dark mauve-grey
+            // with muted red-brown flecks, pale pink-grey patches and big craters with long pale rays.
+            else if (starK >= 6500)
+            {
+                l.Light = rgb(126, 112, 118); l.Dark = rgb(82, 70, 76); l.Accent = rgb(134, 80, 72); l.Bright = rgb(184, 156, 164);
+                l.Contrast = 0.7; l.RustAmt = 0.5; l.BrightAmt = 0.35; l.CraterAmt = 0.9; l.RayAmt = 0.9;
+            }
             // About half of them are patchy (real: Qiedea TU-M c8-0 A 1, 1167 K): a darker brick-red base with charcoal basins and scattered bright
             // orange-salmon patches, a big shallow crater and no rays; the other half stay plain (ZW-R d5-22 B 1). Not under hot blue-white stars (neutral base above).
-            if (starK < StarTintMinK && ((hash >> 10) & 1) == 1)
+            if (starK < 6500 && ((hash >> 10) & 1) == 1)
             {
                 l.Light = rgb(114, 58, 48); l.Dark = rgb(62, 40, 38); l.Accent = rgb(50, 46, 46); l.Bright = rgb(216, 134, 94);
                 l.Contrast = 0.85; l.RustAmt = 0.3; l.BrightAmt = 0.2; l.CraterAmt = 0.5; l.RayAmt = 0.0;
@@ -665,7 +672,8 @@ namespace EliteBioRadar
                 bool silicate = (detail.AtmosphereType ?? "").IndexOf("Silicate", StringComparison.OrdinalIgnoreCase) >= 0;
                 // Above about 2500 K the cloud layer is pale whatever the gas (Qiedea EB-X e1-0 13, water with silicates, 3002 K: white; GH-U d3-6 1, 4007 K: cream;
                 // EB-X e1-0 1, 6879 K: yellow-green), while RR-N d6-47 A 1 at 2154 K and EB-X e1-0 3 at 1176 K were near-black.
-                if (silicate || detail.SurfaceTemperature >= 2500) denseVariant = 8;
+                // Thick hot atmospheres are pale too (OS-T d3-2 3: hot water at 265 MPa and 1480 K, pale yellow-cream; the near-black ones, EB-X e1-0 3 and RR-N A 1, had thin or moderate atmospheres).
+                if (silicate || detail.SurfaceTemperature >= 2500 || (detail.SurfaceTemperature >= 1130 && detail.SurfacePressure >= 5.0e6)) denseVariant = 8;
                 else if (detail.SurfaceTemperature >= 1130)
                 {
                     denseVariant = 4; s0 = rgb(14, 14, 17); s1 = rgb(34, 33, 38); contrast = 0.8;
