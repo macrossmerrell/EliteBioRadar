@@ -151,6 +151,20 @@ namespace EliteBioRadar
             l.Light = Tinted(l.Light, m); l.Dark = Tinted(l.Dark, m); l.Accent = Tinted(l.Accent, m); l.Bright = Tinted(l.Bright, m);
         }
 
+        // Far from its star a body is simply dimmer. Real: the five planets of the K0 star Qiedea FW-L c8-0 (flux 0.011 down to 0.0017 Earth-Sun units):
+        // the nearest read a normal grey, the next a dim slate, the next two almost black, the farthest a dark grey even though it is an icy body. The
+        // brightness goes with the square root of the flux (the same shape the L-dwarf rule above uses), from 0.011 down, floored at 0.3. Not for
+        // L dwarfs, which have their own rule.
+        private const double FluxReference = 0.011;
+        private static void ApplyStarFlux(LandableWorldLook l, double starK, double flux)
+        {
+            if (flux <= 0 || (starK > 0 && starK < LowStarTintMaxK)) return;
+            double k = Math.Clamp(Math.Sqrt(flux / FluxReference), 0.3, 1.0);
+            if (k >= 0.999) return;
+            (double, double, double) m = (k, k, k);
+            l.Light = Tinted(l.Light, m); l.Dark = Tinted(l.Dark, m); l.Accent = Tinted(l.Accent, m); l.Bright = Tinted(l.Bright, m); l.Ice = Tinted(l.Ice, m);
+        }
+
         private static void ApplyStarTint(LandableWorldLook l, double starK)
         {
             if (starK < StarTintMinK && !(starK > 0 && starK < LowStarTintMaxK)) return;
@@ -159,11 +173,12 @@ namespace EliteBioRadar
         }
 
         // The look for a landable-world body, tinted by the colour of its star when the star is hot (see StarLightTint).
-        public static LandableWorldLook GetLandableWorldLook(BodyScanDetail detail, string iconCode = "HMC", double starK = 0, double starDistM = 0)
+        public static LandableWorldLook GetLandableWorldLook(BodyScanDetail detail, string iconCode = "HMC", double starK = 0, double starDistM = 0, double starFlux = 0)
         {
             var look = GetLandableWorldLookCore(detail, iconCode, starK);
             ApplyStarTint(look, starK);
             ApplyRedDwarfDistance(look, starK, starDistM);
+            ApplyStarFlux(look, starK, starFlux);
             return look;
         }
 

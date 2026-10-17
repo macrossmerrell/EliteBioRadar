@@ -434,6 +434,19 @@ namespace EliteBioRadar
 
         public double ParentStarTemperature(BodyScanDetail d) => d.IsStar ? d.SurfaceTemperature : CurrentStarDetail?.SurfaceTemperature ?? 0;
 
+        // Starlight reaching a body from the primary star, in units of the light the Earth gets from the Sun: L / d^2, with L from the star's radius and
+        // temperature and d from the body's light-second distance from arrival (1 AU = 499 ls). 0 when the star or the distance is unknown. Far bodies
+        // are visibly darker in game (real: Qiedea FW-L c8-0 1 to 5, a K0 star's planets from 3,264 to 8,496 ls).
+        public double PrimaryStarFlux(BodyScanDetail d)
+        {
+            var star = CurrentStarDetail;
+            if (d.IsStar || star == null || star.Radius <= 0 || star.SurfaceTemperature <= 0 || d.DistanceFromArrivalLS <= 0) return 0;
+            double rSun = star.Radius / 6.957e8;
+            double lum = rSun * rSun * Math.Pow(star.SurfaceTemperature / 5772.0, 4);
+            double au = d.DistanceFromArrivalLS / 499.0;
+            return lum / (au * au);
+        }
+
         // A "Belt Cluster" body's own Scan event carries almost nothing (BodyName/BodyID/
         // Parents/SemiMajorAxis at most — no RingClass, no composition) — that real data lives
         // on the parent RING's own entry instead, inside whichever star/planet it orbits' own

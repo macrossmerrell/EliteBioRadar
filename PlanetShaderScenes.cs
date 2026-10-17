@@ -27,7 +27,7 @@ namespace EliteBioRadar
 
         // frozenTime null = animate (Time runs forever); a value = still frame at that time. Returns null when the planet isn't covered by a
         // shader, on software-only rendering, or on any failure - the caller then keeps the CPU render (rings included).
-        internal static Scene? Build(BodyScanDetail d, string iconCode, int w, int h, double? frozenTime, long systemPopulation, double starK = 0, double starDistM = 0)
+        internal static Scene? Build(BodyScanDetail d, string iconCode, int w, int h, double? frozenTime, long systemPopulation, double starK = 0, double starDistM = 0, double starFlux = 0)
         {
             if ((RenderCapability.Tier >> 16) == 0) return null;
             bool gas = PlanetRenderer.IsGasGiantFamily(iconCode);
@@ -74,7 +74,7 @@ namespace EliteBioRadar
                     }
                     else if (landable)
                     {
-                        var e = LandableWorldShaderEffect.Create(PlanetRenderer.GetLandableWorldLook(d, iconCode, starK, starDistM), centre, radius);
+                        var e = LandableWorldShaderEffect.Create(PlanetRenderer.GetLandableWorldLook(d, iconCode, starK, starDistM, starFlux), centre, radius);
                         Clock(e, LandableWorldShaderEffect.TimeProperty);
                         planet = Host(e);
                     }

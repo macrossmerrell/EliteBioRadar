@@ -1901,7 +1901,7 @@ namespace EliteBioRadar
                     ? (ringed ? (int)size : (int)Math.Floor(size * 0.8 / 0.46))     // ringed: whole scene; ringless: sphere fills ~80%
                     : (ringed ? (int)size : (int)Math.Floor(size * 0.82 / 0.68));
                 double t = PlanetRenderer.StableHash(b.BodyName) % 900;
-                var scene = PlanetShaderScenes.Build(b, iconCode, box, box, t, _watcher.SystemPopulation, _watcher.ParentStarTemperature(b), _watcher.ParentStarDistanceM(b));
+                var scene = PlanetShaderScenes.Build(b, iconCode, box, box, t, _watcher.SystemPopulation, _watcher.ParentStarTemperature(b), _watcher.ParentStarDistanceM(b), _watcher.PrimaryStarFlux(b));
                 if (scene == null) return null;
                 var clip = new Canvas { Width = size, Height = size, ClipToBounds = true };
                 foreach (var el in scene.Layers)
@@ -1966,7 +1966,7 @@ namespace EliteBioRadar
                     return new Image { Source = frame, Width = size, Height = size, Stretch = Stretch.UniformToFill, ClipToBounds = true };
                 }
                 var iconCode = MainWindow.MapPlanetClassToIconCode(b.PlanetClass);
-                if (iconCode != null && GetCachedThumb("p|" + b.BodyName + "|" + size, ThumbSignature(b, size, _watcher.ParentStarTemperature(b) + _watcher.ParentStarDistanceM(b) * 1e-9), () => TryBuildShaderThumb(b, iconCode, size)) is UIElement shaderThumb) return shaderThumb;
+                if (iconCode != null && GetCachedThumb("p|" + b.BodyName + "|" + size, ThumbSignature(b, size, _watcher.ParentStarTemperature(b) + _watcher.ParentStarDistanceM(b) * 1e-9 + _watcher.PrimaryStarFlux(b) * 1000), () => TryBuildShaderThumb(b, iconCode, size)) is UIElement shaderThumb) return shaderThumb;
                 if (iconCode != null && PlanetRenderer.IsGasGiantFamily(iconCode))
                 {
                     // GetGasGiantLayers turned out to already BE 4 static bitmaps — the
