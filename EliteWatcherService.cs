@@ -403,48 +403,75 @@ namespace EliteBioRadar
         // live reference into state this service keeps mutating.
         public List<BodyScanDetail> GetCurrentSystemBodyDetails() => _bodyScanDetails.Values.ToList();
 
-        // Surface temperature of the star that lights a body. The game lights every body from the system's PRIMARY star only (a real moon of a brown
-        // dwarf, Qiedea MX-T d3-2 AB 2 d, was not red-tinted by its Y-dwarf parent but lit by the A7 primary 1862 ls away), so this is the primary
-        // star's temperature for any body, and a star reports its own. 0 when no star is known.
-        // Distance (metres) from that primary star: the body's own semi-major axis when its parent chain ends at the primary, otherwise its
-        // light-second distance from arrival (which is the primary). 0 when unknown.
-        public double ParentStarDistanceM(BodyScanDetail d)
+        // The star that lights a body: of every star scanned in the system, the one whose light is strongest at the body (luminosity from radius and
+        // temperature, over distance squared). Usually the primary, but a body around a far companion is lit by that companion (real: Qiedea DL-N c7-0 C 3,
+        // a planet of the L6 dwarf C, 155,000 ls from the M0 primary, is red-lit by C: the dwarf's light there is about 100 times the primary's), while a moon of a Y dwarf
+        // 1,862 ls from an A7 primary is lit by the A7 (Qiedea MX-T d3-2 AB 2 d: 1,000 times brighter than the dwarf's). Distance is the body's orbit round the star it
+        // orbits, or else the difference of the light-second distances from arrival. A star reports its own temperature and no distance.
+        private (double tempK, double distM, double flux, double lum) LightingStar(BodyScanDetail d)
         {
+            if (d.IsStar) return (d.SurfaceTemperature, 0, 0, 0);
             try
             {
-                if (d.IsStar || CurrentStarDetail == null) return 0;
                 var all = GetCurrentSystemBodyDetails();
+                var stars = all.Where(x => x.IsStar).ToList();
+                var primary = CurrentStarDetail;
+                if (primary != null && !stars.Any(x => x.BodyID == primary.BodyID)) stars.Add(primary);
+                stars = stars.Where(x => x.SurfaceTemperature > 0 && (x.Radius > 0 || x.AbsoluteMagnitude != 0)).ToList();
+                if (stars.Count == 0) return (primary?.SurfaceTemperature ?? 0, 0, 0, 0);
+
+                // The star this body really orbits, and its orbit round it (the planet's, for a moon).
+                int ownStarId = -1; double ownDist = 0;
                 var cur = d;
                 for (int i = 0; i < 6 && cur != null; i++)
                 {
                     int pid = cur.ParentBodyID;
                     if (pid < 0) break;
-                    var parent = all.FirstOrDefault(x => x.BodyID == pid) ?? (CurrentStarDetail.BodyID == pid ? CurrentStarDetail : null);
+                    var parent = all.FirstOrDefault(x => x.BodyID == pid) ?? (primary?.BodyID == pid ? primary : null);
                     if (parent == null) break;
-                    if (parent.IsStar) return parent.BodyID == CurrentStarDetail.BodyID ? cur.SemiMajorAxis : DistanceFromArrivalM(d);
+                    if (parent.IsStar) { ownStarId = parent.BodyID; ownDist = cur.SemiMajorAxis; break; }
                     cur = parent;
                 }
-                return DistanceFromArrivalM(d);
+
+                double LumOf(BodyScanDetail st) => st.AbsoluteMagnitude != 0 ? Math.Pow(10, (4.83 - st.AbsoluteMagnitude) / 2.5) : Math.Pow(st.Radius / 6.957e8, 2) * Math.Pow(st.SurfaceTemperature / 5772.0, 4);
+                (double tempK, double distM, double flux, double lum) best = (0, 0, -1, 0);
+                foreach (var s in stars)
+                {
+                    // An orbit under 5e8 m is the body's tiny orbit round a barycentre it shares with a partner (B 1 and B 2 of DL-N c7-0, 1.7e8 m), not its distance from the star.
+                    double distM = s.BodyID == ownStarId && ownDist >= 5e8
+                        ? ownDist
+                        : Math.Abs(d.DistanceFromArrivalLS - s.DistanceFromArrivalLS) * 299792458.0;
+                    if (distM < 1e8) continue;   // unknown (no arrival distance on either side)
+                    // The journal's AbsoluteMagnitude is the star's luminosity (checked against radius and temperature for an M0, an L1, an L6 and an A9: the same
+                    // to three digits); fall back to radius and temperature when it is missing.
+                    double rSun = s.Radius / 6.957e8;
+                    double lum = s.AbsoluteMagnitude != 0 ? Math.Pow(10, (4.83 - s.AbsoluteMagnitude) / 2.5) : rSun * rSun * Math.Pow(s.SurfaceTemperature / 5772.0, 4);
+                    double au = distM / 1.496e11;
+                    double flux = lum / (au * au);
+                    // Far from its own dim star, a brighter star elsewhere takes over the lighting (user, Qiedea DL-N c7-0 B 6, 4 AU from the L1 dwarf B: lit by the M0 primary
+                    // 325 AU away). Physically B is 130 times brighter there, so the game is not simply flux. Where it flips, from the user's sightings: round the K6 star B of MH-V d2-1,
+                    // B 1 (0.8 AU) and B 2 (1.3 AU) are lit locally and B 3 (1.8 AU) by the A7 primary, so about 1.5 AU (2.2e11 m); round the L dwarfs of DL-N c7-0, C 3 (2.3 AU) is local
+                    // and B 6 (4.0 AU) is primary-lit, so about 3 AU (4.5e11 m). Two fits to few points, not a law; the old guess was: (B 5 and C 4 at
+                    // 2.9 to 3.0 AU were still red-lit by their own dwarf, C 5 at 3.9 AU and B 6 at 4.0 AU were not).
+                    if (s.BodyID == ownStarId && distM > (s.SurfaceTemperature < 2400 ? 4.5e11 : 2.2e11) && stars.Any(o => o.BodyID != s.BodyID && LumOf(o) > lum)) flux *= 0.001;
+                    if (flux > best.flux) best = (s.SurfaceTemperature, distM, flux, lum);
+                }
+                if (best.flux >= 0) return best;
+                return (primary?.SurfaceTemperature ?? 0, 0, 0, 0);
             }
-            catch { /* unknown */ }
-            return 0;
+            catch { return (CurrentStarDetail?.SurfaceTemperature ?? 0, 0, 0, 0); }
         }
 
-        private static double DistanceFromArrivalM(BodyScanDetail d) => d.DistanceFromArrivalLS * 299792458.0;
-
-        public double ParentStarTemperature(BodyScanDetail d) => d.IsStar ? d.SurfaceTemperature : CurrentStarDetail?.SurfaceTemperature ?? 0;
-
-        // Starlight reaching a body from the primary star, in units of the light the Earth gets from the Sun: L / d^2, with L from the star's radius and
-        // temperature and d from the body's light-second distance from arrival (1 AU = 499 ls). 0 when the star or the distance is unknown. Far bodies
-        // are visibly darker in game (real: Qiedea FW-L c8-0 1 to 5, a K0 star's planets from 3,264 to 8,496 ls).
+        public double ParentStarTemperature(BodyScanDetail d) => LightingStar(d).tempK;
+        public double ParentStarDistanceM(BodyScanDetail d) => LightingStar(d).distM;
+        // Starlight at the body relative to the "full brightness" level for its lighting star (1 = full, less = dimmer; may exceed 1). The game seems to adapt
+        // its exposure to the star: bodies of the K0 star FW-L c8-0 were normal at 0.011 Earth-Sun units and dim below, but the bodies of the L6 dwarf in DL-N c7-0
+        // were bright at 1.8e-4 and dark by 1.4e-5. The reference level follows luminosity: 0.011 * (L / 0.48)^0.6, which fits both. 0 when unknown.
         public double PrimaryStarFlux(BodyScanDetail d)
         {
-            var star = CurrentStarDetail;
-            if (d.IsStar || star == null || star.Radius <= 0 || star.SurfaceTemperature <= 0 || d.DistanceFromArrivalLS <= 0) return 0;
-            double rSun = star.Radius / 6.957e8;
-            double lum = rSun * rSun * Math.Pow(star.SurfaceTemperature / 5772.0, 4);
-            double au = d.DistanceFromArrivalLS / 499.0;
-            return lum / (au * au);
+            var ls = LightingStar(d);
+            if (ls.flux <= 0 || ls.lum <= 0) return 0;
+            return ls.flux / (0.011 * Math.Pow(ls.lum / 0.48, 0.6));
         }
 
         // A "Belt Cluster" body's own Scan event carries almost nothing (BodyName/BodyID/

@@ -1034,7 +1034,7 @@ namespace EliteBioRadar
             if ((RenderCapability.Tier >> 16) == 0) return false;
             try
             {
-                if (detail.StarType is "L" or "T" or "Y")
+                if (detail.StarType is "T" or "Y")   // L dwarfs stay on the granulated star look: a glowing hot-pink globe with darker red mottling and white sparkles
                 {
                     var (bx, by, bR) = StarRenderer.GetStarShaderDisc(detail, sceneW, sceneH);
                     var ge = GasGiantShaderEffect.Create(StarRenderer.GetBrownDwarfGasLook(detail),

@@ -121,7 +121,7 @@ namespace EliteBioRadar
         // Rings are tinted from A stars up: the rocky rings of Qiedea JC-U d3-1 A 3 (A5 star) read cream-white and tan in game, lighter than their class colours.
         public const double RingTintMinK = 8000;   // an A9 (7712 K, Qiedea OS-T d3-2) had plain brown-tan rings
         // The coolest stars (L dwarfs, about 1500 K): the body is lit almost purely red and reads monochrome red-pink (real: Qiedea TU-M c8-0 B 1, an L6 star at 1521 K, 6 ls away).
-        public const double LowStarTintMaxK = 1800;
+        public const double LowStarTintMaxK = 2400;   // was 1800: the L1 dwarf B of Qiedea DL-N c7-0 (1866 K) tints its bodies pink-red too; this is the top of the L class
 
         public static (double r, double g, double b) StarLightTint(double kelvin)
         {
@@ -146,7 +146,7 @@ namespace EliteBioRadar
         private static void ApplyRedDwarfDistance(LandableWorldLook l, double starK, double starDistM)
         {
             if (!(starK > 0 && starK < LowStarTintMaxK) || starDistM < 3e8) return;
-            double k = Math.Clamp(Math.Sqrt(RedDwarfReferenceDistM / starDistM), 0.45, 1.0);
+            double k = Math.Clamp(Math.Sqrt(RedDwarfReferenceDistM / starDistM), 0.6, 1.0);   // floor raised from 0.45: the icy bodies of the L6 dwarf in Qiedea DL-N c7-0 C (2e11 to 8e11 m out) were mostly brighter in game than the old floor
             (double, double, double) m = (k, k, k);
             l.Light = Tinted(l.Light, m); l.Dark = Tinted(l.Dark, m); l.Accent = Tinted(l.Accent, m); l.Bright = Tinted(l.Bright, m);
         }
@@ -155,14 +155,34 @@ namespace EliteBioRadar
         // the nearest read a normal grey, the next a dim slate, the next two almost black, the farthest a dark grey even though it is an icy body. The
         // brightness goes with the square root of the flux (the same shape the L-dwarf rule above uses), from 0.011 down, floored at 0.3. Not for
         // L dwarfs, which have their own rule.
-        private const double FluxReference = 0.011;
+        // starFlux here is relative to the full-brightness level of the lighting star (1 = full), see EliteWatcherService.PrimaryStarFlux.
         private static void ApplyStarFlux(LandableWorldLook l, double starK, double flux)
         {
-            if (flux <= 0 || (starK > 0 && starK < LowStarTintMaxK)) return;
-            double k = Math.Clamp(Math.Sqrt(flux / FluxReference), 0.3, 1.0);
+            if (flux <= 0) return;
+            double k = Math.Clamp(Math.Sqrt(flux), 0.2, 1.0);
             if (k >= 0.999) return;
             (double, double, double) m = (k, k, k);
             l.Light = Tinted(l.Light, m); l.Dark = Tinted(l.Dark, m); l.Accent = Tinted(l.Accent, m); l.Bright = Tinted(l.Bright, m); l.Ice = Tinted(l.Ice, m);
+        }
+
+        // Atmosphere worlds around an L dwarf are lit red too (real: the thick-atmosphere icy bodies B 1 and B 2 of the L1 dwarf B in Qiedea DL-N c7-0 were rose-pink).
+        public static void ApplyAtmoStarTint(AtmoWorldLook l, double starK)
+        {
+            if (!(starK > 0 && starK < LowStarTintMaxK)) return;
+            var k = StarLightTint(starK);
+            l.Surf0 = Tinted(l.Surf0, k); l.Surf1 = Tinted(l.Surf1, k); l.Haze = Tinted(l.Haze, k); l.Cloud = Tinted(l.Cloud, k); l.Cap = Tinted(l.Cap, k); l.Glow = Tinted(l.Glow, k);
+        }
+
+        // Atmosphere worlds are dimmed by the same relative-flux rule as the landable worlds, with a lower floor: Qiedea DL-N c7-0 B 8 (a neon-rich icy world
+        // 7 AU from the L1 dwarf B, 315 AU from the M0 primary A) was almost black in game, with only a faint sliver lit on the A side, while the app drew it
+        // fully lit. (Two stars lighting it from opposite sides is not modelled: one light, from the star that gives the most.)
+        public static void ApplyAtmoStarFlux(AtmoWorldLook l, double flux)
+        {
+            if (flux <= 0) return;
+            double k = Math.Clamp(Math.Sqrt(flux), 0.12, 1.0);
+            if (k >= 0.999) return;
+            (double, double, double) m = (k, k, k);
+            l.Surf0 = Tinted(l.Surf0, m); l.Surf1 = Tinted(l.Surf1, m); l.Haze = Tinted(l.Haze, m); l.Cloud = Tinted(l.Cloud, m); l.Cap = Tinted(l.Cap, m); l.Glow = Tinted(l.Glow, m);
         }
 
         private static void ApplyStarTint(LandableWorldLook l, double starK)
@@ -177,7 +197,7 @@ namespace EliteBioRadar
         {
             var look = GetLandableWorldLookCore(detail, iconCode, starK);
             ApplyStarTint(look, starK);
-            ApplyRedDwarfDistance(look, starK, starDistM);
+            // (the old L-dwarf distance rule is replaced by the relative-flux rule below, which covers every star)
             ApplyStarFlux(look, starK, starFlux);
             return look;
         }
@@ -680,6 +700,13 @@ namespace EliteBioRadar
                 }
             }
 
+            // Hot thick CO2 worlds of 600-1130 K: a pale blue-grey veil over salmon-pink patches (real: Qiedea OS-T d3-3 2 and 3, CA-P c6-0 4: 705 K, 923 K and 844 K at 9 to 12 MPa),
+            // the orange-red veil look with a pinker surface and a thicker veil; about six in ten of them.
+            bool salmonVeil = false;
+            if (iconCode == "HMC" && !detail.Landable && !rocky && detail.SurfaceTemperature >= 600 && detail.SurfaceTemperature < 1130 && detail.SurfacePressure >= 5.0e6
+                && (detail.AtmosphereType ?? "").IndexOf("Carbon", StringComparison.OrdinalIgnoreCase) >= 0 && ((hash >> 11) % 10) < 6)
+            { denseVariant = 1; s0 = rgb(176, 100, 88); s1 = rgb(238, 148, 128); contrast = 0.5; salmonVeil = true; }
+
             // Thick water atmospheres (about 0.1-0.6 MPa) come in four real looks (gold ochre added from Qiedea KC-U d3-1 4) with no pressure or temperature rule between them: a dusty brown
             // (AU-Y b17-0 A 2), rust-orange under a pale blue-grey veil (SU-M c8-1 B 5; C 3 without the veil) and very dark with white cyclones (SU-M c8-1 B 6).
             // B 5 and B 6 were a near-identical pair with opposite looks, so the body name picks. The thickest steam (ZW-R d5-22 A 3) keeps its pale veil.
@@ -705,9 +732,18 @@ namespace EliteBioRadar
                 Pitch = (((hash >> 12) % 9) - 4) * 0.08,
                 Seed = (hash % 5000) / 100.0 + 1.0,
             };
-if (darkCyclone && !icy && !rockyIce && ((hash >> 9) & 1) == 1)   // navy-teal (Qiedea JC-U d3-1 B 3); the other half stay a warm charcoal-brown (KC-U d3-1 3, DJ-M c9-1 5)
-            { atmoLook.Haze = rgb(96, 128, 150); atmoLook.Glow = rgb(92, 168, 186); }
-            else if (darkCyclone && !icy && !rockyIce) { atmoLook.Surf0 = rgb(34, 28, 30); atmoLook.Surf1 = rgb(72, 66, 70); }
+            if (darkCyclone && !icy && !rockyIce)
+            {
+                // Four dark-cyclone looks, picked by the name: navy-teal (Qiedea JC-U d3-1 B 3), warm charcoal-brown (KC-U d3-1 3, DJ-M c9-1 5), dark olive-brown
+                // with a blue-white rim (BA-P c6-0 1, a K0 star) and dark plum with a lilac rim (BA-P c6-0 4).
+                switch ((hash >> 9) % 4)
+                {
+                    case 0: atmoLook.Haze = rgb(96, 128, 150); atmoLook.Glow = rgb(92, 168, 186); break;
+                    case 1: atmoLook.Surf0 = rgb(34, 28, 30); atmoLook.Surf1 = rgb(72, 66, 70); break;
+                    case 2: atmoLook.Surf0 = rgb(40, 31, 16); atmoLook.Surf1 = rgb(98, 78, 44); break;
+                    default: atmoLook.Surf0 = rgb(38, 28, 42); atmoLook.Surf1 = rgb(80, 64, 84); atmoLook.Haze = rgb(124, 108, 150); atmoLook.Glow = rgb(150, 130, 182); break;
+                }
+            }
             if (!icy && !rockyIce && denseVariant == 7)
             {
                 // Thin lavender-blue haze that shows mostly at the limb, soft low-contrast dark spots, and white caps (cold).
@@ -777,6 +813,7 @@ if (darkCyclone && !icy && !rockyIce && ((hash >> 9) & 1) == 1)   // navy-teal (
                 atmoLook.Cloud = rgb(160, 178, 202); atmoLook.CycloneAmt = 0.0; atmoLook.CloudAmt = 0.85; atmoLook.CapAmt = 0;   // the blue-grey comes in streaky patches over the orange
                 // The veil thickness varies by body: patchy (Eafots JJ-B c13-2 A 1) to almost total (Qiedea JC-U d3-1 B 2, 9.5 MPa, a pale pink-grey cloud layer).
                 atmoLook.HazeAmt = 0.28 + 0.38 * (((hash >> 7) % 100) / 100.0); atmoLook.SurfContrast = 1.1;
+                if (salmonVeil) atmoLook.HazeAmt = 0.5 + 0.2 * (((hash >> 7) % 100) / 100.0);   // the thicker veil of the salmon-pink hot CO2 worlds
                 if (waterOrange) { atmoLook.HazeAmt = 0.28 + 0.12 * (((hash >> 7) % 100) / 100.0); atmoLook.CycloneAmt = 0.6; }   // water version: stronger colour, round white cyclones
                 atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.20, 0.20, 0.96);
             }

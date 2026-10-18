@@ -16,7 +16,7 @@ namespace EliteBioRadar
         {
             if ((RenderCapability.Tier >> 16) == 0) return null;
             bool ringedStar = s.Rings.Exists(r => !r.Name.Contains("Belt", StringComparison.OrdinalIgnoreCase) && r.OuterRad > 0 && r.InnerRad > 0);
-            if (ringedStar && s.StarType is "L" or "T" or "Y") return TryBuildRingedBrownDwarfThumb(s, size);
+            if (ringedStar && s.StarType is "T" or "Y") return TryBuildRingedBrownDwarfThumb(s, size);
             if (ringedStar) return null;
             try
             {
@@ -44,7 +44,7 @@ namespace EliteBioRadar
                     e.SetValue(BlackHoleShaderEffect.TimeProperty, t);
                     effect = e;
                 }
-                else if (s.StarType is "L" or "T" or "Y")
+                else if (s.StarType is "T" or "Y")
                 {
                     var (cx, cy, R) = StarRenderer.GetStarShaderDisc(s, box, box);
                     var e = GasGiantShaderEffect.Create(StarRenderer.GetBrownDwarfGasLook(s), new Point(cx / box, cy / box), new Point(R / box, R / box));

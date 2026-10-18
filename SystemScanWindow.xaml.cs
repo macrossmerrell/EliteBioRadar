@@ -770,7 +770,16 @@ namespace EliteBioRadar
             }
 
             grid.Children.Add(Stat("Stars", starCount == 1 ? "1 scanned" : $"{starCount} scanned", null, fsdChip));
-            grid.Children.Add(Stat("Bodies", $"{bodies.Count(b => !b.IsStar)} scanned", beltCount > 0 ? $"{beltCount} belt cluster{(beltCount == 1 ? "" : "s")}" : null));
+            // Scanned out of the total: the honk (FSSDiscoveryScan) reports every star and planet in the system but not the belt clusters, so belts are left out
+            // of the count and the scanned stars are taken off the total. No honk on record, or fewer than we have scanned: just the scanned count.
+            int bodiesScanned = bodies.Count(b => !b.IsStar && !b.IsBelt);
+            int bodiesTotal = _watcher.SystemBodyCount - starCount;
+            string bodiesText = bodiesTotal >= bodiesScanned && bodiesTotal > 0 ? $"{bodiesScanned}/{bodiesTotal} scanned" : $"{bodiesScanned} scanned";
+            // The line below: how many of them are mapped (a DSS map), out of the same total (or out of those scanned when there is no honk to give a total).
+            int bodiesMapped = bodies.Count(b => !b.IsStar && !b.IsBelt && b.IsMapped);
+            int mapDenominator = bodiesTotal >= bodiesScanned && bodiesTotal > 0 ? bodiesTotal : bodiesScanned;
+            string? bodiesSub = beltCount > 0 ? $"{beltCount} belt cluster{(beltCount == 1 ? "" : "s")}" : null;
+            grid.Children.Add(Stat("Bodies", $"{bodiesText}\n{bodiesMapped}/{mapDenominator} mapped", bodiesSub));   // both lines in the same bold value style
             grid.Children.Add(Stat("Est. Value (scanned)", $"≈ {PayoutData.FormatCredits((long)totalValue)}", "mapped-bonus where applicable"));
 
             var border = new Border { BorderBrush = BorderSoft, BorderThickness = new Thickness(0, 0, 0, 1), Child = grid };
