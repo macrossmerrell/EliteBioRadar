@@ -44,6 +44,8 @@ namespace EliteBioRadar
             new(28, Where.Any,  "nightvision",  "Night Vision Activated", ShipEventTone.On,      "Night Vision Deactivated", ShipEventTone.Off),
             new(15, Where.Srv,  "driveassist",  "Drive Assist On",        ShipEventTone.On,      "Drive Assist Off",         ShipEventTone.Off),
             new(12, Where.Srv,  "brake",        "Brake On",               ShipEventTone.On,      "Brake Off",                ShipEventTone.Off),
+            new(13, Where.Srv,  "turret",       "Turret Mode On",         ShipEventTone.On,      "Turret Mode Off",          ShipEventTone.Off),
+            new(14, Where.Srv,  "turretstow",   "Turret Retracted",       ShipEventTone.Caution, "Turret Deployed",          ShipEventTone.Off),
             new(6,  Where.Ship, "hardpoints",   "Hardpoints Deployed",    ShipEventTone.Caution, "Hardpoints Retracted",     ShipEventTone.Off),
             new(5,  Where.Ship, "flightassist", "Flight Assist Off",      ShipEventTone.Caution, "Flight Assist On",         ShipEventTone.On),
             new(10, Where.Ship, "silent",       "Silent Running On",      ShipEventTone.On,      "Silent Running Off",       ShipEventTone.Off),

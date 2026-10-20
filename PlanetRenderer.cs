@@ -243,12 +243,13 @@ namespace EliteBioRadar
                 // warm cream, very dark, olive-lavender camouflage); the other 60% keep the original eleven.
                 int slice = (hash >> 18) % 20;
                 if (slice <= 1) look = 12;
-                else if (slice == 2 && ((hash >> 23) & 1) == 0) look = 13;   // halved after it was drawn wrongly on four bodies (latest: Qiedea YK-M c8-0 1 d was orange-tan)
+                else if (slice == 2) look = 13;   // sulphur-yellow patches on olive: three real bodies now (GI-X b19-0 3, AH-T d4-6 B 2 a, MH-V d2-2 4); the share was halved by mistake when the olive misdraws were really the rocky picker's look 4
                 else if (slice == 3) look = 14;
                 else if (slice <= 5) look = 16;
                 else if (slice == 6) look = 15;
                 else if (slice == 7) look = 17;
                 else if (slice >= 10 && slice <= 11) look = 18;
+                else if (slice == 12) look = 19;   // salmon-rose with large sage-green patches (one real body so far)
                 else if (slice <= 9) look = 8;   // the dark rust-brown family keeps turning up in game (TD-Z 1, SU-M C 7, TU-M A 2), so it gets a larger share
             }
             // Around an L dwarf the body reads monochrome red (see LowStarTintMaxK): start from the flat neutral grey-brown and let the tint colour it.
@@ -315,6 +316,9 @@ namespace EliteBioRadar
                 case 18: // flat medium grey-brown with soft darker blotches, strong relief and one small dark-rayed crater, no colour (real: Qiedea TU-M c8-0 A 5 and A 6, SU-M c8-1 B 1 and B 4)
                     l.Light = rgb(112, 104, 98); l.Dark = rgb(86, 80, 76); l.Accent = rgb(96, 80, 74); l.Bright = rgb(126, 118, 112);
                     l.Contrast = 0.45; l.RustAmt = 0.15; l.BrightAmt = 0.1; l.CraterAmt = 0.35; l.RayAmt = -0.8; l.NoFrost = true; break;   // none of the six real ones showed frost (TU-M A 5, A 6; SU-M B 1, B 4; KC-U d3-1 7)
+                case 19: // salmon-rose base with large sage-green and dark-green patches and peach patches, a small crater, no frost (real: Qiedea AQ-N c7-0 A 3, 498 K)
+                    l.Light = rgb(158, 110, 100); l.Dark = rgb(88, 104, 76); l.Accent = rgb(118, 124, 90); l.Bright = rgb(218, 148, 124);
+                    l.Contrast = 0.9; l.RustAmt = 0.3; l.BrightAmt = 0.5; l.CraterAmt = 0.25; l.RayAmt = 0.0; l.NoFrost = true; break;
                 case 17: // olive base with lavender-grey and tan-pink patches, a fine camouflage pattern (real: SU-M c8-1 B 2)
                     l.Light = rgb(128, 126, 94); l.Dark = rgb(94, 98, 68); l.Accent = rgb(118, 108, 128); l.Bright = rgb(160, 140, 114);
                     l.Contrast = 0.6; l.RustAmt = 0.5; l.BrightAmt = 0.6; l.CraterAmt = 0.2; l.RayAmt = 0.0; break;
@@ -381,6 +385,13 @@ namespace EliteBioRadar
             {
                 l.Light = rgb(114, 58, 48); l.Dark = rgb(62, 40, 38); l.Accent = rgb(50, 46, 46); l.Bright = rgb(216, 134, 94);
                 l.Contrast = 0.85; l.RustAmt = 0.3; l.BrightAmt = 0.2; l.CraterAmt = 0.5; l.RayAmt = 0.0;
+            }
+            // A third look for about a quarter of them: a brown-grey base with tan-salmon patches, olive-grey blotches, small red flecks and pale-rayed craters
+            // (real: Qiedea MH-V d2-2 2, 1135 K, G7 star; its neighbour MH-V d2-2 1 was the patchy brick red above).
+            else if (starK < 6500 && ((hash >> 11) & 1) == 1)
+            {
+                l.Light = rgb(118, 98, 92); l.Dark = rgb(76, 62, 58); l.Accent = rgb(112, 84, 70); l.Bright = rgb(196, 158, 132);
+                l.Contrast = 0.8; l.RustAmt = 0.55; l.BrightAmt = 0.45; l.CraterAmt = 0.6; l.RayAmt = 0.4;
             }
             if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 250)
                 l.IceAmt = 0.08 + 0.22 * (((hash >> 9) % 100) / 100.0);   // small polar patches only (the first version gave a big cap: Qiedea TU-M c8-0 C 5 a has none)
@@ -506,7 +517,7 @@ namespace EliteBioRadar
                 AtmGlow = detail.SurfacePressure > 0 ? 0.35 : 0.0, SpecAmt = 0.0,
             };
             int look = (hash >> 4) % 6;   // by name alone: a star-group window did not hold up (4E was grey beside orange 3 moons)
-            if (detail.SurfacePressure > 0 && ((hash >> 20) % 20) < 5) look = 6;   // about a quarter of the thin-atmosphere ones: the very dark blue-grey (AB 6 f a)
+            if (detail.SurfacePressure > 0 && ((hash >> 20) % 20) < 2) look = 6;   // about one in ten of the thin-atmosphere ones: the very dark blue-grey (AB 6 f a was a match; AB 9 g and MH-V d2-2 6 d were not, so the share came down from a quarter)
             switch (look)
             {
                 case 0: // pale grey, pink-brown patches, frost (cold bodies)
@@ -630,13 +641,15 @@ namespace EliteBioRadar
                 // near-black and pale blue-grey; the 14 MPa UA-L d9-45 2 is pale blue-grey too), so a name hash picks one.
                 denseVariant = (hash >> 2) % 4;
                 if (denseVariant == 3) denseVariant = 5;   // 4 is reserved for the very-hot lava look
+                // Very dense and cold (under 300 K): dark navy basins on cream land under a huge ice cap (real: Qiedea AQ-N c7-0 A 7, 31 MPa of argon-rich nitrogen, 254 K) or on red-orange land with almost no cap (its barycentre partner A 6, 11 MPa, 244 K); both of the two seen, so three in four.
+                if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 300 && ((hash >> 13) % 4) != 3) denseVariant = 9;
                 // Extremely hot bodies (real: RR-N d6-47 A 1, 2,154 K) are near-black with glowing red lava patches.
                 bool veryHot = detail.SurfaceTemperature >= 1500;
                 // Methane-rich: one real example (PW-N d6-2 8, 2.9 MPa, 372 K) was olive-green under a teal haze - a guess
                 // that methane tints the surface that way, to be confirmed with more methane bodies.
                 // Two real methane bodies, two looks: PW-N d6-2 8 was olive-green under a teal haze, Qiedea JC-U d3-1 A 10 (hot thick methane-rich, 11.5 MPa, 577 K)
                 // a pale blue-grey veil with pink and blue patches and a pale cap. The body name picks.
-                if ((detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase)) denseVariant = ((hash >> 6) & 1) == 0 ? 3 : 6;
+                if ((detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase)) { int mv = (hash >> 6) % 3; denseVariant = mv == 0 ? 3 : mv == 1 ? 6 : 9; }   // 9: khaki land under a beige haze with dark navy basins (real: Qiedea MX-T d3-0 7, 19.9 MPa, 467 K)
                 if (rocky) denseVariant = 0;   // real dense rocky bodies (RR-N d6-47 A 2 a, 3.3 MPa) were a pale blue-grey shell
                 // Cold thick atmospheres (real: Qiedea ZW-R d5-22 A 5, 3.49 MPa nitrogen/argon, 214 K): a Mars-like ochre-tan surface under a thin
                 // lavender haze with white polar caps. One data point - a hypothesis that the cold ones look like this.
@@ -650,6 +663,7 @@ namespace EliteBioRadar
                 else if (denseVariant == 7) { s0 = rgb(176, 120, 66); s1 = rgb(230, 182, 108); contrast = 0.45; }   // ochre-tan, Mars-like (atmoLook override below)
                 else if (denseVariant == 3) { s0 = rgb(74, 78, 44); s1 = rgb(132, 130, 78); contrast = 0.5; }   // olive-green
                 else if (denseVariant == 1) { s0 = rgb(150, 70, 40); s1 = rgb(206, 104, 58); contrast = 0.5; }   // orange-red
+                else if (denseVariant == 9) { s0 = rgb(44, 50, 72); s1 = (detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase) ? rgb(184, 166, 134) : ((hash >> 5) & 1) == 0 ? rgb(234, 212, 166) : rgb(224, 112, 86); contrast = 1.6; }   // cream or red-orange land, dark navy basins
                 else if (denseVariant == 5) { s0 = rgb(150, 126, 70); s1 = rgb(236, 208, 128); contrast = 0.9; }   // pale blue-grey with a yellow wash (real: RR-N d6-47 B 3)
                 else if (denseVariant == 2) { s0 = rgb(24, 26, 32);  s1 = rgb(46, 50, 58);  contrast = 0.5; }   // near-black
                 else                        { s0 = rgb(112, 124, 140); s1 = rgb(162, 174, 188); contrast = 0.7; }   // slate
@@ -701,10 +715,10 @@ namespace EliteBioRadar
             }
 
             // Hot thick CO2 worlds of 600-1130 K: a pale blue-grey veil over salmon-pink patches (real: Qiedea OS-T d3-3 2 and 3, CA-P c6-0 4: 705 K, 923 K and 844 K at 9 to 12 MPa),
-            // the orange-red veil look with a pinker surface and a thicker veil; about six in ten of them.
+            // the orange-red veil look with a pinker surface and a thicker veil; about seven in ten of them, from 1 MPa up (a fourth body, AQ-N c7-0 A 4 at 1.5 MPa and 853 K, was almost all veil).
             bool salmonVeil = false;
-            if (iconCode == "HMC" && !detail.Landable && !rocky && detail.SurfaceTemperature >= 600 && detail.SurfaceTemperature < 1130 && detail.SurfacePressure >= 5.0e6
-                && (detail.AtmosphereType ?? "").IndexOf("Carbon", StringComparison.OrdinalIgnoreCase) >= 0 && ((hash >> 11) % 10) < 6)
+            if (iconCode == "HMC" && !detail.Landable && !rocky && detail.SurfaceTemperature >= 600 && detail.SurfaceTemperature < 1130 && detail.SurfacePressure >= 1.0e6
+                && (detail.AtmosphereType ?? "").IndexOf("Carbon", StringComparison.OrdinalIgnoreCase) >= 0 && ((hash >> 11) % 10) < 7)
             { denseVariant = 1; s0 = rgb(176, 100, 88); s1 = rgb(238, 148, 128); contrast = 0.5; salmonVeil = true; }
 
             // Thick water atmospheres (about 0.1-0.6 MPa) come in four real looks (gold ochre added from Qiedea KC-U d3-1 4) with no pressure or temperature rule between them: a dusty brown
@@ -776,6 +790,20 @@ namespace EliteBioRadar
                 atmoLook.HazeAmt = 0.35;
                 atmoLook.HotAmt = Math.Clamp((detail.SurfaceTemperature - 1300.0) / 900.0, 0.45, 1.0);
             }
+            else if (!icy && !rockyIce && denseVariant == 9)
+            {
+                // A huge white ice cap over the top (and a thinner band at the bottom), cream-tan land and dark navy basins, a thin pale-blue rim, no storms.
+                atmoLook.Haze = rgb(204, 212, 228); atmoLook.Glow = rgb(150, 190, 232); atmoLook.Cloud = rgb(240, 244, 250);
+                atmoLook.CycloneAmt = 0.0; atmoLook.CloudAmt = 0.08; atmoLook.HazeAmt = 0.15;
+                atmoLook.Cap = rgb(244, 244, 248); atmoLook.CapAmt = ((hash >> 5) & 1) == 0 ? 0.85 : 0.10; atmoLook.SurfContrast = 1.6;   // the cream version has the huge cap, the red-orange one almost none
+                atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.20, 0.20, 0.96);
+                if ((detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase))
+                {
+                    // The methane version: khaki land seen through a beige haze, dark navy basins, a teal limb, a small pale cap at the top.
+                    atmoLook.Haze = rgb(176, 160, 134); atmoLook.HazeAmt = 0.42; atmoLook.Glow = rgb(96, 172, 192); atmoLook.Cloud = rgb(214, 204, 184); atmoLook.CloudAmt = 0.25;
+                    atmoLook.CapAmt = 0.14; atmoLook.SurfContrast = 1.7;
+                }
+            }
             else if (!icy && !rockyIce && denseVariant == 8)
             {
                 // Silicate vapour atmosphere (real: Qiedea EB-X e1-0 1, 6879 K: smooth pale yellow-green cream with olive cloud blotches and a few dark flecks;
@@ -813,7 +841,7 @@ namespace EliteBioRadar
                 atmoLook.Cloud = rgb(160, 178, 202); atmoLook.CycloneAmt = 0.0; atmoLook.CloudAmt = 0.85; atmoLook.CapAmt = 0;   // the blue-grey comes in streaky patches over the orange
                 // The veil thickness varies by body: patchy (Eafots JJ-B c13-2 A 1) to almost total (Qiedea JC-U d3-1 B 2, 9.5 MPa, a pale pink-grey cloud layer).
                 atmoLook.HazeAmt = 0.28 + 0.38 * (((hash >> 7) % 100) / 100.0); atmoLook.SurfContrast = 1.1;
-                if (salmonVeil) atmoLook.HazeAmt = 0.5 + 0.2 * (((hash >> 7) % 100) / 100.0);   // the thicker veil of the salmon-pink hot CO2 worlds
+                if (salmonVeil) atmoLook.HazeAmt = 0.45 + 0.45 * (((hash >> 7) % 100) / 100.0);   // the thicker veil of the salmon-pink hot CO2 worlds
                 if (waterOrange) { atmoLook.HazeAmt = 0.28 + 0.12 * (((hash >> 7) % 100) / 100.0); atmoLook.CycloneAmt = 0.6; }   // water version: stronger colour, round white cyclones
                 atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.20, 0.20, 0.96);
             }

@@ -538,6 +538,8 @@ namespace EliteBioRadar
         private readonly string _statusFile;
         private readonly string _navRouteFile;
         private string? _lastNavRouteJson;
+        private bool _routeClearedLive;
+        private string? _routeJsonAtClear;
         private string _currentJournalFile = "";
         private long   _journalPosition;
         private int _lastLoggedGuiFocus = 0;
@@ -1175,6 +1177,7 @@ namespace EliteBioRadar
                 // no way to ever retry: a real captured symptom, the whole Destination tab
                 // going permanently blank ("route is still set in game") after one bad tick.
                 if (json == _lastNavRouteJson) return;
+                if (_routeClearedLive && _routeJsonAtClear != null && json == _routeJsonAtClear) return;
 
                 var obj = JObject.Parse(json);
                 var route = obj["Route"];
@@ -1206,6 +1209,21 @@ namespace EliteBioRadar
                 // RemainingDistanceLy is set inside EnsureRouteState instead, anchored off the
                 // same "current position" logic as RemainingJumpsInRoute — see its comment.
                 EnsureRouteState(CurrentDestination, hops);
+                // After a live clear, a re-plotted route toward the same next system comes with no FSDTarget (the target did not change), so the Destination
+                // tab never learned the target again. Take it from the route: the system after the current one (or the first, when the route starts elsewhere).
+                if (_routeClearedLive && hops.Count > 0 && string.IsNullOrEmpty(CurrentDestination.NextSystem))
+                {
+                    int curIdx = hops.FindIndex(h => string.Equals(h.StarSystem, StarSystem, StringComparison.OrdinalIgnoreCase));
+                    var nextHop = curIdx >= 0 ? (curIdx + 1 < hops.Count ? hops[curIdx + 1] : null) : hops[0];
+                    if (nextHop != null)
+                    {
+                        CurrentDestination.NextSystem = nextHop.StarSystem;
+                        CurrentDestination.StarClass  = nextHop.StarClass;
+                        FsdTargetedAt = DateTime.UtcNow;
+                        _routeClearedLive = false;
+                        EnsureRouteState(CurrentDestination, hops);
+                    }
+                }
                 _lastNavRouteJson = json;
                 DestinationUpdated?.Invoke(this, EventArgs.Empty);
             }
@@ -4441,8 +4459,16 @@ namespace EliteBioRadar
                 // panel can fall back (e.g. to the radar while on a planet). A later NavRoute/FSDTarget rebuilds it.
                 case "NavRouteClear":
                 {
+                    _routeJsonAtClear = _lastNavRouteJson;   // the file may still hold the cleared route for a moment: ignored until it changes
                     CurrentDestination = null;
                     _lastNavRouteJson = null;
+                    if (!backfill)
+                    {
+                        // A live clear is the player resetting the route: the next plotted route is a new trip (progress restarts), and if it goes
+                        // to the same next system the game will NOT announce that target again (no FSDTarget), so the route itself has to supply it.
+                        _routeClearedLive = true;
+                        _routeCache = new RouteCacheData();
+                    }
                     // The saved route cache is left alone: the game also writes NavRouteClear when a route simply ends or is replotted, and a new
                     // NavRoute/FSDTarget replaces the cache anyway.
                     if (!backfill) DestinationUpdated?.Invoke(this, EventArgs.Empty);
