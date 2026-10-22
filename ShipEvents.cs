@@ -80,6 +80,7 @@ namespace EliteBioRadar
         public void ObserveStatus(EliteStatus s)
         {
             var ctx = ContextOf(s);
+            var oldCtx = _ctx; bool hadBaseline = _haveBaseline;
             bool newContext = !_haveBaseline || ctx != _ctx;
             uint prev = _flags;
             if (newContext)
@@ -90,6 +91,8 @@ namespace EliteBioRadar
                 _quietUntil = DateTime.UtcNow.AddSeconds(1.5);
                 _lastHealth = ctx == Ctx.Foot ? s.Health : 0;
             }
+            // Stepping from the ship into the SRV is the SRV being deployed: the journal's LaunchSRV says so too, and this catches it when that line is missed or late (same key, so one chip).
+            if (newContext && hadBaseline && oldCtx == Ctx.Ship && ctx == Ctx.Srv) Raise("srv.launch", "SRV Deployed", ShipEventTone.Move, 10.0);
             _flags = s.Flags;
 
             UpdateHazards(s, ctx);
@@ -132,6 +135,9 @@ namespace EliteBioRadar
                 if ((s.Flags2 & (1u << 7)) != 0) list.Add(new ShipHazard("lowhealth", $"LOW HEALTH ({s.Health:P0})", ShipEventTone.Danger));
             }
 
+            if (_shipApproaching && (ctx == Ctx.Ship || (DateTime.UtcNow - _shipApproachSince).TotalSeconds > 180)) _shipApproaching = false;
+            if (_shipApproaching) list.Add(new ShipHazard("shipapproach", "Ship on Approach", ShipEventTone.Move));
+
             bool hasTemp = list.Any(h => h.Key is "hot" or "veryhot" or "cold" or "verycold");
             bool hasOxygen = list.Any(h => h.Key == "lowoxygen");
             bool quiet = DateTime.UtcNow < _quietUntil;
@@ -157,14 +163,27 @@ namespace EliteBioRadar
             }
         }
 
+        // The ship was recalled to the surface and is on its way down (see the FSDTarget re-announcement in EliteWatcherService).
+        public void RaiseShipOnApproach()
+        {
+            _shipApproaching = true; _shipApproachSince = DateTime.UtcNow;   // stays on the chip as a state until the ship lands (Touchdown), is boarded or 3 minutes pass
+            Raise("ship.approach", "Ship on Approach", ShipEventTone.Move, 5.0);
+        }
+        private bool _shipApproaching;
+        private DateTime _shipApproachSince = DateTime.MinValue;
+
         // Live journal lines only (the caller skips the startup replay).
         public void ObserveJournal(string evt, JObject obj)
         {
             switch (evt)
             {
-                case "Liftoff":   Raise("liftoff", "Liftoff", ShipEventTone.Move); break;
-                case "Touchdown": Raise("touchdown", "Ship Landed", ShipEventTone.Move); break;
-                case "LaunchSRV": Raise("srv.launch", "SRV Launched", ShipEventTone.Move); break;
+                case "Liftoff":
+                    // PlayerControlled:false is the ship leaving by itself for orbit after the player walks or drives away from it.
+                    if (obj.Value<bool?>("PlayerControlled") == false) Raise("ship.departing", "Ship Departing", ShipEventTone.Caution);
+                    else Raise("liftoff", "Liftoff", ShipEventTone.Move);
+                    break;
+                case "Touchdown": _shipApproaching = false; Raise("touchdown", "Ship Landed", ShipEventTone.Move); break;
+                case "LaunchSRV": Raise("srv.launch", "SRV Deployed", ShipEventTone.Move, 10.0); break;
                 case "DockSRV":   Raise("srv.dock", "SRV Docked", ShipEventTone.Move); break;
                 case "Embark":
                     if (obj.Value<bool?>("SRV") == true) Raise("board.srv", "Boarding SRV", ShipEventTone.Move);

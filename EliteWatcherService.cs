@@ -775,6 +775,13 @@ namespace EliteBioRadar
                     SrvAnchor = new AnchorPoint { Latitude = status.Latitude, Longitude = status.Longitude };
                     ScanCache.SaveSrvAnchor(bodyForAnchor, status.Latitude, status.Longitude);
                 }
+                else if (prev.InSRV && abroadGroundedShip)
+                {
+                    // The SRV was picked up by the ship (DockSRV): it is no longer parked on the surface, so its marker goes.
+                    Log.Write($"ShipDeparture: SrvAnchor cleared for '{bodyForAnchor}' (SRV docked into the ship)");
+                    SrvAnchor = null;
+                    ScanCache.ClearSrvAnchor(bodyForAnchor);
+                }
                 else if (prev.OnFoot && status.InSRV)
                 {
                     // Climbed back into the SRV we were tracking.
@@ -4150,6 +4157,26 @@ namespace EliteBioRadar
                     break;
                 }
 
+                // The SRV docked into the ship: drop its parked-SRV marker whatever the status flags did (they can skip straight from SRV to ship).
+                case "DockSRV":
+                    if (!backfill && SrvAnchor != null && !string.IsNullOrEmpty(CurrentBody))
+                    {
+                        Log.Write($"DockSRV: SrvAnchor cleared for '{CurrentBody}'");
+                        SrvAnchor = null;
+                        ScanCache.ClearSrvAnchor(CurrentBody);
+                    }
+                    break;
+
+                // The ship taking off on its own for orbit (the player left its vicinity on foot or in the SRV): the game's own word that it has departed, so the departure flag
+                // no longer has to wait for the distance guess.
+                case "Liftoff":
+                    if (!backfill && obj.Value<bool?>("PlayerControlled") == false)
+                    {
+                        ShipDepartureCrossed = true;
+                        Log.Write("Liftoff: the ship departed on its own (PlayerControlled:false), ShipDepartureCrossed set");
+                    }
+                    break;
+
                 case "ApproachBody":
                 case "Touchdown":
                 {
@@ -4548,6 +4575,12 @@ namespace EliteBioRadar
                     bool sameTargetRepeat = prevTarget.Length > 0 &&
                         string.Equals(prevTarget, CurrentDestination.NextSystem, StringComparison.OrdinalIgnoreCase) &&
                         !backfill && CurrentStatus.GuiFocus == 0 && CurrentStatus.HasPosition;
+                    // Recalling the ship from the surface makes the game announce the same FSD target again (real: 16:05:28 the route's next system re-sent, the ship landed 49 s later);
+                    // with the ship away and the player on foot or in the SRV that is "Ship on Approach", not the player choosing a jump, so it must not flip the app to Destination.
+                    bool shipRecall = ShipDepartureCrossed && !backfill && prevTarget.Length > 0 &&
+                        string.Equals(prevTarget, CurrentDestination.NextSystem, StringComparison.OrdinalIgnoreCase) &&
+                        CurrentStatus.HasPosition && (CurrentStatus.OnFoot || CurrentStatus.InSRV);
+                    if (shipRecall) { ShipEvents.RaiseShipOnApproach(); sameTargetRepeat = true; }
                     if (!startupAnnouncement && !sameTargetRepeat) FsdTargetedAt = fsdTargetTs;
                     // TotalRouteJumps/TotalRouteLy are (re)derived from the persisted route
                     // cache inside LoadNavRoute -> EnsureRouteState, not tracked here.
