@@ -643,6 +643,7 @@ namespace EliteBioRadar
         private List<string> _bioTopUpGenera = new();
         private void UpdateDeorbitSequenceState(EliteStatus status)
         {
+            if (_watcher != null && _watcher.InMainMenu) { _deorbitSeqActive = false; _prevHasPositionForSeq = status.HasPosition; _prevIsGlidingForSeq = false; return; }
             // When the ship came within reach of a planet (lat/long appeared) - a next-system pick counts for the Destination tab only if it
             // was made after this, so the auto-targeted next hop of a plotted route does not pin the tab while you explore.
             // A brief blink of the flag (the glide/position overlap) must not count as arriving again, or an earlier pick would be ignored.
@@ -694,6 +695,7 @@ namespace EliteBioRadar
         // One method now, so all three can never drift apart like that again.
         private bool ShouldShowDeorbit(EliteStatus status)
         {
+            if (_watcher != null && _watcher.InMainMenu) return false;
             // Deorbit covers the whole controlled descent AND ascent, not just the narrow Glide
             // window: it's live any time Supercruise is true while position data is also live
             // (still technically Supercruise, but close enough to a body to have lat/long) —
@@ -723,12 +725,19 @@ namespace EliteBioRadar
             // Confirmed by feedback: ascent should wait for Supercruise to actually be live.
             bool nearBodyInSupercruise = status.Supercruise && status.HasPosition;
             // A hyperspace charge started while still near a body (an atmospheric jump) gets its own screen too.
-            return _deorbitSeqActive || nearBodyInSupercruise || status.IsGliding || JumpSceneActive(status);
+            // A hyperspace charge started from orbital cruise (supercruise, still close enough to a body to have latitude/longitude) is not a planetary jump: the jump screen is
+            // only armed for a charge made at a planet. Without this the launch/deorbit animation stayed up through the whole jump (real: a jump from 64 km in orbital cruise).
+            // The Destination tab takes over for the charge and the jump instead; a charge at the surface still gets the jump animation.
+            bool jumpScene = JumpSceneActive(status);
+            if (_watcher != null && _watcher.IsChargingJump && !jumpScene) return false;
+            return _deorbitSeqActive || nearBodyInSupercruise || status.IsGliding || jumpScene;
         }
 
         private InfoPanelMode ComputeMode(EliteStatus status)
         {
             if (PreviewStarType() != null) return InfoPanelMode.Star;
+            // At the game's main menu Status.json is stale: do not keep showing the last flight (a failed hyperspace jump out of orbital cruise left the launch animation up).
+            if (_watcher != null && _watcher.InMainMenu) return InfoPanelMode.Star;
             if (ShouldShowDeorbit(status)) return InfoPanelMode.Deorbit;
 
             // FSD spooling up for a real hyperspace jump wins next — even from an
@@ -4092,10 +4101,10 @@ namespace EliteBioRadar
         }
 
         // ---------------------------------------------------------------
-        // "FUEL SCOOPING" title over the Star tab while the scoop is feeding the tank, with the tonnes on board.
+        // "FUEL SCOOPING" title over the Star and Planet tabs while the scoop is feeding the tank, with the tonnes on board.
         private void RefreshFuelScoopBanner(EliteStatus? status)
         {
-            bool show = status != null && status.ScoopingFuel && starPanelViewbox.Visibility == Visibility.Visible;
+            bool show = status != null && status.ScoopingFuel && (starPanelViewbox.Visibility == Visibility.Visible || planetPanelViewbox.Visibility == Visibility.Visible);
             fuelScoopLayer.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
             if (show) fuelScoopText.Text = $"FUEL SCOOPING  ·  {status!.FuelMain + status.FuelReservoir:F1} t";
         }

@@ -242,6 +242,8 @@ namespace EliteBioRadar
         // The LAST {"Null":N} in Parents: the outermost barycenter, e.g. the whole system's own centre for a star that itself orbits a smaller barycenter
         // (real: Qiedea MX-T d3-2 AB 3, Parents [{"Null":21},{"Null":0}], pairs with AB 4 around 21, and 21 orbits 0 with the other stars). -1 when none.
         public int  OuterBarycenterID { get; set; } = -1;
+        // A {"Null":N} listed BEFORE the real Planet/Star parent: the body shares that barycentre with a partner (Parents [{"Null":1},{"Star":0}]). Unlike BarycenterID this is -1 for a body whose Null comes after its star (a planet of a star that itself orbits a barycentre). Used to give pair partners one look family.
+        public int  PairBarycenterID  { get; set; } = -1;
         public string ScanType { get; set; } = ""; // informational tag only ("AutoScan"/"Detailed"), not a completeness signal
         public bool   IsMapped { get; set; } // DSS-mapped this session (SAAScanComplete) — a later, distinct milestone than a Detailed scan
 

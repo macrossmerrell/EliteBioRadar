@@ -37,6 +37,8 @@ namespace EliteBioRadar
             bool landable = !gas && !atmo && PlanetRenderer.HasLandableShader(iconCode);
             bool ringed = d.Rings.Any(r => r.OuterRad > 0 && r.InnerRad > 0);
             (double, double, double)? ringTint = starK >= PlanetRenderer.RingTintMinK ? PlanetRenderer.StarLightTint(starK) : null;
+            // Rings darken with the starlight a little faster than the planet: brightness is the planet's factor squared (floor 0.15), so a ring far from a weak star is dark.
+            double ringDim = starFlux > 0 && !gas ? Math.Clamp(starFlux, 0.15, 1.0) : 1.0;   // not for gas giants: they are not dimmed with distance, so their rings stay as they were
             // Terrain planets without a shader of their own still get the ring shader when ringed.
             if (!gas && !atmo && !landable && !(ringed && PlanetRenderer.IsTerrainFamily(iconCode))) return null;
             try
@@ -90,9 +92,9 @@ namespace EliteBioRadar
                     // Built before anything is returned: if the ring shader can't be set up the whole scene is abandoned (caller falls back to the
                     // CPU render with its own rings) rather than showing a ringless planet.
                     double? terrainR = gas ? null : planetR;
-                    scene.Layers.Add(Host(RingShaderEffect.Create(d, w, h, false, Light, terrainR, ringTint)));
+                    scene.Layers.Add(Host(RingShaderEffect.Create(d, w, h, false, Light, terrainR, ringTint, ringDim)));
                     scene.Layers.Add(planet);
-                    scene.Layers.Add(Host(RingShaderEffect.Create(d, w, h, true, Light, terrainR, ringTint)));
+                    scene.Layers.Add(Host(RingShaderEffect.Create(d, w, h, true, Light, terrainR, ringTint, ringDim)));
                 }
                 else
                 {

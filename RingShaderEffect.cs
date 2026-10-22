@@ -65,7 +65,7 @@ namespace EliteBioRadar
         };
 
         // lightDir is the planet shader's view-space light (x right, y up, z toward viewer); it is rotated into the ring-aligned frame here.
-        public static RingShaderEffect Create(BodyScanDetail detail, int sceneW, int sceneH, bool frontPass, Vector3D lightDir, double? planetRadius = null, (double r, double g, double b)? starTint = null)
+        public static RingShaderEffect Create(BodyScanDetail detail, int sceneW, int sceneH, bool frontPass, Vector3D lightDir, double? planetRadius = null, (double r, double g, double b)? starTint = null, double dim = 1.0)
         {
             var (cx, cy, sphereR, bands) = PlanetRenderer.GetRingShaderGeometry(detail, sceneW, sceneH);
             var e = new RingShaderEffect();
@@ -100,7 +100,8 @@ namespace EliteBioRadar
                     var k = starTint.Value;
                     wr = Math.Min(1.0, (wr + (lum - wr) * 0.7) * k.r); wg = Math.Min(1.0, (wg + (lum - wg) * 0.7) * k.g); wb = Math.Min(1.0, (wb + (lum - wb) * 0.7) * k.b);
                 }
-                e.SetValue(colProps[i], new Point4D(wr, wg, wb, grain));
+                // Far from a weak star the rings are dark too (real: the icy rings of Qiedea QY-P c6-0 B 9, 4.9 AU from an M3 star: dark slate-blue where the app drew white).
+                e.SetValue(colProps[i], new Point4D(wr * dim, wg * dim, wb * dim, grain));
             }
             return e;
         }

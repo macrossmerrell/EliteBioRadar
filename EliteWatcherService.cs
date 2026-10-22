@@ -370,6 +370,11 @@ namespace EliteBioRadar
         // "honk") and every body resolved so far, in resolution order. Both reset on a real
         // system change (FSDJump), same lifetime as _bodyScanDetails.
         public int SystemBodyCount { get; private set; }
+        // True from the journal's Music "MainMenu" until the next LoadGame: the game is at its main menu (a failed hyperspace jump, or logging out) and Status.json is stale, so the
+        // last in-flight state (supercruise near a planet, a launch animation) must not keep showing. Real: a hyperspace jump out of orbital cruise failed, the game went to the menu
+        // and the app stayed on the launch animation.
+        public bool InMainMenu { get; private set; }
+        private string? _menuStatusJson;   // Status.json content when the menu was first seen: a different one later means the game is writing again
         private readonly List<string> _resolvedBodiesOrder = new();
         public IReadOnlyList<string> ResolvedBodiesOrder => _resolvedBodiesOrder;
         // Scan detail for every body (star OR planet) seen this session, keyed by full body
@@ -434,6 +439,13 @@ namespace EliteBioRadar
                 }
 
                 double LumOf(BodyScanDetail st) => st.AbsoluteMagnitude != 0 ? Math.Pow(10, (4.83 - st.AbsoluteMagnitude) / 2.5) : Math.Pow(st.Radius / 6.957e8, 2) * Math.Pow(st.SurfaceTemperature / 5772.0, 4);
+                double OtherRelFlux(BodyScanDetail o)
+                {
+                    double od = Math.Abs(d.DistanceFromArrivalLS - o.DistanceFromArrivalLS) * 299792458.0 / 1.496e11;
+                    if (od <= 0) return 0;
+                    double ol = LumOf(o);
+                    return ol / (od * od) / (0.011 * Math.Pow(ol / 0.48, 0.6));
+                }
                 (double tempK, double distM, double flux, double lum) best = (0, 0, -1, 0);
                 foreach (var s in stars)
                 {
@@ -453,7 +465,9 @@ namespace EliteBioRadar
                     // B 1 (0.8 AU) and B 2 (1.3 AU) are lit locally and B 3 (1.8 AU) by the A7 primary, so about 1.5 AU (2.2e11 m); round the L dwarfs of DL-N c7-0, C 3 (2.3 AU) is local
                     // and B 6 (4.0 AU) is primary-lit, so about 3 AU (4.5e11 m). Two fits to few points, not a law; the old guess was: (B 5 and C 4 at
                     // 2.9 to 3.0 AU were still red-lit by their own dwarf, C 5 at 3.9 AU and B 6 at 4.0 AU were not).
-                    if (s.BodyID == ownStarId && distM > (s.SurfaceTemperature < 2400 ? 4.5e11 : 2.2e11) && stars.Any(o => o.BodyID != s.BodyID && LumOf(o) > lum)) flux *= 0.001;
+                    if (s.BodyID == ownStarId && distM > (s.SurfaceTemperature < 2400 ? 4.5e11 : 2.2e11) && stars.Any(o => o.BodyID != s.BodyID && LumOf(o) > lum && OtherRelFlux(o) >= 0.02)) flux *= 0.001;
+                    // (the takeover needs the other star to deliver a real share of ITS full-brightness level at the body: QY-P c6-0 B 9, 4.9 AU from the M3 star B and 248 AU from the K5 primary, was
+                    // lit bright by B, not dimmed to the primary's few millionths)
                     if (flux > best.flux) best = (s.SurfaceTemperature, distM, flux, lum);
                 }
                 if (best.flux >= 0) return best;
@@ -830,6 +844,15 @@ namespace EliteBioRadar
                     json = sr.ReadToEnd();
 
                 if (string.IsNullOrWhiteSpace(json)) return;
+
+                // The main-menu state (journal Music "MainMenu") is only trusted while Status.json stays untouched: the game writes it continuously in play and not at the
+                // menu, so any rewrite after the menu was seen means the player is back in the game (also guards against a "MainMenu" track that is not a real menu).
+                if (InMainMenu)
+                {
+                    if (_menuStatusJson == null) _menuStatusJson = json;
+                    else if (json != _menuStatusJson) { InMainMenu = false; _menuStatusJson = null; }
+                }
+                else _menuStatusJson = null;
 
                 var obj = JObject.Parse(json);
                 var flagsRaw  = obj.Value<long?>("Flags")  ?? 0;
@@ -1537,6 +1560,7 @@ namespace EliteBioRadar
             var parentsArr = obj["Parents"];
             if (parentsArr != null)
             {
+                bool sawRealParent = false;
                 foreach (var p in parentsArr)
                 {
                     if (p is not JObject po) continue;
@@ -1545,6 +1569,8 @@ namespace EliteBioRadar
                     var baryId = po.Value<int?>("Null");
                     if (baryId.HasValue && detail.BarycenterID < 0) detail.BarycenterID = baryId.Value;
                     if (baryId.HasValue) detail.OuterBarycenterID = baryId.Value;
+                    if (baryId.HasValue && !sawRealParent && detail.PairBarycenterID < 0) detail.PairBarycenterID = baryId.Value;
+                    if (po["Planet"] != null || po["Star"] != null) sawRealParent = true;
                     var planetParent = po.Value<int?>("Planet");
                     if (planetParent.HasValue)
                     {
@@ -2885,15 +2911,20 @@ namespace EliteBioRadar
                     var recentLines = SafeReadAllLines(latestFile);
                     int lastScanIdx   = -1;
                     int lastLeaveIdx  = -1;
+                    int lastMenuIdx = -1, lastLoadIdx = -1;
                     for (int i = 0; i < recentLines.Count; i++)
                     {
                         var o = TryParse(recentLines[i]); if (o == null) continue;
                         var ev = o.Value<string>("event");
                         if (ev == "ScanOrganic" || ev == "Touchdown" || ev == "Disembark")
                             lastScanIdx = i;
+                        if (ev == "Music" && string.Equals(o.Value<string>("MusicTrack"), "MainMenu", StringComparison.OrdinalIgnoreCase)) lastMenuIdx = i;
+                        if (ev == "LoadGame") lastLoadIdx = i;
                         if (ev == "LeaveBody" || ev == "FSDJump" || ev == "SupercruiseEntry")
                             lastLeaveIdx = i;
                     }
+                    // The game sitting at its main menu when the app starts: Status.json is stale, do not show the last flight.
+                    InMainMenu = lastMenuIdx >= 0 && lastMenuIdx > lastLoadIdx;
                     // The journal alone cannot tell "left and still away" from "left, then arrived at a body again": arriving by supercruise
                     // writes no Touchdown/Disembark, so a SupercruiseEntry earlier in the file looked like leaving. (Real case: Qiedea AH-T d4-6 A 3 -
                     // the app restarted while the player was flying low over A 3, cleared it as "left" and showed another planet instead.) The live
@@ -4428,8 +4459,13 @@ namespace EliteBioRadar
                     break;
                 }
 
+                case "Music":
+                    if (string.Equals(obj.Value<string>("MusicTrack"), "MainMenu", StringComparison.OrdinalIgnoreCase)) InMainMenu = true;
+                    break;
+
                 // Session (re)load - see _lastLoadGameAt for why the post-load route re-announcement must not count as a new target.
                 case "LoadGame":
+                    InMainMenu = false;
                     _lastLoadGameAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
                     break;
 

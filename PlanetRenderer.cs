@@ -202,6 +202,17 @@ namespace EliteBioRadar
             return look;
         }
 
+        // Partners on one barycentre (Parents [{"Null":1},{"Star":0}]: Qiedea IR-V d2-0 1 and 2, DL-N c7-0 B 1 and B 2, B 4 and B 5) came out in one look family in game,
+        // so the generic landable pick uses a hash of the pair (the name without its last token, and the barycentre) instead of each body's own name. The seed and
+        // everything else keep the body's own hash, so the two never share a pattern.
+        private static int PairPickHash(BodyScanDetail d, int own)
+        {
+            if (d.PairBarycenterID < 0 || d.ParentBodyID < 0 || d.IsStar || d.IsMoon || string.IsNullOrEmpty(d.BodyName)) return own;   // no real parent: a planet round a binary star pair, not a partner
+            int cut = d.BodyName.LastIndexOf(' ');
+            string stem = cut > 0 ? d.BodyName[..cut] : d.BodyName;
+            return StableHash($"{stem}|{d.ParentBodyID}|{d.PairBarycenterID}");
+        }
+
         private static LandableWorldLook GetLandableWorldLookCore(BodyScanDetail detail, string iconCode, double starK)
         {
             int hash = StableHash(detail.BodyName);
@@ -231,17 +242,18 @@ namespace EliteBioRadar
             // Bodies around the same star tend to share a family of looks (reported from play), so the star group
             // ("<system> <star letters>", the name up to the first number) picks a window of five looks and the
             // body picks within it.
-            int look = (hash >> 4) % 11;   // by name alone: a star-group window did not hold up against real rocky bodies
+            int pickHash = PairPickHash(detail, hash);
+            int look = (pickHash >> 4) % 11;   // by name alone: a star-group window did not hold up against real rocky bodies
             // Three looks added from a 40-body review of real screenshots. The blue-grey one appeared only on landables with a thin
             // atmosphere (3 of 6 of those, 0 of 17 airless), so it takes about half of them; the pale grey-white and the yellow-green
             // (and the warm cream one) each turned up on about 1 in 13 bodies, so a small slice of the others is diverted to them (the rest keep their old pick).
             // The share was lowered from 50% to 35% after more thin-atmosphere landables came in (5 of 14 had the dark blue-grey look; the first estimate was 3 of 6).
-            if (detail.SurfacePressure > 0 && ((hash >> 20) % 20) < 7) look = 11;
+            if (detail.SurfacePressure > 0 && ((pickHash >> 20) % 20) < 7) look = 11;
             else
             {
                 // The share of bodies diverted to the looks added from the real-screenshot reviews (pale grey-cream, pale with big dark basins, yellow-green,
                 // warm cream, very dark, olive-lavender camouflage); the other 60% keep the original eleven.
-                int slice = (hash >> 18) % 20;
+                int slice = (pickHash >> 18) % 20;
                 if (slice <= 1) look = 12;
                 else if (slice == 2) look = 13;   // sulphur-yellow patches on olive: three real bodies now (GI-X b19-0 3, AH-T d4-6 B 2 a, MH-V d2-2 4); the share was halved by mistake when the olive misdraws were really the rocky picker's look 4
                 else if (slice == 3) look = 14;
@@ -250,6 +262,8 @@ namespace EliteBioRadar
                 else if (slice == 7) look = 17;
                 else if (slice >= 10 && slice <= 11) look = 18;
                 else if (slice == 12) look = 19;   // salmon-rose with large sage-green patches (one real body so far)
+                else if (slice == 13) look = 20;   // dark maroon with rose patches and big white patches (one real body so far)
+                else if (slice == 14) look = 21;   // dark olive-charcoal with big golden-tan patches (one real body so far)
                 else if (slice <= 9) look = 8;   // the dark rust-brown family keeps turning up in game (TD-Z 1, SU-M C 7, TU-M A 2), so it gets a larger share
             }
             // Around an L dwarf the body reads monochrome red (see LowStarTintMaxK): start from the flat neutral grey-brown and let the tint colour it.
@@ -319,6 +333,12 @@ namespace EliteBioRadar
                 case 19: // salmon-rose base with large sage-green and dark-green patches and peach patches, a small crater, no frost (real: Qiedea AQ-N c7-0 A 3, 498 K)
                     l.Light = rgb(158, 110, 100); l.Dark = rgb(88, 104, 76); l.Accent = rgb(118, 124, 90); l.Bright = rgb(218, 148, 124);
                     l.Contrast = 0.9; l.RustAmt = 0.3; l.BrightAmt = 0.5; l.CraterAmt = 0.25; l.RayAmt = 0.0; l.NoFrost = true; break;
+                case 20: // dark brown-black ground with rose-red patches and large streaky white patches (real: Qiedea IR-V d2-0 3, 699 K, metallic magma volcanism)
+                    l.Light = rgb(150, 70, 66); l.Dark = rgb(60, 46, 44); l.Accent = rgb(118, 52, 50); l.Bright = rgb(232, 228, 220);
+                    l.Contrast = 1.2; l.RustAmt = 0.6; l.BrightAmt = 0.9; l.CraterAmt = 0.2; l.RayAmt = 0.0; l.NoFrost = true; break;
+                case 21: // dark olive-charcoal ground with large golden-tan patches covering about half of it (real: Qiedea IR-V d2-0 4, 516 K, silicate vapour geysers)
+                    l.Light = rgb(72, 74, 58); l.Dark = rgb(44, 46, 38); l.Accent = rgb(98, 92, 60); l.Bright = rgb(216, 174, 108);
+                    l.Contrast = 1.2; l.RustAmt = 0.15; l.BrightAmt = 0.95; l.CraterAmt = 0.15; l.RayAmt = 0.0; l.NoFrost = true; break;
                 case 17: // olive base with lavender-grey and tan-pink patches, a fine camouflage pattern (real: SU-M c8-1 B 2)
                     l.Light = rgb(128, 126, 94); l.Dark = rgb(94, 98, 68); l.Accent = rgb(118, 108, 128); l.Bright = rgb(160, 140, 114);
                     l.Contrast = 0.6; l.RustAmt = 0.5; l.BrightAmt = 0.6; l.CraterAmt = 0.2; l.RayAmt = 0.0; break;
@@ -471,7 +491,9 @@ namespace EliteBioRadar
                 Mottle = 0.85 + ((hash >> 7) % 40) / 100.0,
                 AtmGlow = 0.0, HotAmt = 0.0, SpecAmt = 0.25,
             };
-            switch ((hash >> 4) % 5)
+            int rk = (hash >> 4) % 5;
+            if (((hash >> 14) % 6) == 0) rk = 5;   // about one in six: the dark rust-brown with small teal patches and a white cap (one real body so far)
+            switch (rk)
             {
                 case 0: // sandy orange-tan with grey-brown patches, fine white speckles and a large polar cap (real: FX-S d4-0 7)
                     l.Light = rgb(198, 150, 108); l.Dark = rgb(142, 108, 82); l.Accent = rgb(104, 82, 66); l.Bright = rgb(236, 230, 222);
@@ -485,6 +507,9 @@ namespace EliteBioRadar
                 case 4: // dark charcoal-olive ground with white frost patches over about a sixth of the surface and a big white polar cap (real: Qiedea KC-U d3-1 9)
                     l.Light = rgb(96, 98, 86); l.Dark = rgb(50, 52, 48); l.Accent = rgb(70, 66, 58); l.Bright = rgb(120, 122, 110);
                     l.Ice = rgb(236, 238, 238); l.Contrast = 0.8; l.RustAmt = 0.2; l.BrightAmt = 0.15; l.CraterAmt = 0.3; l.RayAmt = 0.0; l.IceAmt = 0.62; l.SpecAmt = 0.1; break;
+                case 5: // dark rust-brown ground with small scattered teal-green patches and a white frost cap at one pole, dim (real: Qiedea QY-P c6-0 B 4 a, 100 K, round an M3 star)
+                    l.Light = rgb(94, 62, 52); l.Dark = rgb(52, 38, 34); l.Accent = rgb(112, 72, 58); l.Bright = rgb(108, 170, 162);
+                    l.Ice = rgb(240, 242, 242); l.Contrast = 0.8; l.RustAmt = 0.4; l.BrightAmt = 0.3; l.CraterAmt = 0.25; l.RayAmt = 0.0; l.IceAmt = 0.4; l.SpecAmt = 0.1; break;
                 default: // rust-brown with a network of pale vein-like cracks and a strong blue limb (real: TD-Z b17-0 5)
                     l.Light = rgb(134, 86, 72); l.Dark = rgb(80, 58, 54); l.Accent = rgb(120, 80, 72); l.Bright = rgb(150, 112, 104);
                     l.Ice = rgb(168, 162, 168); l.Contrast = 0.7; l.RustAmt = 0.4; l.BrightAmt = 0.15; l.CraterAmt = 0.2; l.RayAmt = 0.0; l.LineAmt = 1.0; l.IceAmt = 0.3; l.AtmGlow = 0.45; break;
@@ -569,6 +594,7 @@ namespace EliteBioRadar
             double haze = Math.Pow(Math.Clamp((logP - 5.1) / 0.8, 0.0, 1.0), 1.5);
 
             int denseVariant = 0;
+            bool orangeFlat = false;   // hot thick CO2 of 1000 K and up: smooth orange-red with hardly any veil
             bool waterOrange = false;   // thick-water rust-orange look: keeps its cyclones and a thinner veil (Qiedea KC-U d3-1 2)
             bool darkCyclone = false;   // the very dark navy cyclone look (real: five mid-pressure bodies, plus Qiedea JC-U d3-1 B 3): navy ground, teal-green limb
             int pick = hash % 10;
@@ -642,7 +668,9 @@ namespace EliteBioRadar
                 denseVariant = (hash >> 2) % 4;
                 if (denseVariant == 3) denseVariant = 5;   // 4 is reserved for the very-hot lava look
                 // Very dense and cold (under 300 K): dark navy basins on cream land under a huge ice cap (real: Qiedea AQ-N c7-0 A 7, 31 MPa of argon-rich nitrogen, 254 K) or on red-orange land with almost no cap (its barycentre partner A 6, 11 MPa, 244 K); both of the two seen, so three in four.
-                if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 300 && ((hash >> 13) % 4) != 3) denseVariant = 9;
+                if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 300 && detail.SurfacePressure >= 5.0e6 && ((hash >> 13) % 4) != 3) denseVariant = 9;
+                // Cold and dense but under 5 MPa: a smooth pale lilac-grey veil over the whole disc about six times in ten (real: Qiedea QY-P c6-0 B 2, argon-rich 1.26 MPa, 173 K).
+                else if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 300 && ((hash >> 13) % 10) < 6) denseVariant = 6;
                 // Extremely hot bodies (real: RR-N d6-47 A 1, 2,154 K) are near-black with glowing red lava patches.
                 bool veryHot = detail.SurfaceTemperature >= 1500;
                 // Methane-rich: one real example (PW-N d6-2 8, 2.9 MPa, 372 K) was olive-green under a teal haze - a guess
@@ -663,10 +691,16 @@ namespace EliteBioRadar
                 else if (denseVariant == 7) { s0 = rgb(176, 120, 66); s1 = rgb(230, 182, 108); contrast = 0.45; }   // ochre-tan, Mars-like (atmoLook override below)
                 else if (denseVariant == 3) { s0 = rgb(74, 78, 44); s1 = rgb(132, 130, 78); contrast = 0.5; }   // olive-green
                 else if (denseVariant == 1) { s0 = rgb(150, 70, 40); s1 = rgb(206, 104, 58); contrast = 0.5; }   // orange-red
-                else if (denseVariant == 9) { s0 = rgb(44, 50, 72); s1 = (detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase) ? rgb(184, 166, 134) : ((hash >> 5) & 1) == 0 ? rgb(234, 212, 166) : rgb(224, 112, 86); contrast = 1.6; }   // cream or red-orange land, dark navy basins
+                else if (denseVariant == 9) { s0 = rgb(44, 50, 72); s1 = (detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase) ? rgb(184, 166, 134) : (haze <= 0.80 || ((hash >> 5) & 1) == 1) ? rgb(224, 112, 86) : rgb(234, 212, 166); contrast = 1.6; }   // cream or red-orange land, dark navy basins
                 else if (denseVariant == 5) { s0 = rgb(150, 126, 70); s1 = rgb(236, 208, 128); contrast = 0.9; }   // pale blue-grey with a yellow wash (real: RR-N d6-47 B 3)
                 else if (denseVariant == 2) { s0 = rgb(24, 26, 32);  s1 = rgb(46, 50, 58);  contrast = 0.5; }   // near-black
                 else                        { s0 = rgb(112, 124, 140); s1 = rgb(162, 174, 188); contrast = 0.7; }   // slate
+            }
+            else if (iconCode == "HMC" && !detail.Landable && haze <= 0.80 && detail.SurfacePressure is >= 20000 and <= 1000000 && ((hash >> 15) % 10) < 2)
+            {
+                // Red-orange Mars-like land with dark navy basins, a pale cap and white cyclones at mid pressure (real: Qiedea IR-V d2-1 2, water-rich nitrogen at 128 kPa and 346 K);
+                // the same look as the very dense cold worlds, about one in five of them.
+                denseVariant = 9; s0 = rgb(44, 50, 72); s1 = rgb(224, 112, 86); contrast = 1.6;
             }
             else if (iconCode == "HMC" && (detail.AtmosphereType ?? "").Contains("Nitrogen", StringComparison.OrdinalIgnoreCase))
             {
@@ -681,7 +715,7 @@ namespace EliteBioRadar
                 // Mid-pressure CO2: gold-ochre for about a quarter (Qiedea TU-M c8-0 C 5); the rest keep the ordinary pick.
                 s0 = rgb(178, 120, 62); s1 = rgb(240, 194, 108); contrast = 0.55;
             }
-            else if (iconCode == "HMC" && !detail.Landable && haze <= 0.80 && detail.SurfacePressure is >= 20000 and <= 600000 && ((hash >> 5) % 10) < 3)
+            else if (iconCode == "HMC" && !detail.Landable && haze <= 0.80 && detail.SurfacePressure is >= 20000 and <= 600000 && ((hash >> 5) % 20) < 3)
             {
                 // The very dark navy cyclone look turned up on five bodies of mid pressure and very different gas (CO2 36 and 132 kPa, argon 44, nitrogen 196, water 499:
                 // Qiedea DJ-M c9-1 5, PK-L c9-1 B 3, JC-U d3-1 A 7 and B 1, SU-M c8-1 B 6), so about three in ten of them draw it.
@@ -690,7 +724,7 @@ namespace EliteBioRadar
             else if (pick <= 3)     { s0 = rgb(176, 106, 56);  s1 = rgb(232, 152, 92); }                   // ochre / orange (brightened to match a real orange Mars-like body, Qiedea ZW-R d5-22 BC 4)
             else if (pick == 4)     { s0 = rgb(92, 40, 30);    s1 = rgb(150, 72, 52); }                      // rust red
             else if (pick <= 6)     { s0 = rgb(66, 52, 44);    s1 = rgb(118, 96, 80); }                      // brown
-            else if (pick == 7)     { s0 = rgb(94, 76, 40);    s1 = rgb(164, 130, 72); }                     // olive-gold (was greener; real: Qiedea TU-M c8-0 C 5, golden ochre)
+            else if (pick == 7 || pick == 8) { s0 = rgb(94, 76, 40); s1 = rgb(164, 130, 72); }                     // olive-gold (was greener; real: Qiedea TU-M c8-0 C 5, golden ochre)
             else                    { s0 = rgb(18, 24, 34);    s1 = rgb(46, 58, 74); contrast = 1.2; darkCyclone = true; }       // dark charcoal with a faint rust undertone (real: PW-N d6-2 6, 63 kPa, 242 K)
 
             // Ice caps: about one body in five, larger on the cold ones (the first version gave 40% a big one; real ones such as K: B 3, C 8 and C 3 had none).
@@ -707,7 +741,10 @@ namespace EliteBioRadar
                 // Above about 2500 K the cloud layer is pale whatever the gas (Qiedea EB-X e1-0 13, water with silicates, 3002 K: white; GH-U d3-6 1, 4007 K: cream;
                 // EB-X e1-0 1, 6879 K: yellow-green), while RR-N d6-47 A 1 at 2154 K and EB-X e1-0 3 at 1176 K were near-black.
                 // Thick hot atmospheres are pale too (OS-T d3-2 3: hot water at 265 MPa and 1480 K, pale yellow-cream; the near-black ones, EB-X e1-0 3 and RR-N A 1, had thin or moderate atmospheres).
-                if (silicate || detail.SurfaceTemperature >= 2500 || (detail.SurfaceTemperature >= 1130 && detail.SurfacePressure >= 5.0e6)) denseVariant = 8;
+                bool co2Thick = (detail.AtmosphereType ?? "").IndexOf("Carbon", StringComparison.OrdinalIgnoreCase) >= 0 && detail.SurfacePressure >= 5.0e6;
+                if (silicate || detail.SurfaceTemperature >= 2500 || (detail.SurfaceTemperature >= 1130 && detail.SurfacePressure >= 5.0e6 && !co2Thick)) denseVariant = 8;
+                // Hot thick CO2 of 1000 K and up stays a smooth saturated orange-red (real: Qiedea IR-V d2-0 5, 27 MPa, 1276 K; GI-X b19-0 5 at 1086 K earlier): a thin veil, dark red flecks.
+                else if (co2Thick && detail.SurfaceTemperature >= 1000) { denseVariant = 1; s0 = rgb(160, 72, 38); s1 = rgb(214, 102, 52); contrast = 0.6; orangeFlat = true; }
                 else if (detail.SurfaceTemperature >= 1130)
                 {
                     denseVariant = 4; s0 = rgb(14, 14, 17); s1 = rgb(34, 33, 38); contrast = 0.8;
@@ -717,7 +754,7 @@ namespace EliteBioRadar
             // Hot thick CO2 worlds of 600-1130 K: a pale blue-grey veil over salmon-pink patches (real: Qiedea OS-T d3-3 2 and 3, CA-P c6-0 4: 705 K, 923 K and 844 K at 9 to 12 MPa),
             // the orange-red veil look with a pinker surface and a thicker veil; about seven in ten of them, from 1 MPa up (a fourth body, AQ-N c7-0 A 4 at 1.5 MPa and 853 K, was almost all veil).
             bool salmonVeil = false;
-            if (iconCode == "HMC" && !detail.Landable && !rocky && detail.SurfaceTemperature >= 600 && detail.SurfaceTemperature < 1130 && detail.SurfacePressure >= 1.0e6
+            if (iconCode == "HMC" && !detail.Landable && !rocky && detail.SurfaceTemperature >= 600 && detail.SurfaceTemperature < 1000 && detail.SurfacePressure >= 1.0e6
                 && (detail.AtmosphereType ?? "").IndexOf("Carbon", StringComparison.OrdinalIgnoreCase) >= 0 && ((hash >> 11) % 10) < 7)
             { denseVariant = 1; s0 = rgb(176, 100, 88); s1 = rgb(238, 148, 128); contrast = 0.5; salmonVeil = true; }
 
@@ -794,8 +831,8 @@ namespace EliteBioRadar
             {
                 // A huge white ice cap over the top (and a thinner band at the bottom), cream-tan land and dark navy basins, a thin pale-blue rim, no storms.
                 atmoLook.Haze = rgb(204, 212, 228); atmoLook.Glow = rgb(150, 190, 232); atmoLook.Cloud = rgb(240, 244, 250);
-                atmoLook.CycloneAmt = 0.0; atmoLook.CloudAmt = 0.08; atmoLook.HazeAmt = 0.15;
-                atmoLook.Cap = rgb(244, 244, 248); atmoLook.CapAmt = ((hash >> 5) & 1) == 0 ? 0.85 : 0.10; atmoLook.SurfContrast = 1.6;   // the cream version has the huge cap, the red-orange one almost none
+                atmoLook.CycloneAmt = haze > 0.80 ? 0.0 : 0.5; atmoLook.CloudAmt = haze > 0.80 ? 0.08 : 0.35; atmoLook.HazeAmt = 0.15;
+                atmoLook.Cap = rgb(244, 244, 248); atmoLook.CapAmt = haze <= 0.80 ? 0.35 : ((hash >> 5) & 1) == 0 ? 0.85 : 0.10; atmoLook.SurfContrast = 1.6;   // the cream version has the huge cap, the red-orange one almost none
                 atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.20, 0.20, 0.96);
                 if ((detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase))
                 {
@@ -841,7 +878,8 @@ namespace EliteBioRadar
                 atmoLook.Cloud = rgb(160, 178, 202); atmoLook.CycloneAmt = 0.0; atmoLook.CloudAmt = 0.85; atmoLook.CapAmt = 0;   // the blue-grey comes in streaky patches over the orange
                 // The veil thickness varies by body: patchy (Eafots JJ-B c13-2 A 1) to almost total (Qiedea JC-U d3-1 B 2, 9.5 MPa, a pale pink-grey cloud layer).
                 atmoLook.HazeAmt = 0.28 + 0.38 * (((hash >> 7) % 100) / 100.0); atmoLook.SurfContrast = 1.1;
-                if (salmonVeil) atmoLook.HazeAmt = 0.45 + 0.45 * (((hash >> 7) % 100) / 100.0);   // the thicker veil of the salmon-pink hot CO2 worlds
+                if (salmonVeil) atmoLook.HazeAmt = 0.6 + 0.35 * (((hash >> 7) % 100) / 100.0);
+                if (orangeFlat) { atmoLook.HazeAmt = 0.10; atmoLook.CloudAmt = 0.18; atmoLook.SurfContrast = 0.9; }   // smooth saturated orange-red, hardly any veil   // the thicker veil of the salmon-pink hot CO2 worlds
                 if (waterOrange) { atmoLook.HazeAmt = 0.28 + 0.12 * (((hash >> 7) % 100) / 100.0); atmoLook.CycloneAmt = 0.6; }   // water version: stronger colour, round white cyclones
                 atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.20, 0.20, 0.96);
             }
