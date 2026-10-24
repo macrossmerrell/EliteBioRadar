@@ -122,8 +122,21 @@
         <!-- CONTENT — everything else (trip bar, summary, per-star bodies) is built in
              code-behind into this one scrollable stack, same reasoning as ScanLogWindow's
              own heavily code-behind-built tabs: the content is entirely data-driven. -->
-        <ScrollViewer Grid.Row="1" Style="{StaticResource ThinScrollViewer}">
-            <StackPanel x:Name="rootStack"/>
-        </ScrollViewer>
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <ScrollViewer Grid.Column="0" Style="{StaticResource ThinScrollViewer}">
+                <StackPanel x:Name="rootStack"/>
+            </ScrollViewer>
+            <!-- Body detail panel: slides in from the right edge when a card is clicked (built in SystemScanBodyPanel.cs). -->
+            <Border x:Name="detailSide" Grid.Column="1" Width="0" ClipToBounds="True"
+                    Background="#0b1414" BorderBrush="#1a4444" BorderThickness="1,0,0,0">
+                <ScrollViewer Style="{StaticResource ThinScrollViewer}" Width="450">
+                    <StackPanel x:Name="detailStack" Margin="16,12,14,14"/>
+                </ScrollViewer>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

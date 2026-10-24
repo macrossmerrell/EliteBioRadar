@@ -173,7 +173,17 @@ namespace EliteBioRadar
                 .Select(b => $"{b.BodyName}:{b.BioSignalCount}:{b.GeoSignalCount}:{b.MiningSignalCount}:{b.IsMapped}:{b.Materials.Count}:{b.WasDiscovered}:{b.WasMapped}:{b.WasFootfalled}"))
             // Version bumps when the discovery index finishes its startup pass (or a live
             // discovery lands), so the D badges appear/disappear without needing a body to change.
-            + "#" + DiscoveryIndex.Version + "#" + MaterialInventory.Version + "#" + ScanCache.Version;
+            + "#" + DiscoveryIndex.Version + "#" + MaterialInventory.Version + "#" + ScanCache.Version + "#" + LiveBioSignature();
+
+        // The body being worked on: its live organism scans and genera (not in the cache until an organism is finished) so the open panel and cards follow a first sample.
+        private string LiveBioSignature()
+        {
+            string cur = _watcher.CurrentBody ?? "";
+            string a, g;
+            lock (_watcher.ScannedOrganisms) a = string.Join(",", _watcher.ScannedOrganisms.Select(o => $"{o.Genus}/{o.Species}/{o.ScanCount}/{o.IsComplete}"));
+            lock (_watcher.KnownGenera) g = string.Join(",", _watcher.KnownGenera);
+            return cur + ":" + a + ":" + g;
+        }
 
         public SystemScanWindow(EliteWatcherService watcher)
         {
@@ -368,6 +378,7 @@ namespace EliteBioRadar
                 var list = g.ToList();
                 foreach (var b in list) _baryGroups[b.BodyName] = list;
             }
+            RefreshDetailPanel(bodies);   // after _baryGroups: the open body panel reads them
             rootStack.Children.Add(BuildTripBar());
 
             if (bodies.Count == 0)
@@ -1432,7 +1443,7 @@ namespace EliteBioRadar
             }
 
             card.Child = col;
-            return card;
+            return MakeDetailClickable(card, b);
         }
 
         // Deliberately much lighter than BuildCard — a belt cluster carries none of a planet's
@@ -1589,7 +1600,7 @@ namespace EliteBioRadar
             if (moonMats != null) outer.Children.Add(moonMats);
 
             row.Child = outer;
-            return row;
+            return MakeDetailClickable(row, m);
         }
 
         private UIElement BuildMinorRow(BodyScanDetail b)
@@ -1616,7 +1627,7 @@ namespace EliteBioRadar
             dock.Children.Add(cls);
 
             row.Child = dock;
-            return row;
+            return MakeDetailClickable(row, b);
         }
 
         // ---------------------------------------------------------------

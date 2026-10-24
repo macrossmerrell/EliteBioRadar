@@ -105,6 +105,10 @@ namespace EliteBioRadar
         {
             // T Tauri (TTS): young, active - a saturated orange body (real: NC-D b26-1, 3,002 K, sampled about 238,171,87) with bright
             // yellow-white plasma patches, nothing like a pale cool M dwarf of the same temperature.
+            // L dwarfs (real: Qiedea OD-Q c6-0 B, L3, 1742 K): a hot-pink / magenta globe with big vivid-red blotches and a red rim and halo, only tiny pale flecks;
+            // not the pale pink the temperature blend between the T and L anchors gave. Same colours for the whole class.
+            if (starType == "L")
+                return (Color.FromRgb(0xff, 0x46, 0xc8), Color.FromRgb(0xff, 0x1c, 0xa0), Color.FromRgb(0xeb, 0x0c, 0x1c));
             if (starType == "TTS")
                 return (Color.FromRgb(0xff, 0xc0, 0x5e), Color.FromRgb(0xee, 0x9a, 0x46), Color.FromRgb(0xbc, 0x64, 0x26));
             if (tempK <= 0)
@@ -272,7 +276,7 @@ namespace EliteBioRadar
                     : detail.SurfaceTemperature >= 5600 ? Mix(core, Color.FromRgb(0xff, 0xf0, 0xc8), 0.55)   // G/F: patches stay pale cream
                     : Mix(Mix(core, Mix(Color.FromRgb(0xff, 0xe6, 0x82), Color.FromRgb(0xff, 0xdc, 0x48), coolT), 0.60 + 0.25 * (1 - coolT)),
                           Mix(core, Color.FromRgb(0xff, 0xf0, 0xc8), 0.55), Math.Clamp((detail.SurfaceTemperature - 4500) / 1100.0, 0, 1)),   // K stars turn from golden to cream patches as they get hotter (the real 5,149 K K0 had white-cream ones)
-                PatchCover = hot ? 1.0 : brownDwarf ? 0.5 : detail.StarType == "TTS" ? 1.0 : 0.2 + 0.8 * coolT,
+                PatchCover = hot ? 1.0 : detail.StarType == "L" ? 0.10 : brownDwarf ? 0.5 : detail.StarType == "TTS" ? 1.0 : 0.2 + 0.8 * coolT,
                 Seed = seed,
                 Activity = activity,
                 Contrast = (0.55 + 0.55 * activity) * (!hot && detail.SurfaceTemperature >= 5600 ? 0.65 : 1.0),

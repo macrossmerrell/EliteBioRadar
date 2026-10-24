@@ -439,6 +439,14 @@ namespace EliteBioRadar
                 }
 
                 double LumOf(BodyScanDetail st) => st.AbsoluteMagnitude != 0 ? Math.Pow(10, (4.83 - st.AbsoluteMagnitude) / 2.5) : Math.Pow(st.Radius / 6.957e8, 2) * Math.Pow(st.SurfaceTemperature / 5772.0, 4);
+                // A body inside the reach of the star it orbits is lit by that star whatever other stars add (real: the planets of the L3 dwarf B in Qiedea OD-Q c6-0, 0.2 to 1 AU out, all took
+                // its pink-red light although the K7 primary 10 AU away gave them slightly more in plain flux). Reach: 1.5 AU round an ordinary star, 3 AU round an L dwarf (see below).
+                var ownStar = ownStarId >= 0 ? stars.FirstOrDefault(x => x.BodyID == ownStarId) : null;
+                if (ownStar != null && ownDist >= 5e8 && ownDist <= (ownStar.SurfaceTemperature < 2400 ? 4.5e11 : 2.2e11))
+                {
+                    double ol = LumOf(ownStar), oau = ownDist / 1.496e11;
+                    return (ownStar.SurfaceTemperature, ownDist, ol / (oau * oau), ol);
+                }
                 double OtherRelFlux(BodyScanDetail o)
                 {
                     double od = Math.Abs(d.DistanceFromArrivalLS - o.DistanceFromArrivalLS) * 299792458.0 / 1.496e11;
@@ -486,6 +494,18 @@ namespace EliteBioRadar
             var ls = LightingStar(d);
             if (ls.flux <= 0 || ls.lum <= 0) return 0;
             return ls.flux / (0.011 * Math.Pow(ls.lum / 0.48, 0.6));
+        }
+
+        // For the System Scan body panel's details: the star that lights the body, its distance and the relative light (1 = the star's full-brightness level).
+        public (string name, double tempK, double distAU, double relLight) LightingInfo(BodyScanDetail d)
+        {
+            var ls = LightingStar(d);
+            string name = "";
+            var stars = GetCurrentSystemBodyDetails().Where(x => x.IsStar).ToList();
+            if (CurrentStarDetail != null && !stars.Any(x => x.BodyID == CurrentStarDetail.BodyID)) stars.Add(CurrentStarDetail);
+            var s = stars.FirstOrDefault(x => Math.Abs(x.SurfaceTemperature - ls.tempK) < 0.5);
+            if (s != null) name = s.BodyName;
+            return (name, ls.tempK, ls.distM / 1.496e11, PrimaryStarFlux(d));
         }
 
         // A "Belt Cluster" body's own Scan event carries almost nothing (BodyName/BodyID/
