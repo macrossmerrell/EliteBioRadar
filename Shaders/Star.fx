@@ -1,3 +1,4 @@
+// Star shader (ps_3_0): the current star look - wide, leaning, hairy coronal arches over a soft haze, a faint limb fuzz and bright flares. Replaced the earlier classic look (still in git: tag star-render-baseline).
 // Star shader (ps_3_0) for WPF ShaderEffect. Compiled with Shaders\compile.ps1 -> Star.ps.
 //
 // Draws a whole star scene inside the host rectangle: a rotating granulated photosphere
@@ -149,29 +150,25 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     float halo = exp(-rOut * 3.4) * HaloAmt * fringe * breathe;
     halo *= smoothstep(2.1, 0.9, max(r, 1.0));
 
-    // ---------------- coronal loops ----------------
-    // Smooth magnetic arches of glowing plasma anchored on the limb (feet sink slightly into the
-    // disc). Six slots, each re-rolling its limb position, span and height every cycle on
-    // staggered clocks, so several loops of different heights are alive around the star at once.
+    // ---------------- coronal loops (wide, leaning, hairy arches) ----------------
+    // Reference: in-game snips of an M2 star's arches. Each arch is a bundle of fine, slightly wavy strands over a soft dark-orange haze: wide spans (up to a quarter of
+    // the limb), many leaning over, thick at the feet and thin at the crest, in dark orange with brighter orange along the strands. Six slots, as before.
     float3 loopSum = float3(0, 0, 0);    // drawn BEHIND the disc
     float3 flareSum = float3(0, 0, 0);   // drawn in front
     float lAng[6], lSpan[6], lEnv[6];    // per-slot loop footprint, so flares can steer clear
-    float3 loopCol  = lerp(EdgeCol.rgb, MidCol.rgb, 0.35) * 1.30;
-    float3 loopCore = lerp(MidCol.rgb, HotCol.rgb, 0.25);
+    float3 loopCol  = lerp(EdgeCol.rgb, MidCol.rgb, 0.20) * 1.05;
+    float3 loopCore = lerp(MidCol.rgb, HotCol.rgb, 0.40);
 
     for (int m = 0; m < 6; m++)
     {
         float3 h0 = Hash3(Seed * 0.7 + m * 19.1, m * 7.7, Seed * 0.2 + m);
-        float period = 13.0 + h0.z * 11.0;
+        float period = 16.0 + h0.z * 12.0;
         float cyc    = Time / period + h0.x * 5.0;
         float life   = frac(cyc);
         float cycI   = floor(cyc);
         float3 h = Hash3(Seed * 0.7 + m * 19.1 + cycI * 7.31, m * 7.7 + cycI * 1.3, Seed * 0.2 + m + cycI * 2.9);
 
-        // 30% fewer new arches than before.
-        float exists = step(frac(h.y * 7.7), (0.40 + 0.55 * LoopAmt) * 0.70);
-        // Position: usually anywhere around the limb, but often within one of two "active region"
-        // clumps (their centers drift every ~45 s, fixed for a given arch from birth to death).
+        float exists = step(frac(h.y * 7.7), (0.50 + 0.45 * LoopAmt) * 0.85);
         float birthT = (cycI - h0.x * 5.0) * period;
         float3 hc    = Hash3(Seed * 0.9 + floor(birthT / 45.0) * 3.3, 5.5, 2.2);
         float pick   = frac(h.x * 17.3);
@@ -179,45 +176,49 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
         float a      = pick < 0.28 ? hc.x * TAU + scat
                      : pick < 0.50 ? hc.y * TAU + scat
                      : h.x * TAU;
-        float delta  = (0.10 + frac(h.z * 3.7) * 0.26) * 0.85;   // half-span, radians along the limb
-        // Always taller than wide (height 1.0x-1.9x the half-span) so even small loops read as arches.
-        float Hh     = sin(delta) * (1.00 + 0.90 * frac(h.y * 5.3)) * (0.80 + 0.30 * LoopAmt);
-        float env    = smoothstep(0.0, 0.36, life) * smoothstep(1.0, 0.60, life) * exists;     // rise 30% slower
-        float Hc     = Hh * (0.55 + 0.45 * smoothstep(0.0, 0.64, life));                       // growth 30% slower
+        float delta  = (0.16 + frac(h.z * 3.7) * 0.40) * 0.85;   // half-span: wider than the classic style (up to ~0.48 rad)
+        float Hh     = min(sin(delta) * (0.70 + 0.55 * frac(h.y * 5.3)) * (0.85 + 0.30 * LoopAmt), 0.62);   // height capped: the first version let the widest arches tower over a small star
+        float env    = smoothstep(0.0, 0.34, life) * smoothstep(1.0, 0.62, life) * exists;
+        float Hc     = Hh * (0.55 + 0.45 * smoothstep(0.0, 0.64, life));
+        float lean   = (frac(h.x * 31.7) - 0.5) * 0.9;           // the crest leans to one side, so the arch curls over
         lAng[m] = a; lSpan[m] = delta; lEnv[m] = env;
 
         float2 n  = float2(cos(a), sin(a));
         float2 tg = float2(-n.y, n.x);
-        // Chord sits a little inside the limb so the feet overlap the star's edge.
         float cd = cos(delta) - 0.025, w = sin(delta);
-        float x = dot(q, tg);
         float y = dot(q, n) - cd;
+        float x = dot(q, tg) - lean * w * saturate(y / max(Hc, 0.05));
 
-        float L = 0.0;
-        for (int k = 0; k < 3; k++)
+        float Lhaze = 0.0, Lstr = 0.0;
+        for (int k = 0; k < 4; k++)
         {
             float kk = (float)k;
-            float Hk = Hc * (1.0 - 0.10 * kk);
-            float wk = w * (1.0 - 0.07 * kk);
-            float fx = x / wk, fy = y / Hk;
-            // Superellipse with exponent ~2: a rounded crown that is taller than wide (1.6 was too pointed, 2.5 too U-shaped).
+            float Hk = Hc * (1.0 - 0.07 * kk);
+            float wk = w * (1.0 - 0.05 * kk);
+            // Each strand wobbles a little along its length: the hair-like waviness.
+            float wob = (Tex(float2(x * 2.6 + m * 1.7 + kk * 3.1, y * 2.2 + cycI * 0.37 + kk * 0.5)).x - 0.5) * 0.16;
+            float fx = x / wk + wob * 0.5, fy = y / Hk + wob * 0.3;
             float ax = abs(fx), ay = abs(fy);
             float f  = pow(ax, 2.1) + pow(ay, 2.1);
             float gl = 2.1 * length(float2(pow(ax, 1.1) / wk, pow(ay, 1.1) / Hk));
             float dd = abs(f - 1.0) / max(gl, 1e-3);
-            // k == 0: broad smooth body; k > 0: slightly tighter strands inside it.
-            // Thick at the feet, tapering to a thin crest.
             float tUp = saturate(y / Hk);
-            float taperW = 1.05 - 0.75 * pow(tUp, 0.8);
-            float wd = ((k == 0) ? 0.080 : (0.030 + 0.010 * kk)) * taperW;
-            float body = exp(-(dd * dd) / (wd * wd));
-            float haze = exp(-dd / (0.12 * taperW)) * 0.09;
-            float yMask = smoothstep(-0.07, -0.005, y);                  // continue just into the disc
-            float amp = ((k == 0) ? 0.34 : 0.15) * (1.0 - 0.40 * tUp);
-            L += (body * amp + (k == 0 ? haze : 0.0)) * yMask;
+            float taperW = 1.10 - 0.80 * pow(tUp, 0.8);               // thick at the feet, thin at the crest
+            float yMask = smoothstep(-0.07, -0.005, y);
+            if (k == 0)
+            {
+                // The soft dark-orange haze the strands sit in.
+                float wd = 0.105 * taperW;
+                Lhaze += (exp(-(dd * dd) / (wd * wd)) * 0.24 + exp(-dd / (0.17 * taperW)) * 0.09) * yMask * (0.80 + 0.20 * tUp);   // eased at the feet: the base was too bright
+            }
+            else
+            {
+                float wd = (0.017 + 0.005 * kk) * taperW;
+                Lstr += exp(-(dd * dd) / (wd * wd)) * 0.30 * (1.0 - 0.35 * tUp) * yMask * (0.80 + 0.20 * tUp);
+            }
         }
-        float bright = 0.55 + 0.45 * frac(h.z * 13.1);                  // each loop its own intensity
-        loopSum += lerp(loopCol, loopCore, saturate(L * 0.6)) * L * env * bright;
+        float bright = 0.55 + 0.45 * frac(h.z * 13.1);
+        loopSum += (loopCol * Lhaze + lerp(loopCol, loopCore, 0.55) * Lstr) * env * bright;
     }
 
     // ---------------- flares / mass ejections ----------------
@@ -264,12 +265,12 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
             float frag = smoothstep(0.76, 0.84, Tex(lq * 4.8 + h.xy + u).x) * mWide * (1.0 - mCloud * 0.5) * 0.7;
 
             float I = (haze + thread * mCloud * 0.95 + thread2 * mCloud * 0.55 + frag * 0.70) * gate;
-            float3 tone = lerp(loopCol, float3(1.0, 0.68, 0.34), saturate(thread * 0.80 + frag * 0.45));
+            float3 tone = lerp(loopCol, float3(1.0, 0.86, 0.56), saturate(thread * 0.85 + frag * 0.55));
             flareSum += tone * I;
 
             // Bright eruption flash at the footpoint early on.
             float flash = exp(-dot(q - n * 0.98, q - n * 0.98) / 0.005) * smoothstep(0.35, 0.0, u) * gate;
-            flareSum += float3(1.0, 0.85, 0.55) * flash * 0.7;
+            flareSum += float3(1.0, 0.92, 0.70) * flash * 1.0;
         }
     }
 
@@ -278,7 +279,16 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     float edgeFade = smoothstep(0.0, 0.10, min(uvEdge.x, uvEdge.y));
     loopSum *= edgeFade; flareSum *= edgeFade;
 
-    float3 haloRGB = MidCol.rgb * halo;
+    // Limb fringe: a faint, irregular fuzz along the edge of the disc (the soft hair on the in-game stars). The first version used one regular noise row
+    // with a hard cut-off and read as a saw blade; this one mixes several uneven frequencies, drifts slowly and fades smoothly with no teeth.
+    float spA = Tex(float2(ang / TAU * 23.0, 0.13 + Time * 0.006)).x;
+    float spB = Tex(float2(ang / TAU * 61.0 + 0.4, 0.57 - Time * 0.005)).y;
+    float spC = Tex(float2(ang / TAU * 7.0, 0.91 + Time * 0.003)).z;
+    float spN = saturate(spA * 0.45 + spB * 0.30 + spC * 0.55 - 0.18);
+    float spLen = 0.010 + 0.050 * spN * spN;
+    float spic = exp(-rOut / max(spLen, 0.004)) * smoothstep(0.28, 0.62, spN) * smoothstep(0.985, 1.02, r) * 0.30;
+    float3 haloRGB = MidCol.rgb * halo + EdgeCol.rgb * spic;
+    halo += spic * 0.8;
     // Loops sit behind the star (its edge hides the feet); flares lift off in front of it.
     float3 behind = haloRGB + loopSum * 1.15;
     float3 rgb = col * edge + behind * (1.0 - edge) + flareSum * 1.15;

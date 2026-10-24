@@ -237,6 +237,7 @@ namespace EliteBioRadar
             _watchTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             _watchTimer.Tick += (_, __) =>
             {
+                FollowTargetedBody();
                 bool systemChanged = !string.Equals(_watcher.StarSystem, _lastSystemName, StringComparison.OrdinalIgnoreCase);
                 var bodySig = BuildBodySignature();
                 bool bodiesChanged = bodySig != _lastBodySignature;

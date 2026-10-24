@@ -49,6 +49,7 @@ namespace EliteBioRadar
         public static readonly DependencyProperty TiltProperty     = Reg("Tilt", 14, 0.0);
         public static readonly DependencyProperty PatchCoverProperty = Reg("PatchCover", 15, 1.0);
 
+
         public StarShaderEffect()
         {
             PixelShader = _shader;

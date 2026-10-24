@@ -21,6 +21,7 @@ namespace EliteBioRadar
         private string _detailBodyName = "";
         private bool _detailDetailsOpen;
         private bool _detailExtendedWindow;
+
         private List<BodyScanDetail> _detailBodies = new();
 
         // Makes a card, moon row or minor row open the panel for its body.
@@ -61,6 +62,20 @@ namespace EliteBioRadar
                 }
                 detailSide.BeginAnimation(WidthProperty, new DoubleAnimation(0, DetailPanelWidth, TimeSpan.FromMilliseconds(220)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
             }
+        }
+
+        // The open body panel follows the in-game target: when a new planet or moon is targeted, the panel switches to it. Only while the panel is open (it is
+        // not opened by targeting), and only for bodies this window lists.
+        private string _lastTargetedBody = "";
+        private void FollowTargetedBody()
+        {
+            string target = _watcher.TargetedBody ?? "";
+            if (string.Equals(target, _lastTargetedBody, StringComparison.OrdinalIgnoreCase)) return;
+            _lastTargetedBody = target;
+            if (string.IsNullOrEmpty(target) || string.IsNullOrEmpty(_detailBodyName)) return;
+            if (string.Equals(target, _detailBodyName, StringComparison.OrdinalIgnoreCase)) return;
+            var b = _detailBodies.FirstOrDefault(x => !x.IsStar && !x.IsBelt && string.Equals(x.BodyName, target, StringComparison.OrdinalIgnoreCase));
+            if (b != null) ShowBodyDetail(b);
         }
 
         private void CloseBodyDetail()
@@ -130,7 +145,9 @@ namespace EliteBioRadar
             hero.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             hero.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             var thumb = new Grid { Width = 128, Height = 128, Margin = new Thickness(0, 0, 14, 0), VerticalAlignment = VerticalAlignment.Top };
-            thumb.Children.Add(BuildThumb(b, 128));
+            var detailThumb = new Grid { Width = 128, Height = 128 };
+            detailThumb.Children.Add(BuildThumb(b, 128));
+            thumb.Children.Add(detailThumb);
             Grid.SetColumn(thumb, 0);
             hero.Children.Add(thumb);
 
@@ -160,7 +177,7 @@ namespace EliteBioRadar
             // Atmosphere.
             if (b.AtmosphereComposition.Count > 0)
             {
-                s.Children.Add(DSection("ATMOSPHERE" + (string.IsNullOrEmpty(b.AtmosphereType) || b.AtmosphereType == "None" ? "" : "  ·  " + b.AtmosphereType.ToUpperInvariant())));
+                s.Children.Add(DSection("ATMOSPHERE" + (string.IsNullOrEmpty(b.AtmosphereType) || b.AtmosphereType == "None" ? "" : "  ·  " + System.Text.RegularExpressions.Regex.Replace(b.AtmosphereType, "(?<=[a-z0-9])(?=[A-Z])", " ").ToUpperInvariant())));
                 foreach (var (name, pct) in b.AtmosphereComposition.Take(6))
                 {
                     var bar = new DockPanel { Margin = new Thickness(0, 1, 0, 1) };
@@ -299,12 +316,18 @@ namespace EliteBioRadar
                 {
                     File.AppendAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "LookVerdicts.log"),
                         $"{DateTime.UtcNow:O}\t{b.BodyName}\t{b.PlanetClass}\t{v}\t{b.SurfaceTemperature:F0}K\t{b.SurfacePressure:F0}Pa\t{extra}\r\n");
+                    Verdicts()[b.BodyName] = v;
                     good.IsEnabled = bad.IsEnabled = false; self.Content = "noted ✓";
                 }
                 catch { }
             }
+            if (Verdicts().TryGetValue(b.BodyName, out var given))
+            {
+                good.IsEnabled = bad.IsEnabled = false;
+                (given == "RIGHT" ? good : bad).Content = "noted ✓";
+            }
             good.Click += (_, __) => Verdict("RIGHT", good);
-            bad.Click += (_, __) => { string appPath = SaveAppRender(b); Verdict("WRONG", bad, appPath); ShowPasteWindow(b, appPath); };
+            bad.Click += (_, __) => { string appPath = AppRenderPath(b); Verdict("WRONG", bad, appPath); ShowPasteWindow(b, appPath); };
             DockPanel.SetDock(bad, Dock.Right); foot.Children.Add(bad);
             DockPanel.SetDock(good, Dock.Right); foot.Children.Add(good);
             foot.Children.Add(new Border());
@@ -342,6 +365,26 @@ namespace EliteBioRadar
             hover.Setters.Add(new Setter(Control.BorderBrushProperty, Brush("#00e5ff")));
             t.Triggers.Add(hover);
             return t;
+        }
+
+        // Verdicts already given, by body name (RIGHT or WRONG): loaded once from LookVerdicts.log so they survive changing bodies, refreshes and restarts.
+        private static Dictionary<string, string>? _verdictMemory;
+        private static Dictionary<string, string> Verdicts()
+        {
+            if (_verdictMemory != null) return _verdictMemory;
+            var d = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                string path = System.IO.Path.Combine(AppContext.BaseDirectory, "LookVerdicts.log");
+                if (File.Exists(path))
+                    foreach (var line in File.ReadAllLines(path))
+                    {
+                        var parts = line.Split('\t');
+                        if (parts.Length >= 4) d[parts[1]] = parts[3];
+                    }
+            }
+            catch { }
+            return _verdictMemory = d;
         }
 
         private static string FormatPressure(double pascals)
