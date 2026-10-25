@@ -1057,10 +1057,11 @@ namespace EliteBioRadar
                 }
                 var look = StarRenderer.GetStarLook(detail);
                 var (cx, cy, R) = StarRenderer.GetStarShaderDisc(detail, sceneW, sceneH);
+                double starOff = PlanetShaderScenes.ClockOffset("star|" + detail.BodyName);   // the same star redrawn keeps its place in the animation
                 var effect = StarShaderEffect.Create(look,
                     new Point(cx / sceneW, cy / sceneH), new Point(R / sceneW, R / sceneH));
                 effect.BeginAnimation(StarShaderEffect.TimeProperty,
-                    new DoubleAnimation(0, 36000, TimeSpan.FromSeconds(36000)));
+                    new DoubleAnimation(starOff, 36000, TimeSpan.FromSeconds(36000 - starOff)));
                 var surface = new System.Windows.Shapes.Rectangle { Width = sceneW, Height = sceneH, Fill = Brushes.Black, Effect = effect };
                 { var ssHost = Supersample(surface); Canvas.SetLeft(ssHost, sceneX); Canvas.SetTop(ssHost, sceneY);
                 starPanelCanvas.Children.Add(ssHost); }

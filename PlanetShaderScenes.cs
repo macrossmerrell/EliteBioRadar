@@ -16,6 +16,19 @@ namespace EliteBioRadar
     // Planet tab (animated, scene-sized) and the System Scan thumbnails (frozen time, small), so a look or geometry change is made once.
     internal static class PlanetShaderScenes
     {
+
+        // The shader clocks run from 0 whenever a scene is built, so any redraw of the same body (a scan completing, a refresh) used to restart the rotation at its
+        // starting point and the planet visibly jumped. The first time a body is drawn its start time is remembered, and later builds begin the clock at the elapsed
+        // time instead, so the rotation carries on from where it was.
+        private static readonly Dictionary<string, DateTime> _clockStarts = new(StringComparer.OrdinalIgnoreCase);
+        internal static double ClockOffset(string key)
+        {
+            lock (_clockStarts)
+            {
+                if (!_clockStarts.TryGetValue(key, out var t)) { _clockStarts[key] = DateTime.UtcNow; return 0; }
+                return Math.Min((DateTime.UtcNow - t).TotalSeconds, 30000.0);
+            }
+        }
         internal sealed class Scene
         {
             public readonly List<FrameworkElement> Layers = new();
@@ -48,7 +61,7 @@ namespace EliteBioRadar
                 void Clock(Effect e, DependencyProperty time)
                 {
                     if (frozenTime.HasValue) e.SetValue(time, frozenTime.Value);
-                    else e.BeginAnimation(time, new DoubleAnimation(0, 36000, TimeSpan.FromSeconds(36000)));
+                    else { double off = ClockOffset(d.BodyName); e.BeginAnimation(time, new DoubleAnimation(off, 36000, TimeSpan.FromSeconds(36000 - off))); }
                 }
 
                 BitmapSource? ringBackImage = null, glow = null;

@@ -252,7 +252,23 @@ namespace EliteBioRadar
             if (b.Materials.Count > 0)
             {
                 s.Children.Add(DSection("MATERIALS"));
-                s.Children.Add(DText(string.Join("  ·  ", b.Materials.Take(10).Select(m => $"{m.Name} {m.Percent:F0}%")), TextBright, 11));
+                // Each material leads with the same coloured symbol chip the cards use, then its name and share.
+                var matWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 0) };
+                foreach (var m in b.Materials.OrderByDescending(x => x.Percent).Take(10))
+                {
+                    var col = MaterialColors.TryGetValue(m.Name, out var mc) ? mc : Brush("#9fd8e0");
+                    var item = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 14, 5) };
+                    item.Children.Add(new Border
+                    {
+                        BorderBrush = col, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(2),
+                        Padding = new Thickness(4, 1, 4, 1), Margin = new Thickness(0, 0, 5, 0), VerticalAlignment = VerticalAlignment.Center,
+                        Child = new TextBlock { Text = MaterialSymbol(m.Name), Foreground = col, FontSize = 10.5, FontWeight = FontWeights.Bold },
+                    });
+                    item.Children.Add(new TextBlock { Text = m.Name, Foreground = TextBright, FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
+                    item.Children.Add(new TextBlock { Text = $" {m.Percent:F0}%", Foreground = TextMid, FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
+                    matWrap.Children.Add(item);
+                }
+                s.Children.Add(matWrap);
             }
 
             // Rings, moons, pair partners.

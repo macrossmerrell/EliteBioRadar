@@ -118,7 +118,9 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     col = lerp(col, CapCol.rgb * (0.92 + 0.10 * fine), cap * 0.95);
 
     // ---------------- clouds (own differential wind) ----------------
-    float wind = Time * 0.020 * (1.0 + 0.25 * sin(lat * 4.0 + Seed * 3.0));
+    // Wind: one steady drift plus a small latitude-dependent wobble. (Was Time * 0.020 * (1 + 0.25 sin(...)): the shear between latitudes grew without limit, so a
+    // thumbnail frozen a few minutes in, or the Planet tab after a long session, was pulled into long thin streaks.)
+    float wind = Time * 0.020 + 0.09 * sin(lat * 4.0 + Seed * 3.0) * sin(Time * 0.05);
     float lonC = lon - wind;
     float2 pc  = float2(lonC / PI, lat / PI * 2.0);
     float2 warp = Tex(pc * 0.8 + Seed * 0.07).xy - 0.5;
@@ -137,7 +139,7 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
         float exists = step(1.0 - 1.05 * CycloneAmt, frac(h.z * 7.3 + 0.17));
         float sLat = (h.x - 0.5) * 1.5;
         float size = 0.075 + h.z * 0.075;   // modest storms; the earlier 0.12-0.24 made a lone storm look like a planet-sized eye
-        float d = (lon - Time * 0.020 * (1.0 + 0.25 * sin(sLat * 4.0 + Seed * 3.0))) - (float(i) + 0.6 * h.y) / 12.0 * TAU;   // spread around the globe
+        float d = (lon - (Time * 0.020 + 0.09 * sin(sLat * 4.0 + Seed * 3.0) * sin(Time * 0.05))) - (float(i) + 0.6 * h.y) / 12.0 * TAU;   // spread around the globe
         d = (frac(d / TAU + 0.5) - 0.5) * TAU;
         float dx = d * cos(sLat) / size;
         float dy = (lat - sLat) / size;

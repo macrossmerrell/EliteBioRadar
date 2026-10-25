@@ -177,8 +177,9 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
 
     // Glossy sun-glint on icy surfaces: a sparkly highlight where the surface mirrors the light back.
     float3 Hh = normalize(normalize(LightDir) + float3(0.0, 0.0, 1.0));
-    float spec = pow(saturate(dot(P, Hh)), 40.0) * SpecAmt * (0.35 + 1.1 * fine2) * smoothstep(0.0, 0.25, ndl);
-    col += float3(1.0, 1.0, 0.96) * spec * 0.85;
+    // (was exponent 40, sparkle weight 0.35 + 1.1 * fine2 and 0.85 gain: a broad white blob the game does not show; now a tight, mostly-sparkle glint)
+    float spec = pow(saturate(dot(P, Hh)), 160.0) * SpecAmt * (0.03 + 1.0 * fine2 * fine2 * fine2) * smoothstep(0.0, 0.25, ndl);
+    col += float3(1.0, 1.0, 0.96) * spec * 0.22;
 
     // Glowing flecks on magma-volcanic bodies (emissive, so they survive the shading).
     float hotN = fine2 * 0.35 + Tex(ps * 4.0 + 0.3).y * 0.65;

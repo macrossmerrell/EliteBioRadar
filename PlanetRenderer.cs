@@ -264,6 +264,9 @@ namespace EliteBioRadar
                 else if (slice == 12) look = 19;   // salmon-rose with large sage-green patches (one real body so far)
                 else if (slice == 13) look = 20;   // dark maroon with rose patches and big white patches (one real body so far)
                 else if (slice == 14) look = 21;   // dark olive-charcoal with big golden-tan patches (one real body so far)
+                else if (slice == 15 && detail.SurfacePressure > 0) look = 22;   // dusky blue-grey with salmon patches (one real body so far: Qiedea ER-U d3-6 1)
+                else if (slice == 16 && detail.SurfacePressure > 0) look = 23;   // blue-grey with white frost patches and long dark-rayed craters (one real body: ER-U d3-6 3)
+                else if (slice == 17) look = 24;   // pale peach with grey-brown blotches (one real body: ER-U d3-6 4)
                 else if (slice <= 9) look = 8;   // the dark rust-brown family keeps turning up in game (TD-Z 1, SU-M C 7, TU-M A 2), so it gets a larger share
             }
             // Around an L dwarf the body reads monochrome red (see LowStarTintMaxK): start from the flat neutral grey-brown and let the tint colour it.
@@ -339,6 +342,15 @@ namespace EliteBioRadar
                 case 21: // dark olive-charcoal ground with large golden-tan patches covering about half of it (real: Qiedea IR-V d2-0 4, 516 K, silicate vapour geysers)
                     l.Light = rgb(72, 74, 58); l.Dark = rgb(44, 46, 38); l.Accent = rgb(98, 92, 60); l.Bright = rgb(216, 174, 108);
                     l.Contrast = 1.2; l.RustAmt = 0.15; l.BrightAmt = 0.95; l.CraterAmt = 0.15; l.RayAmt = 0.0; l.NoFrost = true; break;
+                case 22: // dusky blue-grey ground with ragged salmon-orange patches, a ray crater and a blue limb (real: Qiedea ER-U d3-6 1, 361 K, thin SO2)
+                    l.Light = rgb(104, 102, 116); l.Dark = rgb(70, 68, 84); l.Accent = rgb(86, 80, 90); l.Bright = rgb(212, 138, 104);
+                    l.Contrast = 0.8; l.RustAmt = 0.4; l.BrightAmt = 0.8; l.CraterAmt = 0.3; l.RayAmt = -0.8; l.NoFrost = true; l.AtmGlow = Math.Max(l.AtmGlow, 0.55); break;
+                case 23: // blue-grey with white frost-like patches and big craters with long dark rays (real: Qiedea ER-U d3-6 3, 310 K, thin SO2)
+                    l.Light = rgb(120, 126, 142); l.Dark = rgb(86, 92, 108); l.Accent = rgb(60, 70, 66); l.Bright = rgb(226, 230, 236);
+                    l.Contrast = 0.7; l.RustAmt = 0.15; l.BrightAmt = 0.8; l.CraterAmt = 0.9; l.RayAmt = -1.0; l.NoFrost = true; l.AtmGlow = Math.Max(l.AtmGlow, 0.5); break;
+                case 24: // pale peach with grey-brown blotches and one rayed crater (real: Qiedea ER-U d3-6 4, 308 K, thin SO2)
+                    l.Light = rgb(214, 162, 126); l.Dark = rgb(150, 118, 96); l.Accent = rgb(118, 100, 86); l.Bright = rgb(234, 202, 166);
+                    l.Contrast = 0.55; l.RustAmt = 0.25; l.BrightAmt = 0.55; l.CraterAmt = 0.6; l.RayAmt = -0.9; l.NoFrost = true; break;
                 case 17: // olive base with lavender-grey and tan-pink patches, a fine camouflage pattern (real: SU-M c8-1 B 2)
                     l.Light = rgb(128, 126, 94); l.Dark = rgb(94, 98, 68); l.Accent = rgb(118, 108, 128); l.Bright = rgb(160, 140, 114);
                     l.Contrast = 0.6; l.RustAmt = 0.5; l.BrightAmt = 0.6; l.CraterAmt = 0.2; l.RayAmt = 0.0; break;
