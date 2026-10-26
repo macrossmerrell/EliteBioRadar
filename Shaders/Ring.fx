@@ -36,7 +36,8 @@ float2 BandSample(float4 band, float rpx, float s, out float edge)
     float b = Tex(float2(rn * 2.3  + s * 1.7,  0.57)).y;
     float f = Tex(float2(rn * 11.0 + s * 2.3,  0.83)).z;
     float g = Tex(float2(rn * 40.0 + s * 3.1,  0.37)).x;
-    float d = 0.42 * a + 0.30 * b + 0.20 * f + 0.08 * g;
+    float hfine = Tex(float2(rn * 140.0 + s * 4.1, 0.19)).y;   // hundreds of thin grooves, as on the wide real rings
+    float d = 0.38 * a + 0.27 * b + 0.18 * f + 0.07 * g + 0.10 * hfine;
     float cov = saturate((d - (0.50 - band.w * 0.20)) * (3.2 + band.w * 4.0) + 0.50);
     cov = lerp(1.0, cov, saturate(0.60 + band.w * 0.40));
     // A couple of clean divisions, like a real ring system's dark gaps (only in bands wide enough to hold them).

@@ -83,13 +83,13 @@ namespace EliteBioRadar
         {
             _pasteWindow?.Close();
             string gamePath = System.IO.Path.Combine(VerdictFolder(), VerdictFileStem(b) + " - game.png");
-            const double view = 250;
+            const double view = 440;   // large, so the app render can be compared with a big game snip (was 250)
 
             var win = new Window
             {
-                Title = "Looks wrong - add the game snip", Width = 600, Height = 470, Owner = this, Topmost = true,
+                Title = "Looks wrong - add the game snip", Width = 1000, Height = 740, Owner = this, Topmost = true,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner, Background = Brush("#0a0f0f"), FontFamily = new FontFamily("Consolas"),
-                ResizeMode = ResizeMode.CanResize, MinWidth = 560, MinHeight = 440,
+                ResizeMode = ResizeMode.CanResize, MinWidth = 960, MinHeight = 700,
             };
             var root = new StackPanel { Margin = new Thickness(14) };
             root.Children.Add(DText(EliteWatcherService.GetShortBodyName(b.BodyName, _watcher.StarSystem).ToUpperInvariant(), Brush("#cfe8e8"), 17, true));

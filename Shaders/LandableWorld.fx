@@ -69,19 +69,21 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     float fine2 = lerp(Tex(ps * 17.0 + 0.2).x, 0.5, polar2);
     float reg   = lerp(big * 0.6 + mid * 0.4, 0.5, polar);
 
-    // Sharp-edged highlands vs basins.
+    // Sharp-edged highlands vs basins, with ragged edges: the game's patches break up into fine fingers and islands (fine noise nudges the threshold).
     float edgeW = 0.04 + 0.10 / (0.5 + Contrast);
-    float hl = smoothstep(0.50 - edgeW, 0.50 + edgeW, reg);
+    float regE = reg + (fine - 0.5) * 0.16 + (fine2 - 0.5) * 0.09;
+    float hl = smoothstep(0.50 - edgeW, 0.50 + edgeW, regE);
     float3 base = lerp(ColDark.rgb, ColLight.rgb, hl);
     base = lerp(lerp(ColDark.rgb, ColLight.rgb, 0.5), base, saturate(Contrast));
     base *= lerp(1.0, 0.86 + 0.28 * mid, saturate(Contrast + 0.25));   // low-contrast looks stay smooth
-    base *= 0.92 + 0.16 * fine2;
+    base *= 0.94 + 0.12 * fine2;
 
     // Rust streaks: contour lines of a warped field.
     float rz = Tex(ps * 3.0 * Mottle + float2(0.5, 0.1) + (mid - 0.5) * 0.6).z;
     float ridge = 1.0 - abs(rz * 2.0 - 1.0);
-    float rust = smoothstep(0.86, 0.96, ridge) * RustAmt * (1.0 - hl * 0.4) * (1.0 - polar2);
-    base = lerp(base, ColAccent.rgb, rust * 0.85);
+    // (was smoothstep(0.86, 0.96) at 0.85 strength: on pale and white looks the contour lines read as a layer of black pepper over the whole disc; now thinner, fewer and softer)
+    float rust = smoothstep(0.915, 0.975, ridge) * RustAmt * (1.0 - hl * 0.4) * (1.0 - polar2);
+    base = lerp(base, ColAccent.rgb, rust * 0.60);
 
     // Long fracture lines (icy crevasses): arcs of random great circles, wobbled by noise, broken into
     // segments and varying in width, drawn in ColIce. Rotates with the planet.
@@ -121,14 +123,16 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     {
         float3 h = frac(sin(float3(Seed * 9.1 + i * 13.3, Seed * 4.7 + i * 27.9, Seed * 1.9 + i * 19.1))
                         * float3(43758.5, 22578.1, 31415.9));
-        float exists = step(1.0 - 0.95 * CraterAmt, frac(h.z * 5.1 + 0.3));
-        float cLat = (h.x - 0.5) * 2.1;
+        // The first crater is a guaranteed "feature" crater on every look that uses rays: real bodies nearly always show one big rayed crater (Qiedea IY-N c8-1 A 4 and A 5, ER-U d3-6 3 and 5, d3-7 3 a ...).
+        float first = (i == 0) ? step(0.001, abs(RayAmt)) : 0.0;
+        float exists = max(step(1.0 - 0.95 * CraterAmt, frac(h.z * 5.1 + 0.3)), first);
+        float cLat = (h.x - 0.5) * (first > 0.5 ? 1.2 : 2.1);   // the feature crater stays nearer the middle of the disc than the limb
         float dLon = lonW - (h.y * TAU - PI);
         dLon = (frac(dLon / TAU + 0.5) - 0.5) * TAU;
         float dx = dLon * cos(cLat);
         float dy = lat - cLat;
         // Small bowls: real rayed craters have a tiny bowl (the earlier ones were far too big).
-        float R0 = 0.035 + pow(h.z, 2.6) * 0.16;
+        float R0 = lerp(0.035 + pow(h.z, 2.6) * 0.16, 0.07 + 0.05 * h.z, first);
         float rr = sqrt(dx * dx + dy * dy) / R0;
 
         float bowl = smoothstep(1.0, 0.45, rr);
@@ -153,9 +157,33 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
         float lenSp = (2.0 + 4.0 * rs.y) * (0.6 + 0.8 * gr);   // up to about 8 crater radii, as in the close-up of a real one
         float wTap = wSp * lerp(1.7, 0.3, saturate((rr - 1.0) / max(lenSp - 1.0, 0.5)));   // each ray is wide at the crater and tapers to a point
         float spoke = smoothstep(wTap, wTap * 0.35, dperp) * step(0.30, rs.x) * step(0.25, gr) * smoothstep(lenSp, lenSp * 0.55, rr) * smoothstep(0.9, 1.3, rr);
-        float rayOn = step(1.0 - abs(RayAmt) * 0.55, frac(h.y * 3.7 + 0.11));   // only some craters carry rays
+        float rayOn = max(step(1.0 - abs(RayAmt) * 0.55, frac(h.y * 3.7 + 0.11)), first);   // only some craters carry rays; the feature crater always does
         rays += spoke * rayOn * exists;
     }
+    // Small craters: three layers of feature points on a 3D grid of the rotating sphere (no pole pinching; they turn with the planet). Each is a bowl with a raised
+    // rim, lit from the light's side: the wall facing the light is dark, the far wall bright. Sizes about 11, 5 and 2.5 px on a 440 px disc; density follows CraterAmt.
+    float3 Lw = normalize(LightDir);
+    float cs = cos(spin), sn = sin(spin);
+    float smallShade = 1.0;
+    for (int k = 0; k < 3; k++)
+    {
+        float Ng = (k == 0) ? 6.0 : ((k == 1) ? 13.0 : 27.0);
+        float3 gp = Pr * Ng + Seed * 3.1 + k * 7.7;
+        float3 cell = floor(gp);
+        float3 hh = frac(sin(float3(dot(cell, float3(127.1, 311.7, 74.7)), dot(cell, float3(269.5, 183.3, 246.1)), dot(cell, float3(113.5, 271.9, 124.6)))) * 43758.5453);
+        float3 dd = gp - (cell + 0.3 + 0.4 * hh);
+        float Rc = 0.13 + 0.17 * frac(hh.x * 17.0 + hh.y * 5.0);
+        float pEx = (0.15 + 0.45 * CraterAmt) * ((k == 0) ? 1.0 : ((k == 1) ? 0.9 : 0.7));
+        float ex = step(1.0 - pEx, frac(hh.z * 9.0 + 0.4));
+        float t = length(dd) / Rc;
+        float3 dv = float3(dd.x * cs - dd.z * sn, dd.y, dd.x * sn + dd.z * cs);   // offset back in view space, to compare with the light
+        float2 rh = dv.xy / max(length(dv.xy), 1e-4);
+        float slope = (t < 1.0 ? 1.1 * t : 0.0) - 1.6 * (t - 1.0) * exp(-(t - 1.0) * (t - 1.0) * 30.0);   // bowl wall rising outwards, then the rim falling off
+        float wallLight = -slope * dot(rh, float2(Lw.x, Lw.y)) * 0.50 * smoothstep(2.0, 1.0, t);
+        float bowlDark = smoothstep(1.0, 0.3, t) * 0.10;
+        smallShade *= 1.0 + (wallLight - bowlDark) * ex;
+    }
+    shade *= lerp(1.0, smallShade, smoothstep(0.12, 0.40, z) * (1.0 - polar2 * 0.5));
     base *= shade;
     base = (darkRaysG > 0.5) ? lerp(base, base * 0.68, saturate(rays) * 0.70)
                           : lerp(base, base * 1.55 + 0.06, saturate(rays) * 0.85);

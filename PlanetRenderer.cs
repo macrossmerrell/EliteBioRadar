@@ -232,7 +232,7 @@ namespace EliteBioRadar
                     AtmGlow = detail.SurfacePressure > 0 ? 0.25 : 0.0,
                     Contrast = 0.4, RustAmt = 0.0, BrightAmt = 0.15, CraterAmt = 0.3, RayAmt = 0.0, HotAmt = 0.9, SpecAmt = 0.0,
                 };
-            if (iconCode == "ICY") return GetIcyLandableLook(detail, hash, temp);
+            if (iconCode == "ICY") return GetIcyLandableLook(detail, hash, temp, starK);
             if (iconCode == "RBD") return GetRockyLandableLook(detail, hash);
             if (iconCode == "MRB") return GetMetalRichLandableLook(detail, hash, starK);
             if (iconCode == "RIB") return GetRockyIceLandableLook(detail, hash);
@@ -258,7 +258,7 @@ namespace EliteBioRadar
                 else if (slice == 2) look = 13;   // sulphur-yellow patches on olive: three real bodies now (GI-X b19-0 3, AH-T d4-6 B 2 a, MH-V d2-2 4); the share was halved by mistake when the olive misdraws were really the rocky picker's look 4
                 else if (slice == 3) look = 14;
                 else if (slice <= 5) look = 16;
-                else if (slice == 6) look = 15;
+                else if (slice == 6) look = (((pickHash >> 24) & 1) == 0) ? 15 : 25;   // half of the very-dark slice now takes the lighter taupe/olive look: two real HMC partners (Qiedea IY-N c8-1 A 4 and A 5) drew the near-black one but were moderate brown-grey with a big dark-rayed crater in game
                 else if (slice == 7) look = 17;
                 else if (slice >= 10 && slice <= 11) look = 18;
                 else if (slice == 12) look = 19;   // salmon-rose with large sage-green patches (one real body so far)
@@ -342,6 +342,14 @@ namespace EliteBioRadar
                 case 21: // dark olive-charcoal ground with large golden-tan patches covering about half of it (real: Qiedea IR-V d2-0 4, 516 K, silicate vapour geysers)
                     l.Light = rgb(72, 74, 58); l.Dark = rgb(44, 46, 38); l.Accent = rgb(98, 92, 60); l.Bright = rgb(216, 174, 108);
                     l.Contrast = 1.2; l.RustAmt = 0.15; l.BrightAmt = 0.95; l.CraterAmt = 0.15; l.RayAmt = 0.0; l.NoFrost = true; break;
+                case 25: // moderate taupe-brown with darker patches and a big dark-rayed crater (real: Qiedea IY-N c8-1 A 5, 595 K); the body's own hash picks the olive-green variant (A 4: grey-brown with olive-green patches and orange-brown flecks)
+                    if (((hash >> 8) & 1) == 0)
+                    { l.Light = rgb(122, 108, 96); l.Dark = rgb(84, 92, 66); l.Accent = rgb(112, 84, 62); l.Bright = rgb(98, 110, 74);
+                      l.Contrast = 0.9; l.RustAmt = 0.35; l.BrightAmt = 0.5; l.CraterAmt = 0.5; l.RayAmt = -0.9; }
+                    else
+                    { l.Light = rgb(140, 124, 112); l.Dark = rgb(92, 84, 76); l.Accent = rgb(104, 92, 82); l.Bright = rgb(158, 140, 126);
+                      l.Contrast = 0.7; l.RustAmt = 0.2; l.BrightAmt = 0.3; l.CraterAmt = 0.5; l.RayAmt = -0.9; }
+                    l.NoFrost = true; break;
                 case 22: // dusky blue-grey ground with ragged salmon-orange patches, a ray crater and a blue limb (real: Qiedea ER-U d3-6 1, 361 K, thin SO2)
                     l.Light = rgb(104, 102, 116); l.Dark = rgb(70, 68, 84); l.Accent = rgb(86, 80, 90); l.Bright = rgb(212, 138, 104);
                     l.Contrast = 0.8; l.RustAmt = 0.4; l.BrightAmt = 0.8; l.CraterAmt = 0.3; l.RayAmt = -0.8; l.NoFrost = true; l.AtmGlow = Math.Max(l.AtmGlow, 0.55); break;
@@ -437,7 +445,7 @@ namespace EliteBioRadar
         // light grey cratered look). The coloured blotches of real icy worlds (teal, mint, tan, gold) are
         // rendered through the shader's "pale patch" layer, and icy surfaces are glossy, so every look also
         // carries a sun-glint.
-        private static LandableWorldLook GetIcyLandableLook(BodyScanDetail detail, int hash, double temp)
+        private static LandableWorldLook GetIcyLandableLook(BodyScanDetail detail, int hash, double temp, double starK = 0)
         {
             Color rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
             var l = new LandableWorldLook
@@ -455,9 +463,14 @@ namespace EliteBioRadar
             int look = hash % 7;
             if (((hash >> 19) % 9) == 0) look = 10;   // about 1 in 9: dark maroon-brown with golden crack lines and patches (real: Qiedea KP-G b14-0 2 and 3, thin neon-rich, round an M0 star)
             if (((hash >> 17) % 9) == 0) look = 9;   // about 1 in 9: white ice with salmon-orange patches (one real body: Qiedea KD-P c7-1 1 b)
+            if (((hash >> 21) % 12) == 0) look = 11;   // about 1 in 12: peach-tan ice with pale blue patches, dark cracks and rayed craters (one real body: Qiedea IY-N c8-1 AB 1 b)
+            if (((hash >> 22) % 12) == 0) look = 12;   // about 1 in 12: white ice with orange-tan and sage patches and a network of white cracks (one real body: IY-N c8-1 AB 1 d a)
             if (((hash >> 16) % 7) == 0) look = 7;   // ~1 in 7 bodies: white ice with blue crevasses (kept off the main modulus so existing bodies keep their look)
             if (temp > 0 && temp < 35 && (hash % 10) < 7) look = 2;   // the coldest lean towards light grey, cratered
             if (((hash >> 19) % 5) == 0) look = 8;   // about 1 in 5: plain pale grey with fine dark flecks (three real bodies of Qiedea ZK-M c8-0 A 2, none with the big teal blotches)
+            // Ice lit by an L dwarf (real: Qiedea ES-P c7-2 C 2, 3, 4 and 6 a, 79-94 K round a 1,879 K L1 star): four of the five airless ones were pale pink with dark maroon patches,
+            // which is the white-ice-with-salmon-patches look seen through the red light, so three in four take it. (The fifth, C 1, was Metal-rich.)
+            if (starK > 0 && starK < LowStarTintMaxK && ((hash >> 6) % 4) != 0) look = 9;
             switch (look)
             {
                 case 0: // white with teal-green blotches
@@ -481,6 +494,12 @@ namespace EliteBioRadar
                 case 7: // white ice with long blue crevasses and small blue patches (real: DG-F b25-0 A 2 a)
                     l.Light = rgb(238, 240, 240); l.Dark = rgb(226, 229, 230); l.Accent = rgb(150, 156, 160); l.Bright = rgb(120, 170, 200); l.Ice = rgb(66, 128, 176);
                     l.Contrast = 0.12; l.RustAmt = 0.10; l.BrightAmt = 0.05; l.CraterAmt = 0.25; l.RayAmt = 0.1; l.LineAmt = 1.0; l.SpecAmt = 0.3; break;
+                case 11: // peach-tan ice with soft pale blue patches, thin dark crack lines and craters with pale rays (real: Qiedea IY-N c8-1 AB 1 b, 105 K)
+                    l.Light = rgb(214, 172, 132); l.Dark = rgb(186, 146, 112); l.Accent = rgb(92, 76, 70); l.Bright = rgb(198, 212, 224);
+                    l.Contrast = 0.45; l.RustAmt = 0.30; l.BrightAmt = 0.70; l.CraterAmt = 0.8; l.RayAmt = 0.8; l.SpecAmt = 0.2; break;
+                case 12: // white ice with orange-tan and sage-grey patches and a network of long white cracks (real: Qiedea IY-N c8-1 AB 1 d a, 100 K)
+                    l.Light = rgb(232, 230, 226); l.Dark = rgb(210, 206, 198); l.Accent = rgb(150, 158, 140); l.Bright = rgb(226, 178, 130); l.Ice = rgb(248, 248, 246);
+                    l.Contrast = 0.40; l.RustAmt = 0.25; l.BrightAmt = 0.90; l.CraterAmt = 0.4; l.RayAmt = 0.0; l.LineAmt = 1.0; l.SpecAmt = 0.4; break;
                 case 10: // dark maroon-brown ground with thin golden-tan crack lines and ragged golden patches, a faint blue rim, dim (real: Qiedea KP-G b14-0 2 and 3)
                     l.Light = rgb(96, 62, 62); l.Dark = rgb(58, 40, 42); l.Accent = rgb(150, 112, 80); l.Bright = rgb(222, 186, 128);
                     l.Contrast = 0.8; l.RustAmt = 0.5; l.BrightAmt = 0.75; l.CraterAmt = 0.3; l.RayAmt = 0.1; l.LineAmt = 0.8; l.SpecAmt = 0.4; break;
@@ -488,8 +507,9 @@ namespace EliteBioRadar
                     l.Light = rgb(238, 236, 232); l.Dark = rgb(214, 210, 206); l.Accent = rgb(214, 140, 112); l.Bright = rgb(232, 148, 110);
                     l.Contrast = 0.35; l.RustAmt = 0.25; l.BrightAmt = 0.85; l.CraterAmt = 0.7; l.RayAmt = 0.2; l.SpecAmt = 0.5; break;
                 case 8: // pale grey, fine darker-grey mottling and small dark teal-charcoal flecks, thin scratches, no colour (real: ZK-M c8-0 A 2 a, b and c)
-                    l.Light = rgb(172, 172, 170); l.Dark = rgb(138, 138, 136); l.Accent = rgb(44, 58, 56); l.Bright = rgb(150, 152, 148);
-                    l.Contrast = 0.55; l.RustAmt = 0.45; l.BrightAmt = 0.25; l.CraterAmt = 0.4; l.RayAmt = 0.3; l.SpecAmt = 0.6; break;
+                    // Lifted and softened after Qiedea IY-N c8-1 AB 1 c and d: white and pale grey-white (210-230) in game, where the first three real ones read 172 grey (was Light 172, Dark 138, Bright 150, Contrast 0.55, RustAmt 0.45).
+                    l.Light = rgb(200, 202, 200); l.Dark = rgb(168, 170, 168); l.Accent = rgb(44, 58, 56); l.Bright = rgb(214, 216, 214);
+                    l.Contrast = 0.42; l.RustAmt = 0.30; l.BrightAmt = 0.25; l.CraterAmt = 0.4; l.RayAmt = 0.3; l.SpecAmt = 0.6; break;
                 default: // dark rust-pink with gold flecks
                     l.Light = rgb(136, 98, 92); l.Dark = rgb(86, 64, 60); l.Accent = rgb(74, 62, 48); l.Bright = rgb(214, 176, 96);
                     l.Contrast = 0.90; l.RustAmt = 0.30; l.BrightAmt = 0.25; l.CraterAmt = 0.5; l.RayAmt = 0.1; l.SpecAmt = 0.9; break;
@@ -726,6 +746,12 @@ namespace EliteBioRadar
                 else if (denseVariant == 2) { s0 = rgb(24, 26, 32);  s1 = rgb(46, 50, 58);  contrast = 0.5; }   // near-black
                 else                        { s0 = rgb(112, 124, 140); s1 = rgb(162, 174, 188); contrast = 0.7; }   // slate
             }
+            else if (iconCode == "HMC" && !detail.Landable && detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 260 && detail.SurfacePressure is >= 100000 and <= 1000000 && ((hash >> 11) % 3) != 0)
+            {
+                // Cold mid-pressure HMC: pale sandy ochre-tan under a bright teal limb with a big white cap and rough white bumps (real: Qiedea ER-U d3-6 10, 218 K, 235 kPa;
+                // the dense cold ZW-R d5-22 A 5 was the same Mars-like family). Two in three, one real body of its own so far.
+                s0 = rgb(170, 132, 84); s1 = rgb(226, 198, 146); contrast = 0.5;
+            }
             else if (iconCode == "HMC" && !detail.Landable && haze <= 0.80 && detail.SurfacePressure is >= 20000 and <= 1000000 && ((hash >> 15) % 10) < 2)
             {
                 // Red-orange Mars-like land with dark navy basins, a pale cap and white cyclones at mid pressure (real: Qiedea IR-V d2-1 2, water-rich nitrogen at 128 kPa and 346 K);
@@ -745,7 +771,7 @@ namespace EliteBioRadar
                 // Mid-pressure CO2: gold-ochre for about a quarter (Qiedea TU-M c8-0 C 5); the rest keep the ordinary pick.
                 s0 = rgb(178, 120, 62); s1 = rgb(240, 194, 108); contrast = 0.55;
             }
-            else if (iconCode == "HMC" && !detail.Landable && haze <= 0.80 && detail.SurfacePressure is >= 20000 and <= 600000 && ((hash >> 5) % 20) < 3)
+            else if (iconCode == "HMC" && !detail.Landable && haze <= 0.80 && detail.SurfacePressure is >= 5000 and <= 600000 && ((hash >> 5) % 20) < 3)   // lower bound was 20000: ER-U d3-6 7 (10 kPa, oxygen-rich) was the dark cyclone look too
             {
                 // The very dark navy cyclone look turned up on five bodies of mid pressure and very different gas (CO2 36 and 132 kPa, argon 44, nitrogen 196, water 499:
                 // Qiedea DJ-M c9-1 5, PK-L c9-1 B 3, JC-U d3-1 A 7 and B 1, SU-M c8-1 B 6), so about three in ten of them draw it.
@@ -1201,7 +1227,7 @@ namespace EliteBioRadar
         // internal — SystemScanWindow reuses this for its own attached-star ring icon.
         internal static Color GetRingColor(string ringClass) => ringClass switch
         {
-            "eRingClass_Icy"       => Color.FromRgb(0xd8, 0xe8, 0xec),
+            "eRingClass_Icy"       => Color.FromRgb(0xcc, 0xe2, 0xf2),   // a touch bluer: the wide icy ring of Qiedea IY-N c8-1 AB 1 is blue-white in game
             "eRingClass_Metalic"   => Color.FromRgb(0x9a, 0x9c, 0xa0),
             // Was 0xd4aa5c — a fairly saturated gold that read as "too yellow" against a real
             // MetalRich ring. Shifted to a more muted copper/tan, still warmer than plain
@@ -1352,6 +1378,13 @@ namespace EliteBioRadar
             // not fitting after an earlier width-only change. 0.23 leaves real room for a wide
             // ring to extend beyond the sphere inside whatever canvas is passed in.
             double R = Math.Min(width, height) * 0.23;
+            // A very wide ring system (real: Qiedea IY-N c8-1 AB 1, out to 3.5 planet radii) used to be squeezed into the same span as a narrow one, so it drew as a close, thin ring.
+            // Now the planet shrinks to give it room, down to 0.155 of the scene, and the ring keeps its true reach as far as that allows.
+            if (detail.Radius > 0)
+            {
+                double widest = detail.Rings.Where(r => r.OuterRad > 0 && r.InnerRad > 0).Select(r => r.OuterRad / detail.Radius).DefaultIfEmpty(0).Max();
+                if (widest > 2.0) R = Math.Max(Math.Min(width, height) * 0.155, Math.Min(R, Math.Min(width, height) * 0.46 / (0.85 * widest)));
+            }
             // 1.08 → 1.4: the ring rendered clear up to the sphere's own edge with no breathing
             // room at all — the mockup has a visible gap between the planet and where the ring
             // actually starts.
