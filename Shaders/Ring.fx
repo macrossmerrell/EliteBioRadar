@@ -26,18 +26,31 @@ float4 Col2    : register(c13);
 float3 Tex(float2 p) { return tex2D(Noise, frac(p)).rgb; }
 
 // x = coverage (0..1, how much ring material), y = brightness variation
-float2 BandSample(float4 band, float rpx, float s, out float edge)
+// Smooth 1D value noise computed in the shader. The ringlets used to be read from the noise texture at 2 to 48 texels per pixel, which is pure aliasing: it showed as
+// jagged stair-stepped lines that changed with the window size. This is smooth, and each octave fades out where its cycle gets finer than a pixel.
+float Hash1(float n) { return frac(sin(n * 127.1 + 311.7) * 43758.5453); }
+float VN(float x)
+{
+    float i = floor(x);
+    float f = frac(x);
+    f = f * f * (3.0 - 2.0 * f);
+    return lerp(Hash1(i), Hash1(i + 1.0), f);
+}
+
+float2 BandSample(float4 band, float rpx, float s, float aa, out float edge)
 {
     float width = max(band.y - band.x, 1.0);
     float t = (rpx - band.x) / width;
-    edge = smoothstep(0.0, 0.035, t) * (1.0 - smoothstep(0.965, 1.0, t));
+    float ew = max(0.035, aa / width);                       // the edge fade is never narrower than a pixel
+    edge = smoothstep(0.0, ew, t) * (1.0 - smoothstep(1.0 - ew, 1.0, t));
     float rn = rpx / max(PlanetR, 1.0);
-    float a = Tex(float2(rn * 0.55 + s,        0.21)).x;
-    float b = Tex(float2(rn * 2.3  + s * 1.7,  0.57)).y;
-    float f = Tex(float2(rn * 11.0 + s * 2.3,  0.83)).z;
-    float g = Tex(float2(rn * 40.0 + s * 3.1,  0.37)).x;
-    float hfine = Tex(float2(rn * 140.0 + s * 4.1, 0.19)).y;   // hundreds of thin grooves, as on the wide real rings
-    float d = 0.38 * a + 0.27 * b + 0.18 * f + 0.07 * g + 0.10 * hfine;
+    float fp = aa / max(PlanetR, 1.0);                       // one pixel, in planet radii
+    float sd = s * 61.7;
+    float a = VN(rn * 1.3 + sd);
+    float b = lerp(0.5, VN(rn * 4.6 + sd * 1.7 + 11.0), saturate(1.0 - fp * 4.6 * 1.5));
+    float f = lerp(0.5, VN(rn * 15.0 + sd * 2.3 + 23.0), saturate(1.0 - fp * 15.0 * 1.5));
+    float g = lerp(0.5, VN(rn * 42.0 + sd * 3.1 + 5.0), saturate(1.0 - fp * 42.0 * 1.5));
+    float d = 0.43 * a + 0.31 * b + 0.22 * f + 0.04 * g;
     float cov = saturate((d - (0.50 - band.w * 0.20)) * (3.2 + band.w * 4.0) + 0.50);
     cov = lerp(1.0, cov, saturate(0.60 + band.w * 0.40));
     // A couple of clean divisions, like a real ring system's dark gaps (only in bands wide enough to hold them).
@@ -70,9 +83,10 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     float  grain = 0.0;
 
     float e0, e1, e2;
-    float2 s0 = BandSample(Band0, rpx, Seed,        e0);
-    float2 s1 = BandSample(Band1, rpx, Seed + 3.7,  e1);
-    float2 s2 = BandSample(Band2, rpx, Seed + 7.9,  e2);
+    float aa = max(abs(ddx(rpx)) + abs(ddy(rpx)), 0.75);      // one pixel's reach in ring radius
+    float2 s0 = BandSample(Band0, rpx, Seed,        aa, e0);
+    float2 s1 = BandSample(Band1, rpx, Seed + 3.7,  aa, e1);
+    float2 s2 = BandSample(Band2, rpx, Seed + 7.9,  aa, e2);
     float in0 = step(Band0.x, rpx) * step(rpx, Band0.y) * step(1.0, Band0.y);
     float in1 = step(Band1.x, rpx) * step(rpx, Band1.y) * step(1.0, Band1.y);
     float in2 = step(Band2.x, rpx) * step(rpx, Band2.y) * step(1.0, Band2.y);

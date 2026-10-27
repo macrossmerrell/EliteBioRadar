@@ -33,6 +33,7 @@ float  Pitch     : register(c19);
 float3 LightDir  : register(c20);  // normalized, view space
 float  Mottle    : register(c21);  // pattern scale multiplier
 float  SpecAmt   : register(c22);  // 0..1 glossy sun-glint (icy surfaces are shiny, bare rock is not)
+float  LineFine  : register(c24);  // 0..1 thin, wandering, broken cracks plus a second set of hairline cracks (0 = the bold arcs)
 float  LineAmt   : register(c23);  // 0..1 long thin fracture lines drawn in ColIce (icy crevasses; 0 = none)
 
 static const float PI  = 3.14159265;
@@ -96,10 +97,26 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
                          * float3(43758.5, 22578.1, 31415.9));
         float3 N = normalize(hn * 2.0 - 1.0 + 1e-3);
         float wob = (Tex(ps * 1.6 + ci * 0.37).x - 0.5) * 0.12 + (Tex(ps * 4.5 + ci * 0.19).y - 0.5) * 0.02;
+        // LineFine: thin, wandering, broken cracks (many fine fractures) instead of a few bold near-straight arcs.
+        wob += LineFine * ((Tex(ps * 3.1 + ci * 0.43).z - 0.5) * 0.20 + (Tex(ps * 9.0 + ci * 0.27).x - 0.5) * 0.05);
         float dcirc = abs(dot(Pr, N) + wob);
-        float w = 0.014 + 0.012 * Tex(ps * 2.0 + ci * 0.51).z;
+        float w = (0.014 + 0.012 * Tex(ps * 2.0 + ci * 0.51).z) * lerp(1.0, 0.30, LineFine);
         float seg = smoothstep(0.40, 0.62, Tex(ps * 2.2 + float2(ci * 0.31, 0.7)).y);
+        seg = lerp(seg, smoothstep(0.46, 0.60, Tex(ps * 5.0 + float2(ci * 0.31, 0.7)).y), LineFine);
         lines += smoothstep(w, w * 0.35, dcirc) * seg;
+    }
+    if (LineFine > 0.0)
+    {
+        for (int cj = 0; cj < 6; cj++)
+        {
+            float3 hn2 = frac(sin(float3(Seed * 5.3 + cj * 9.1, Seed * 2.9 + cj * 17.3, Seed * 7.7 + cj * 3.9)) * float3(43758.5, 22578.1, 31415.9));
+            float3 N2 = normalize(hn2 * 2.0 - 1.0 + 1e-3);
+            float wob2 = (Tex(ps * 3.7 + cj * 0.29).x - 0.5) * 0.26 + (Tex(ps * 10.0 + cj * 0.13).y - 0.5) * 0.06;
+            float d2 = abs(dot(Pr, N2) + wob2);
+            float w2 = 0.0042 + 0.0028 * Tex(ps * 3.0 + cj * 0.47).z;
+            float seg2 = smoothstep(0.50, 0.62, Tex(ps * 6.0 + float2(cj * 0.37, 0.2)).y);
+            lines += smoothstep(w2, w2 * 0.35, d2) * seg2 * 0.85;
+        }
     }
     base = lerp(base, ColIce.rgb, saturate(lines) * LineAmt * (1.0 - polar) * 0.92);
 

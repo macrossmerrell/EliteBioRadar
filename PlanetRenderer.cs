@@ -445,6 +445,53 @@ namespace EliteBioRadar
         // light grey cratered look). The coloured blotches of real icy worlds (teal, mint, tan, gold) are
         // rendered through the shader's "pale patch" layer, and icy surfaces are glossy, so every look also
         // carries a sun-glint.
+        // Icy bodies whose legacy look was marked "render looks right" in game: they keep it (Qiedea GN-P c7-0 B 8 and B 1).
+        private static readonly HashSet<string> IcyConfirmedLegacy = new HashSet<string> { "Qiedea GN-P c7-0 B 8", "Qiedea GN-P c7-0 B 1" };
+
+        // Parametric icy look: base tone x accent colour x accent form x crater density, all from the name hash. Weights follow the 21 icy moons of QB-C b17-0
+        // (near-white 6, pale grey 6, mid grey 3, charcoal 1, dark red-brown 1, dark teal 1, plus mixes): a guess at the real spread, not a measured one.
+        private static void ApplyParametricIcyLook(LandableWorldLook l, int hash)
+        {
+            Color rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
+            uint m = (uint)hash * 2654435761u; m ^= m >> 15; m *= 2246822519u; m ^= m >> 13;
+            int Roll(int shift, int n) => (int)((m >> shift) % (uint)n);
+            int Pick(int roll, params int[] w) { int t = 0; for (int i = 0; i < w.Length; i++) { t += w[i]; if (roll < t) return i; } return w.Length - 1; }
+
+            int tone = Pick(Roll(0, 100), 28, 28, 18, 8, 9, 9);   // near-white, pale grey, mid grey, charcoal, dark red-brown, dark teal
+            Color[] light = { rgb(236, 235, 232), rgb(214, 216, 214), rgb(176, 178, 178), rgb(120, 120, 118), rgb(118, 76, 70), rgb(96, 110, 112) };
+            Color[] dark = { rgb(214, 213, 210), rgb(170, 172, 172), rgb(120, 122, 122), rgb(70, 70, 70), rgb(70, 48, 46), rgb(54, 60, 60) };
+            l.Light = light[tone]; l.Dark = dark[tone];
+            l.Accent = rgb(56, 54, 54); l.Ice = rgb(48, 48, 50); l.Bright = rgb(240, 240, 238);
+            l.Contrast = tone <= 1 ? 0.30 + 0.15 * Roll(3, 100) / 100.0 : tone == 2 ? 0.55 : 0.80;
+            l.SpecAmt = tone == 4 ? 0.9 : 0.4;
+            l.CraterAmt = 0.25 + 0.75 * Roll(6, 100) / 100.0;
+            l.RayAmt = Roll(9, 100) < 45 ? 0.4 + 0.6 * Roll(12, 100) / 100.0 : 0.05;
+
+            if (tone >= 3)
+            {
+                // Dark grounds: pale frost patches and dark flecks (3 b rust-brown and glossy, 4 d teal, 2 c charcoal in game).
+                l.Bright = tone == 3 ? rgb(200, 202, 202) : tone == 4 ? rgb(176, 150, 144) : rgb(140, 172, 172);
+                l.BrightAmt = 0.70 + 0.20 * Roll(15, 100) / 100.0;
+                l.Accent = tone == 4 ? rgb(40, 28, 28) : rgb(30, 30, 30);
+                l.RustAmt = 0.35 + 0.25 * Roll(18, 100) / 100.0;
+                return;
+            }
+
+            // Light grounds: an accent colour in one or two forms.
+            int acc = Pick(Roll(21, 100), 16, 8, 20, 28, 10, 18);   // blue, teal, orange-tan, maroon-brown, olive, none
+            Color[] ac = { rgb(92, 146, 188), rgb(108, 168, 166), rgb(216, 160, 106), rgb(98, 54, 46), rgb(152, 160, 72), rgb(62, 62, 64) };
+            int form = Pick(Roll(24, 100), 35, 35, 30);               // ragged patches, thin cracks, fleck clusters
+            int second = Roll(27, 100) < 30 ? Pick(Roll(2, 100), 0, 60, 40) : -1;   // sometimes a second form (cracks or flecks) as well
+            void Use(int f)
+            {
+                if (f == 0 && acc != 5) { l.Bright = ac[acc]; l.BrightAmt = 0.55 + 0.35 * Roll(5, 100) / 100.0; }
+                else if (f == 1 || (f == 0 && acc == 5)) { l.Ice = ac[acc]; l.LineAmt = 1.0; l.LineFine = 1.0; }
+                else { l.Accent = ac[acc]; l.RustAmt = 0.45 + 0.20 * Roll(8, 100) / 100.0; }
+            }
+            Use(form);
+            if (second >= 0 && second != form) Use(second);
+        }
+
         private static LandableWorldLook GetIcyLandableLook(BodyScanDetail detail, int hash, double temp, double starK = 0)
         {
             Color rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
@@ -465,12 +512,21 @@ namespace EliteBioRadar
             if (((hash >> 17) % 9) == 0) look = 9;   // about 1 in 9: white ice with salmon-orange patches (one real body: Qiedea KD-P c7-1 1 b)
             if (((hash >> 21) % 12) == 0) look = 11;   // about 1 in 12: peach-tan ice with pale blue patches, dark cracks and rayed craters (one real body: Qiedea IY-N c8-1 AB 1 b)
             if (((hash >> 22) % 12) == 0) look = 12;   // about 1 in 12: white ice with orange-tan and sage patches and a network of white cracks (one real body: IY-N c8-1 AB 1 d a)
+            if (((hash >> 13) % 12) == 0) look = 13;   // about 1 in 12: pale grey-white ice with a big white-rayed crater, dark branching cracks and dark grey mottled basins (one real body: Qiedea QB-C b17-0 1 c)
             if (((hash >> 16) % 7) == 0) look = 7;   // ~1 in 7 bodies: white ice with blue crevasses (kept off the main modulus so existing bodies keep their look)
             if (temp > 0 && temp < 35 && (hash % 10) < 7) look = 2;   // the coldest lean towards light grey, cratered
             if (((hash >> 19) % 5) == 0) look = 8;   // about 1 in 5: plain pale grey with fine dark flecks (three real bodies of Qiedea ZK-M c8-0 A 2, none with the big teal blotches)
             // Ice lit by an L dwarf (real: Qiedea ES-P c7-2 C 2, 3, 4 and 6 a, 79-94 K round a 1,879 K L1 star): four of the five airless ones were pale pink with dark maroon patches,
             // which is the white-ice-with-salmon-patches look seen through the red light, so three in four take it. (The fifth, C 1, was Metal-rich.)
             if (starK > 0 && starK < LowStarTintMaxK && ((hash >> 6) % 4) != 0) look = 9;
+            // The tuned real looks (7-13) and the very cold light-grey look keep their picks; everything else (the old guessed looks 0-6) is now generated from the name hash,
+            // because the 21 icy moons of Qiedea QB-C b17-0 (one star, 47-117 K) were all different combinations of base tone, accent colour, accent form and crater density.
+            bool coldKeep = look == 2 && temp > 0 && temp < 35;
+            if (look <= 6 && !coldKeep && !IcyConfirmedLegacy.Contains(detail.BodyName ?? ""))
+            {
+                ApplyParametricIcyLook(l, hash);
+                return l;
+            }
             switch (look)
             {
                 case 0: // white with teal-green blotches
@@ -500,6 +556,9 @@ namespace EliteBioRadar
                 case 12: // white ice with orange-tan and sage-grey patches and a network of long white cracks (real: Qiedea IY-N c8-1 AB 1 d a, 100 K)
                     l.Light = rgb(232, 230, 226); l.Dark = rgb(210, 206, 198); l.Accent = rgb(150, 158, 140); l.Bright = rgb(226, 178, 130); l.Ice = rgb(248, 248, 246);
                     l.Contrast = 0.40; l.RustAmt = 0.25; l.BrightAmt = 0.90; l.CraterAmt = 0.4; l.RayAmt = 0.0; l.LineAmt = 1.0; l.SpecAmt = 0.4; break;
+                case 13: // pale grey-white ice, mid-grey mottled basins, many small bowl craters, a big crater with long pale rays, thin dark branching cracks (real: Qiedea QB-C b17-0 1 c, 111 K, round an M dwarf)
+                    l.Light = rgb(216, 220, 218); l.Dark = rgb(146, 148, 148); l.Accent = rgb(52, 54, 54); l.Bright = rgb(236, 239, 238); l.Ice = rgb(44, 46, 48);
+                    l.Contrast = 0.75; l.RustAmt = 0.45; l.BrightAmt = 0.55; l.CraterAmt = 1.0; l.RayAmt = 1.0; l.LineAmt = 1.0; l.LineFine = 1.0; l.SpecAmt = 0.3; break;
                 case 10: // dark maroon-brown ground with thin golden-tan crack lines and ragged golden patches, a faint blue rim, dim (real: Qiedea KP-G b14-0 2 and 3)
                     l.Light = rgb(96, 62, 62); l.Dark = rgb(58, 40, 42); l.Accent = rgb(150, 112, 80); l.Bright = rgb(222, 186, 128);
                     l.Contrast = 0.8; l.RustAmt = 0.5; l.BrightAmt = 0.75; l.CraterAmt = 0.3; l.RayAmt = 0.1; l.LineAmt = 0.8; l.SpecAmt = 0.4; break;
@@ -1380,16 +1439,21 @@ namespace EliteBioRadar
             double R = Math.Min(width, height) * 0.23;
             // A very wide ring system (real: Qiedea IY-N c8-1 AB 1, out to 3.5 planet radii) used to be squeezed into the same span as a narrow one, so it drew as a close, thin ring.
             // Now the planet shrinks to give it room, down to 0.155 of the scene, and the ring keeps its true reach as far as that allows.
+            double minPx = R * 1.4, maxPx = Math.Min(width, height) * 0.46;   // stays inside the bitmap edge
             if (detail.Radius > 0)
             {
-                double widest = detail.Rings.Where(r => r.OuterRad > 0 && r.InnerRad > 0).Select(r => r.OuterRad / detail.Radius).DefaultIfEmpty(0).Max();
-                if (widest > 2.0) R = Math.Max(Math.Min(width, height) * 0.155, Math.Min(R, Math.Min(width, height) * 0.46 / (0.85 * widest)));
+                var real = detail.Rings.Where(r => r.OuterRad > 0 && r.InnerRad > 0).ToList();
+                if (real.Count > 0)
+                {
+                    // True proportions for every ringed giant: the rings' inner and outer edges sit at their real multiples of the planet's radius (the drawn sphere is 0.85 R), so a narrow
+                    // ring looks narrow and a wide one wide. (Before, every ring system was stretched to fill the same 1.4 R .. scene-edge span, so they all looked alike.)
+                    double lo = real.Min(r => r.InnerRad / detail.Radius), hi = real.Max(r => r.OuterRad / detail.Radius);
+                    R = Math.Max(Math.Min(width, height) * 0.155, Math.Min(R, Math.Min(width, height) * 0.46 / (0.85 * hi)));
+                    double s = 0.85 * R;
+                    minPx = Math.Max(lo * s, 1.08 * s);
+                    maxPx = Math.Min(hi * s, Math.Min(width, height) * 0.46);
+                }
             }
-            // 1.08 → 1.4: the ring rendered clear up to the sphere's own edge with no breathing
-            // room at all — the mockup has a visible gap between the planet and where the ring
-            // actually starts.
-            double minPx = R * 1.4;
-            double maxPx = Math.Min(width, height) * 0.46; // stays inside the bitmap edge
             var rings = ComputeRingBands(detail, minPx, maxPx);
             return (cx, cy, R, rings);
         }

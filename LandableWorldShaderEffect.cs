@@ -10,7 +10,7 @@ namespace EliteBioRadar
     public sealed class LandableWorldLook
     {
         public Color Light, Dark, Accent, Bright, Ice, Hot;
-        public double Contrast, CraterAmt, RayAmt, RustAmt, BrightAmt, IceAmt, HotAmt, AtmGlow, Tilt, Pitch, Mottle, Seed, SpecAmt, LineAmt;
+        public double Contrast, CraterAmt, RayAmt, RustAmt, BrightAmt, IceAmt, HotAmt, AtmGlow, Tilt, Pitch, Mottle, Seed, SpecAmt, LineAmt, LineFine;
         public bool NoFrost;   // the frost rule leaves this look alone
         public Vector3D LightDir = new Vector3D(-0.55, 0.55, 0.63);   // view space; more frontal = softer terminator
     }
@@ -57,6 +57,7 @@ namespace EliteBioRadar
         public static readonly DependencyProperty MottleProperty    = Reg("Mottle", 21, 1.0);
         public static readonly DependencyProperty SpecAmtProperty   = Reg("SpecAmt", 22, 0.0);
         public static readonly DependencyProperty LineAmtProperty   = Reg("LineAmt", 23, 0.0);
+        public static readonly DependencyProperty LineFineProperty  = Reg("LineFine", 24, 0.0);
 
         public LandableWorldShaderEffect()
         {
@@ -69,7 +70,7 @@ namespace EliteBioRadar
                 TimeProperty, SeedProperty, CenterProperty, RadiusProperty, ColLightProperty, ColDarkProperty,
                 ColAccentProperty, ColBrightProperty, ColIceProperty, ColHotProperty, ContrastProperty,
                 CraterAmtProperty, RayAmtProperty, RustAmtProperty, BrightAmtProperty, IceAmtProperty,
-                HotAmtProperty, AtmGlowProperty, TiltProperty, PitchProperty, LightDirProperty, MottleProperty, SpecAmtProperty, LineAmtProperty,
+                HotAmtProperty, AtmGlowProperty, TiltProperty, PitchProperty, LightDirProperty, MottleProperty, SpecAmtProperty, LineAmtProperty, LineFineProperty,
             })
                 UpdateShaderValue(p);
         }
@@ -100,6 +101,7 @@ namespace EliteBioRadar
             e.SetValue(MottleProperty, look.Mottle);
             e.SetValue(SpecAmtProperty, look.SpecAmt);
             e.SetValue(LineAmtProperty, look.LineAmt);
+            e.SetValue(LineFineProperty, look.LineFine);
             e.SetValue(LightDirProperty, look.LightDir);
             return e;
         }
