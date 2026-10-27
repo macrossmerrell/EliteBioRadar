@@ -280,7 +280,7 @@ namespace EliteBioRadar
                 var svc = new EliteWatcherService(journalDir);
                 svc.ShipDepartureThresholdMetres = _shipDepartureRangeMetres;
                 InitShipEventChip(svc);
-                InitFirstDiscovery(svc);
+                InitAnimations(svc);
                 svc.StatusUpdated    += (_, args) => Dispatcher.InvokeAsync(() => UpdateStatusBar(args.Status));
                 svc.BodyChanged       += (_, args) => Dispatcher.InvokeAsync(() => UpdateBodyInfo(args));
                 svc.PlanetListChanged += (_, __)   => UpdatePlanetPanel();
@@ -331,6 +331,7 @@ namespace EliteBioRadar
                     Log.Write($"Reopen check: ScanLogWasOpen={reopen.ScanLogWasOpen} SystemScanWasOpen={reopen.SystemScanWasOpen}");
                     if (reopen.ScanLogWasOpen)    OpenScanLogWindow();
                     if (reopen.SystemScanWasOpen) OpenSystemScanWindow();
+                    if (reopen.SystemNotificationsWasOpen) OpenSystemNotificationsWindow();
 
                     // Quiet EDSM catch-up — no-ops instantly if EDSM isn't enabled (checked
                     // inside BackfillEdsmAsync). Delayed slightly so it doesn't compete with the
@@ -4239,6 +4240,59 @@ namespace EliteBioRadar
             var settings = AppSettings.Load();
             settings.ScanLogWasOpen = true;
             AppSettings.Save(settings);
+        }
+
+        private SystemNotificationsWindow? _systemNotificationsWindow;
+
+        private void BtnSystemNotifications_Click(object sender, RoutedEventArgs e) => OpenSystemNotificationsWindow();
+
+        private void OpenSystemNotificationsWindow()
+        {
+            if (_systemNotificationsWindow != null) { _systemNotificationsWindow.Activate(); return; }
+
+            try
+            {
+                _systemNotificationsWindow = new SystemNotificationsWindow { Owner = this };
+                _systemNotificationsWindow.Closed += (_, _) =>
+                {
+                    _systemNotificationsWindow = null;
+                    if (_appShuttingDown) return;
+                    var s = AppSettings.Load();
+                    s.SystemNotificationsWasOpen = false;
+                    AppSettings.Save(s);
+                };
+                _systemNotificationsWindow.Show();
+            }
+            catch (Exception ex)
+            {
+                // Also runs from the startup reopen path, where an escaping exception would take the app down.
+                Log.Write($"OpenSystemNotificationsWindow EXCEPTION: {ex}");
+                _systemNotificationsWindow = null;
+                return;
+            }
+
+            var settings = AppSettings.Load();
+            settings.SystemNotificationsWasOpen = true;
+            AppSettings.Save(settings);
+        }
+
+        private NotificationSettingsWindow? _notificationSettingsWindow;
+
+        private void BtnNotificationSettings_Click(object sender, RoutedEventArgs e)
+        {
+            if (_notificationSettingsWindow != null) { _notificationSettingsWindow.Activate(); return; }
+
+            try
+            {
+                _notificationSettingsWindow = new NotificationSettingsWindow { Owner = this };
+                _notificationSettingsWindow.Closed += (_, __) => _notificationSettingsWindow = null;
+                _notificationSettingsWindow.Show();
+            }
+            catch (Exception ex)
+            {
+                Log.Write($"BtnNotificationSettings_Click EXCEPTION: {ex}");
+                _notificationSettingsWindow = null;
+            }
         }
 
         private NearestFinderWindow? _starFinderWindow;

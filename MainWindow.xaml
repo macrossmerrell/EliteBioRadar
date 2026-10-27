@@ -178,6 +178,20 @@
                     </Viewbox>
                 </Button>
 
+                <!-- Declared last so it docks left of Scan Log, at the start of the row of pop-out window buttons. -->
+                <Button x:Name="btnSystemNotifications" DockPanel.Dock="Right"
+                        Width="30" Height="30"
+                        Background="Transparent" BorderThickness="0"
+                        Cursor="Hand" Padding="0" VerticalAlignment="Center"
+                        Click="BtnSystemNotifications_Click"
+                        ToolTip="System Notifications — a window of its own for animations">
+                    <Viewbox Width="20" Height="20">
+                        <Canvas Width="24" Height="24">
+                            <Path Fill="#00e5ff" Data="M12,22A2,2 0 0,0 14,20H10A2,2 0 0,0 12,22M18,16V11C18,7.93 16.36,5.36 13.5,4.68V4A1.5,1.5 0 0,0 12,2.5A1.5,1.5 0 0,0 10.5,4V4.68C7.63,5.36 6,7.92 6,11V16L4,18V19H20V18L18,16Z"/>
+                        </Canvas>
+                    </Viewbox>
+                </Button>
+
                 <WrapPanel DockPanel.Dock="Left" Orientation="Horizontal">
                     <StackPanel Orientation="Horizontal" Margin="0,2,14,2">
                         <TextBlock Text="SYSTEM: " Style="{StaticResource BarLabel}"/>
@@ -281,7 +295,7 @@
                 </Border>
             </Grid>
 
-            <!-- First Discovery moment: plays once over the STAR tab on arrival in an undiscovered system. See FirstDiscoveryOverlay.cs. -->
+            <!-- Animation overlay: plays over whichever tab is showing (First Discovery today). See AnimationRouter.cs / FirstDiscoveryOverlay.cs. -->
             <Grid x:Name="firstDiscoveryLayer" Grid.Column="1" Panel.ZIndex="20" IsHitTestVisible="False" Visibility="Collapsed">
                 <local:FirstDiscoveryVisual x:Name="firstDiscoveryVisual"/>
             </Grid>
@@ -590,6 +604,22 @@
                                 ToolTip="Converts every .bmp already in the screenshots folder right now, not just new ones"/>
                         <TextBlock x:Name="txtScreenshotStatus" Text="" Foreground="#446666"
                                    FontFamily="Consolas" FontSize="10.5" Margin="0,4,0,8" TextWrapping="Wrap"/>
+
+                        <TextBlock Text="─────────────────" Foreground="#1a4444"
+                                   FontFamily="Consolas" FontSize="10" Margin="0,10,0,6"/>
+
+                        <TextBlock Text="Notifications" Foreground="#00e5ff" FontFamily="Consolas"
+                                   FontSize="13" FontWeight="Bold" Margin="0,0,0,6"/>
+                        <TextBlock Text="  Choose which window shows each animation: Elite Bio Radar, System Notifications, or both"
+                                   Foreground="#446666" FontFamily="Consolas" FontSize="11"
+                                   Margin="0,0,0,6" TextWrapping="Wrap"/>
+                        <Button x:Name="btnNotificationSettings" Content="Notification Settings…"
+                                Margin="0,0,0,8"
+                                Background="#1a3333" Foreground="#00e5ff"
+                                FontFamily="Consolas" FontSize="12"
+                                BorderBrush="#1a4444" Padding="8,4"
+                                HorizontalAlignment="Left"
+                                Click="BtnNotificationSettings_Click"/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="2">

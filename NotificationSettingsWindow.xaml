@@ -1,0 +1,40 @@
+<Window x:Class="EliteBioRadar.NotificationSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Notification Settings"
+        Width="600" Height="420"
+        MinWidth="500" MinHeight="240"
+        WindowStartupLocation="CenterOwner"
+        Background="#0a0f0f"
+        FontFamily="Consolas">
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="NOTIFICATIONS" Foreground="#00e5ff" FontSize="14" FontWeight="Bold" Margin="0,0,0,6"/>
+        <TextBlock Grid.Row="1" Foreground="#446666" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"
+                   Text="Choose which window shows each animation. Tick both to show it in both windows; tick neither to turn it off. Changes apply immediately. System Notifications shows animations only while that window is open (the bell button in the header)."/>
+
+        <!-- Column headings; the rows below use the same column widths (built in code, see NotificationSettingsWindow.cs). -->
+        <Grid Grid.Row="2" Margin="0,0,0,4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="150"/>
+                <ColumnDefinition Width="170"/>
+                <ColumnDefinition Width="70"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Animation" Foreground="#88bbbb" FontSize="12"/>
+            <TextBlock Grid.Column="1" Text="Elite Bio Radar" Foreground="#88bbbb" FontSize="12"/>
+            <TextBlock Grid.Column="2" Text="System Notifications" Foreground="#88bbbb" FontSize="12"/>
+        </Grid>
+
+        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel x:Name="rows"/>
+        </ScrollViewer>
+    </Grid>
+</Window>

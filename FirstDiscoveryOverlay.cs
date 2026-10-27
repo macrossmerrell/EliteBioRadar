@@ -6,7 +6,7 @@ using System.Windows.Media;
 
 namespace EliteBioRadar
 {
-    // The First Discovery moment: plays over the STAR tab on arrival in a system nobody had discovered. A generic system map (orbits
+    // The First Discovery moment: plays on arrival in a system nobody had discovered (see AnimationRouter for where it is shown). A generic system map (orbits
     // drawing in, bodies circling, drifting and slowly zooming) with rings pulsing out of the star, corner brackets locking on, then
     // the title spreading in over the system name. About 4 seconds, then it fades and the tab underneath is back. Drawn frame by
     // frame from one clock, so the title's letter-spacing animation (which a TextBlock cannot do) stays in step with the rest.
@@ -41,6 +41,9 @@ namespace EliteBioRadar
         private string _subtitle = "";
 
         public event Action? Finished;
+
+        // How much of what lies underneath is hidden while it plays (1 = fully covered); set from the animation's catalog entry.
+        public double BackdropOpacity { get; set; } = 1.0;
 
         public FirstDiscoveryVisual() { IsHitTestVisible = false; }
 
@@ -86,7 +89,7 @@ namespace EliteBioRadar
             if (env <= 0) return;
             double k = Math.Max(0.8, Math.Min(w, h) / 300);   // sizes below are written for a ~300 px panel
 
-            dc.PushOpacity(env);
+            dc.PushOpacity(BackdropOpacity * env);
             dc.DrawRectangle(Backdrop, null, new Rect(0, 0, w, h));
             dc.Pop();
 
@@ -223,24 +226,41 @@ namespace EliteBioRadar
 
     public partial class MainWindow
     {
-        private void InitFirstDiscovery(EliteWatcherService svc)
+        private void InitAnimations(EliteWatcherService svc)
         {
-            firstDiscoveryVisual.Finished += () => firstDiscoveryLayer.Visibility = Visibility.Collapsed;
-            // Raised on the journal thread, after the arrival star scan has already queued its tab refresh.
-            svc.SystemFirstDiscovered += (system, starType) => Dispatcher.InvokeAsync(() => PlayFirstDiscovery(system, starType));
+            AnimationRouter.Register(new MainWindowAnimationSurface(this));            // Raised on the journal thread. The router decides which window(s) show it.
+            svc.SystemFirstDiscovered += (system, starType) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.FirstDiscovery, system,
+                    starType.Length > 0 ? StarClassNames.GetDisplayName(starType) : "")));
         }
 
-        // Plays over the STAR tab, which the arrival scan has just brought up. If another tab is showing (or the window is hidden), nobody
-        // would see it, so it is skipped rather than queued.
-        private void PlayFirstDiscovery(string system, string starType)
+        // The Elite Bio Radar window as an animation surface: the overlay layer sits over whichever tab is showing.
+        private sealed class MainWindowAnimationSurface : IAnimationSurface
         {
-            if (starPanelViewbox.Visibility != Visibility.Visible || !IsVisible || WindowState == WindowState.Minimized)
+            private readonly MainWindow _w;
+            private Action? _done;
+
+            public MainWindowAnimationSurface(MainWindow w)
             {
-                Log.Write($"First discovery of '{system}' not shown (star tab not showing)");
-                return;
+                _w = w;
+                _w.firstDiscoveryVisual.Finished += () =>
+                {
+                    _w.firstDiscoveryLayer.Visibility = Visibility.Collapsed;
+                    var d = _done; _done = null; d?.Invoke();
+                };
             }
-            firstDiscoveryLayer.Visibility = Visibility.Visible;
-            firstDiscoveryVisual.Start(system, starType.Length > 0 ? StarClassNames.GetDisplayName(starType) : "");
+
+            public AnimationSurfaces Kind => AnimationSurfaces.Main;
+            public bool IsAvailable => _w.IsVisible && _w.WindowState != WindowState.Minimized;
+
+            public void Play(AnimationRequest request, Action done)
+            {
+                _done = done;
+                Log.Write($"Animation '{request.Def.Id}' playing in the Elite Bio Radar window: {request.Subject}");
+                _w.firstDiscoveryVisual.BackdropOpacity = request.Def.BackdropOpacity;
+                _w.firstDiscoveryLayer.Visibility = Visibility.Visible;
+                _w.firstDiscoveryVisual.Start(request.Subject, request.Detail);
+            }
         }
     }
 }

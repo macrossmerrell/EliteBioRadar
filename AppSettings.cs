@@ -74,6 +74,17 @@ namespace EliteBioRadar
         // matching how a user would expect "remember what was open" to behave.
         public bool    ScanLogWasOpen     { get; set; } = false;
         public bool    SystemScanWasOpen  { get; set; } = false;
+
+        // System Notifications window (the second place animations can play) - same remember-and-reopen convention.
+        public double? SystemNotificationsLeft   { get; set; } = null;
+        public double? SystemNotificationsTop    { get; set; } = null;
+        public double? SystemNotificationsWidth  { get; set; } = null;
+        public double? SystemNotificationsHeight { get; set; } = null;
+        public bool    SystemNotificationsWasOpen { get; set; } = false;
+
+        // Where each animation plays, by animation id (an AnimationSurfaces value: 1 = Elite Bio Radar window, 2 = System Notifications
+        // window, 3 = both, 0 = off). An id that is missing uses the animation's own default - see AnimationCatalog.
+        public System.Collections.Generic.Dictionary<string, int> AnimationTargets { get; set; } = new();
     }
 
     public static class AppSettings
