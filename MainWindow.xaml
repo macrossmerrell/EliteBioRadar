@@ -1,6 +1,7 @@
 <Window x:Class="EliteBioRadar.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:EliteBioRadar"
         Title="Elite Bio Radar"
         Height="700" Width="750"
         MinHeight="300" MinWidth="400"
@@ -278,6 +279,11 @@
                                    FontFamily="pack://application:,,,/Assets/Fonts/#JetBrains Mono"/>
                     </StackPanel>
                 </Border>
+            </Grid>
+
+            <!-- First Discovery moment: plays once over the STAR tab on arrival in an undiscovered system. See FirstDiscoveryOverlay.cs. -->
+            <Grid x:Name="firstDiscoveryLayer" Grid.Column="1" Panel.ZIndex="20" IsHitTestVisible="False" Visibility="Collapsed">
+                <local:FirstDiscoveryVisual x:Name="firstDiscoveryVisual"/>
             </Grid>
 
             <!-- STAR / PLANET info panels — replace radarCanvas when no Lat/Lon is present.

@@ -280,7 +280,8 @@ namespace EliteBioRadar
                 var svc = new EliteWatcherService(journalDir);
                 svc.ShipDepartureThresholdMetres = _shipDepartureRangeMetres;
                 InitShipEventChip(svc);
-                svc.StatusUpdated     += (_, args) => Dispatcher.InvokeAsync(() => UpdateStatusBar(args.Status));
+                InitFirstDiscovery(svc);
+                svc.StatusUpdated    += (_, args) => Dispatcher.InvokeAsync(() => UpdateStatusBar(args.Status));
                 svc.BodyChanged       += (_, args) => Dispatcher.InvokeAsync(() => UpdateBodyInfo(args));
                 svc.PlanetListChanged += (_, __)   => UpdatePlanetPanel();
                 svc.StarScanUpdated     += (_, __) => Dispatcher.InvokeAsync(() => { _manualMode = null; RefreshAll(); });

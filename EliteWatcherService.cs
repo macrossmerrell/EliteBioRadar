@@ -23,6 +23,9 @@ namespace EliteBioRadar
         // Ship/SRV/foot events (gear, lights, scoop, liftoff, boarding ...) for the Radar chip and any later animation screen.
         public ShipEventDetector ShipEvents { get; } = new();
         public event EventHandler? StarScanUpdated;
+        // Raised once, live only, when the arrival star's automatic scan says nobody had discovered the system (system name, star type).
+        public event Action<string, string>? SystemFirstDiscovered;
+        private string _firstDiscoveryRaisedFor = "";
         public event EventHandler? PlanetTargetUpdated;
         public event EventHandler? DestinationUpdated;
         public BodyScanDetail?  CurrentStarDetail    { get; private set; }
@@ -3375,6 +3378,17 @@ namespace EliteBioRadar
                         {
                             CurrentStarDetail = detail;
                             if (!backfill) StarScanUpdated?.Invoke(this, EventArgs.Empty);
+                            // First Discovery: the arrival star's automatic scan, seconds after the jump, reports that nobody had found the system.
+                            // A later detailed scan or a relog into the same system must not replay it.
+                            if (!backfill && detail.WasDiscovered == false &&
+                                string.Equals(obj.Value<string>("ScanType"), "AutoScan", StringComparison.OrdinalIgnoreCase) &&
+                                !string.Equals(_firstDiscoveryRaisedFor, StarSystem, StringComparison.OrdinalIgnoreCase) &&
+                                (obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow) - SystemArrivedAt < TimeSpan.FromSeconds(90))
+                            {
+                                _firstDiscoveryRaisedFor = StarSystem;
+                                Log.Write($"First discovery: '{StarSystem}' ({obj.Value<string>("StarType")})");
+                                SystemFirstDiscovered?.Invoke(StarSystem, obj.Value<string>("StarType") ?? "");
+                            }
                         }
                         else if (!isStar && !backfill && string.Equals(bodyName, TargetedBody, StringComparison.OrdinalIgnoreCase))
                         {
