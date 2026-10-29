@@ -10,15 +10,24 @@ namespace EliteBioRadar
     // One entry per animation the app can play. Group is the heading in the settings list; BackdropOpacity is how much of whatever lies
     // underneath is hidden while it plays (1 = fully covered).
     // PreviewSubject/PreviewDetail are the sample text the Notification Settings window's Play button uses.
+    // Live = a screen driven continuously by the ship's state (the atmosphere scenes) rather than a one-shot played through the router:
+    // MainWindow shows it in the windows ticked here for as long as the phase lasts, so it has no Play preview.
     public sealed record AnimationDef(string Id, string Name, string Group, AnimationSurfaces DefaultSurfaces, double BackdropOpacity,
-                                      string PreviewSubject, string PreviewDetail);
+                                      string PreviewSubject, string PreviewDetail, bool Live = false);
 
     public static class AnimationCatalog
     {
         public static readonly AnimationDef FirstDiscovery =
             new("first-discovery", "First discovery", "Discovery", AnimationSurfaces.Main, 1.0, "Sample System", "M-Type");
 
-        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery };
+        public static readonly AnimationDef Descent =
+            new("descent", "Descent to a planet", "Atmosphere", AnimationSurfaces.Main, 1.0, "", "", Live: true);
+        public static readonly AnimationDef Climb =
+            new("climb", "Climb out (launch / ascent)", "Atmosphere", AnimationSurfaces.Main, 1.0, "", "", Live: true);
+        public static readonly AnimationDef AtmosphericJump =
+            new("atmospheric-jump", "Hyperspace jump from an atmosphere", "Atmosphere", AnimationSurfaces.Main, 1.0, "", "", Live: true);
+
+        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, Descent, Climb, AtmosphericJump };
 
         // The user's choice from the settings file, else the animation's own default.
         public static AnimationSurfaces SurfacesFor(AnimationDef def, AppSettingsData settings) =>

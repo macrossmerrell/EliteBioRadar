@@ -13,6 +13,10 @@
     <Grid>
         <TextBlock Text="SYSTEM NOTIFICATIONS" Foreground="#1a4444" FontSize="16"
                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        <!-- The atmosphere scene (descent / climb / jump) while one is under way, drawn by MainWindow at a wide size and scaled to the window; see ShowLiveScene. -->
+        <Viewbox x:Name="liveSceneBox" Stretch="Uniform" Visibility="Collapsed" IsHitTestVisible="False">
+            <Canvas x:Name="liveSceneCanvas" Background="#080d0d" ClipToBounds="True"/>
+        </Viewbox>
         <local:FirstDiscoveryVisual x:Name="firstDiscoveryVisual"/>
     </Grid>
 </Window>

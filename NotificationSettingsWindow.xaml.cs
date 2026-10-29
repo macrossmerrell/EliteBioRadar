@@ -73,7 +73,15 @@ namespace EliteBioRadar
             play.Click += (_, _) => AnimationRouter.Raise(new AnimationRequest(def, def.PreviewSubject, def.PreviewDetail));
 
             Grid.SetColumn(name, 0); Grid.SetColumn(main, 1); Grid.SetColumn(notif, 2); Grid.SetColumn(play, 3);
-            g.Children.Add(name); g.Children.Add(main); g.Children.Add(notif); g.Children.Add(play);
+            g.Children.Add(name); g.Children.Add(main); g.Children.Add(notif);
+            if (def.Live)
+            {
+                // Follows the ship, so there is nothing to preview from here.
+                var live = new TextBlock { Text = "live", Foreground = DimBrush, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+                Grid.SetColumn(live, 3);
+                g.Children.Add(live);
+            }
+            else g.Children.Add(play);
             return g;
         }
     }

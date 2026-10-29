@@ -257,6 +257,7 @@ namespace EliteBioRadar
                 if (slice <= 1) look = 12;
                 else if (slice == 2) look = 13;   // sulphur-yellow patches on olive: three real bodies now (GI-X b19-0 3, AH-T d4-6 B 2 a, MH-V d2-2 4); the share was halved by mistake when the olive misdraws were really the rocky picker's look 4
                 else if (slice == 3) look = 14;
+                else if (slice == 4) look = 27;   // dark grey-brown with maroon patches and pale flecks (real: Qiedea HD-O c8-2 1, 579 K)
                 else if (slice <= 5) look = 16;
                 else if (slice == 6) look = (((pickHash >> 24) & 1) == 0) ? 15 : 25;   // half of the very-dark slice now takes the lighter taupe/olive look: two real HMC partners (Qiedea IY-N c8-1 A 4 and A 5) drew the near-black one but were moderate brown-grey with a big dark-rayed crater in game
                 else if (slice == 7) look = 17;
@@ -267,6 +268,7 @@ namespace EliteBioRadar
                 else if (slice == 15 && detail.SurfacePressure > 0) look = 22;   // dusky blue-grey with salmon patches (one real body so far: Qiedea ER-U d3-6 1)
                 else if (slice == 16 && detail.SurfacePressure > 0) look = 23;   // blue-grey with white frost patches and long dark-rayed craters (one real body: ER-U d3-6 3)
                 else if (slice == 17) look = 24;   // pale peach with grey-brown blotches (one real body: ER-U d3-6 4)
+                else if (slice == 8) look = 26;   // even pale grey-tan with grey blotches and tiny red flecks (real: Qiedea HD-O c8-2 2, 439 K)
                 else if (slice <= 9) look = 8;   // the dark rust-brown family keeps turning up in game (TD-Z 1, SU-M C 7, TU-M A 2), so it gets a larger share
             }
             // Around an L dwarf the body reads monochrome red (see LowStarTintMaxK): start from the flat neutral grey-brown and let the tint colour it.
@@ -359,6 +361,12 @@ namespace EliteBioRadar
                 case 24: // pale peach with grey-brown blotches and one rayed crater (real: Qiedea ER-U d3-6 4, 308 K, thin SO2)
                     l.Light = rgb(214, 162, 126); l.Dark = rgb(150, 118, 96); l.Accent = rgb(118, 100, 86); l.Bright = rgb(234, 202, 166);
                     l.Contrast = 0.55; l.RustAmt = 0.25; l.BrightAmt = 0.55; l.CraterAmt = 0.6; l.RayAmt = -0.9; l.NoFrost = true; break;
+                case 26: // even pale grey-tan ground with grey blotches, tiny red-brown flecks and a big crater with long dark rays (real: Qiedea HD-O c8-2 2, HMC, 439 K, 0.27 g)
+                    l.Light = rgb(152, 140, 128); l.Dark = rgb(118, 114, 106); l.Accent = rgb(110, 56, 48); l.Bright = rgb(166, 152, 138);
+                    l.Contrast = 0.45; l.RustAmt = 0.25; l.BrightAmt = 0.1; l.CraterAmt = 0.35; l.RayAmt = -0.9; l.NoFrost = true; break;
+                case 27: // dark grey-brown with maroon patches and small pale flecks, fine grain (real: Qiedea HD-O c8-2 1, HMC, 579 K, 0.10 g)
+                    l.Light = rgb(92, 84, 80); l.Dark = rgb(58, 52, 50); l.Accent = rgb(104, 46, 46); l.Bright = rgb(180, 176, 170);
+                    l.Contrast = 0.8; l.RustAmt = 0.7; l.BrightAmt = 0.45; l.CraterAmt = 0.3; l.RayAmt = 0.0; l.NoFrost = true; break;
                 case 17: // olive base with lavender-grey and tan-pink patches, a fine camouflage pattern (real: SU-M c8-1 B 2)
                     l.Light = rgb(128, 126, 94); l.Dark = rgb(94, 98, 68); l.Accent = rgb(118, 108, 128); l.Bright = rgb(160, 140, 114);
                     l.Contrast = 0.6; l.RustAmt = 0.5; l.BrightAmt = 0.6; l.CraterAmt = 0.2; l.RayAmt = 0.0; break;
@@ -457,9 +465,13 @@ namespace EliteBioRadar
             int Roll(int shift, int n) => (int)((m >> shift) % (uint)n);
             int Pick(int roll, params int[] w) { int t = 0; for (int i = 0; i < w.Length; i++) { t += w[i]; if (roll < t) return i; } return w.Length - 1; }
 
-            int tone = Pick(Roll(0, 100), 28, 28, 18, 8, 9, 9);   // near-white, pale grey, mid grey, charcoal, dark red-brown, dark teal
-            Color[] light = { rgb(236, 235, 232), rgb(214, 216, 214), rgb(176, 178, 178), rgb(120, 120, 118), rgb(118, 76, 70), rgb(96, 110, 112) };
-            Color[] dark = { rgb(214, 213, 210), rgb(170, 172, 172), rgb(120, 122, 122), rgb(70, 70, 70), rgb(70, 48, 46), rgb(54, 60, 60) };
+            // near-white, pale grey, mid grey, charcoal, dark red-brown, dark teal; then the coloured grounds added from the 2026-10-27/28 pairs:
+            // peach-tan, grey-taupe, blue-grey, mint-white, dark slate
+            int tone = Pick(Roll(0, 100), 20, 20, 12, 6, 6, 6, 7, 7, 7, 5, 4);
+            Color[] light = { rgb(236, 235, 232), rgb(214, 216, 214), rgb(176, 178, 178), rgb(120, 120, 118), rgb(118, 76, 70), rgb(96, 110, 112),
+                              rgb(208, 166, 130), rgb(152, 142, 132), rgb(146, 156, 168), rgb(226, 232, 232), rgb(104, 112, 118) };
+            Color[] dark = { rgb(214, 213, 210), rgb(170, 172, 172), rgb(120, 122, 122), rgb(70, 70, 70), rgb(70, 48, 46), rgb(54, 60, 60),
+                             rgb(152, 118, 94), rgb(112, 106, 100), rgb(102, 112, 126), rgb(186, 200, 204), rgb(62, 70, 76) };
             l.Light = light[tone]; l.Dark = dark[tone];
             l.Accent = rgb(56, 54, 54); l.Ice = rgb(48, 48, 50); l.Bright = rgb(240, 240, 238);
             l.Contrast = tone <= 1 ? 0.30 + 0.15 * Roll(3, 100) / 100.0 : tone == 2 ? 0.55 : 0.80;
@@ -467,6 +479,28 @@ namespace EliteBioRadar
             l.CraterAmt = 0.25 + 0.75 * Roll(6, 100) / 100.0;
             l.RayAmt = Roll(9, 100) < 45 ? 0.4 + 0.6 * Roll(12, 100) / 100.0 : 0.05;
 
+            if (tone >= 6)
+            {
+                switch (tone)
+                {
+                    case 6: // peach-tan with dark purple-brown ragged patches, pale patches and long dark cracks (real: Qiedea NW-A b18-0 A 5 g, 55 K)
+                        l.Bright = rgb(214, 220, 224); l.BrightAmt = 0.45; l.Accent = rgb(70, 44, 52); l.RustAmt = 0.65;
+                        l.Ice = rgb(58, 40, 44); l.LineAmt = 1.0; l.LineFine = 1.0; l.Contrast = 0.7; l.CraterAmt = 0.15; l.SpecAmt = 0.6; break;
+                    case 7: // grey-taupe with teal-green patches and veins, glossy (real: Qiedea HD-O c8-2 11 e, 54 K)
+                        l.Bright = rgb(70, 128, 118); l.BrightAmt = 0.75; l.Accent = rgb(60, 56, 52); l.RustAmt = 0.3;
+                        l.Ice = rgb(64, 120, 110); l.LineAmt = 0.8; l.LineFine = 1.0; l.Contrast = 0.5; l.CraterAmt = 0.3; l.SpecAmt = 0.7; break;
+                    case 8: // blue-grey mottled with pale patches, small tan patches and big rayed craters (real: Qiedea NW-A b18-0 A 4 i, 90 K)
+                        l.Bright = rgb(198, 206, 214); l.BrightAmt = 0.7; l.Accent = rgb(214, 170, 130); l.RustAmt = 0.3;
+                        l.Contrast = 0.7; l.CraterAmt = 0.7; l.RayAmt = 0.9; l.SpecAmt = 0.5; break;
+                    case 9: // white-grey with wide mint-green and blue-grey patches and fine cracks (real: Qiedea NW-A b18-0 A 5 e, 55 K)
+                        l.Bright = rgb(140, 208, 184); l.BrightAmt = 0.9; l.Accent = rgb(92, 120, 160); l.RustAmt = 0.4;
+                        l.Ice = rgb(92, 120, 150); l.LineAmt = 0.6; l.LineFine = 1.0; l.Contrast = 0.4; l.CraterAmt = 0.2; l.SpecAmt = 0.7; break;
+                    default: // dark slate with ragged mauve-pink patches and dark speckled frost, glossy (real: Qiedea SW-B b17-0 1, 121 K)
+                        l.Bright = rgb(168, 126, 128); l.BrightAmt = 0.8; l.Accent = rgb(36, 40, 44); l.RustAmt = 0.5;
+                        l.Contrast = 0.8; l.CraterAmt = 0.15; l.SpecAmt = 0.6; break;
+                }
+                return;
+            }
             if (tone >= 3)
             {
                 // Dark grounds: pale frost patches and dark flecks (3 b rust-brown and glossy, 4 d teal, 2 c charcoal in game).
@@ -482,14 +516,17 @@ namespace EliteBioRadar
             Color[] ac = { rgb(92, 146, 188), rgb(108, 168, 166), rgb(216, 160, 106), rgb(98, 54, 46), rgb(152, 160, 72), rgb(62, 62, 64) };
             int form = Pick(Roll(24, 100), 35, 35, 30);               // ragged patches, thin cracks, fleck clusters
             int second = Roll(27, 100) < 30 ? Pick(Roll(2, 100), 0, 60, 40) : -1;   // sometimes a second form (cracks or flecks) as well
-            void Use(int f)
+            // A second form is often dark charcoal against the first form's colour (real: Qiedea NW-A b18-0 A 5 f, near-white with tan patches and dark ragged cracks).
+            bool darkSecond = Roll(11, 100) < 60;
+            void Use(int f, bool isSecond)
             {
-                if (f == 0 && acc != 5) { l.Bright = ac[acc]; l.BrightAmt = 0.55 + 0.35 * Roll(5, 100) / 100.0; }
-                else if (f == 1 || (f == 0 && acc == 5)) { l.Ice = ac[acc]; l.LineAmt = 1.0; l.LineFine = 1.0; }
-                else { l.Accent = ac[acc]; l.RustAmt = 0.45 + 0.20 * Roll(8, 100) / 100.0; }
+                Color c = isSecond && darkSecond ? rgb(80, 76, 74) : ac[acc];
+                if (f == 0 && acc != 5) { l.Bright = c; l.BrightAmt = 0.55 + 0.35 * Roll(5, 100) / 100.0; }
+                else if (f == 1 || (f == 0 && acc == 5)) { l.Ice = c; l.LineAmt = 1.0; l.LineFine = 1.0; }
+                else { l.Accent = c; l.RustAmt = 0.45 + 0.20 * Roll(8, 100) / 100.0; }
             }
-            Use(form);
-            if (second >= 0 && second != form) Use(second);
+            Use(form, false);
+            if (second >= 0 && second != form) Use(second, true);
         }
 
         private static LandableWorldLook GetIcyLandableLook(BodyScanDetail detail, int hash, double temp, double starK = 0)
@@ -642,7 +679,7 @@ namespace EliteBioRadar
             };
             int look = (hash >> 4) % 6;   // by name alone: a star-group window did not hold up (4E was grey beside orange 3 moons)
             if (((hash >> 21) % 10) == 0) look = 8;   // about 1 in 10: bright ochre-yellow with white frost patches (one real body so far)
-            if (((hash >> 16) % 8) == 0) look = 7;   // about 1 in 8: very dark with dull red patches and small yellow flecks (one real body: Qiedea KD-P c7-1 1 c)
+            if (((hash >> 16) % 8) == 0) look = ((hash >> 12) & 1) == 1 ? 9 : 7;   // about 1 in 8, half of them the grey-white-patched look 9 (real: Qiedea HD-O c8-2 2 a drew look 7 and was pale in game); look 7 is: very dark with dull red patches and small yellow flecks (one real body: Qiedea KD-P c7-1 1 c)
             if (detail.SurfacePressure > 0 && ((hash >> 20) % 20) < 2) look = 6;   // about one in ten of the thin-atmosphere ones: the very dark blue-grey (AB 6 f a was a match; AB 9 g and MH-V d2-2 6 d were not, so the share came down from a quarter)
             else if (detail.SurfacePressure > 0 && ((hash >> 20) % 20) < 10) look = new[] { 1, 3, 5 }[(hash >> 24) % 3];   // about 40% of the thin-atmosphere ones take a warm orange-tan look: nearly all of them did in game (Qiedea II-P c7-1 1 c and 1 d, MH-V d2-2 6 c and 6 d, AB 6 a, YK-M c8-0 1 d)
             switch (look)
@@ -668,6 +705,9 @@ namespace EliteBioRadar
                 case 7: // very dark charcoal-brown with dull red patches and small bright-yellow flecks, a couple of craters (real: Qiedea KD-P c7-1 1 c, silicate vapour geysers, 189 K)
                     l.Light = rgb(70, 60, 58); l.Dark = rgb(44, 38, 38); l.Accent = rgb(112, 46, 44); l.Bright = rgb(214, 196, 70);
                     l.Contrast = 0.7; l.RustAmt = 0.7; l.BrightAmt = 0.35; l.CraterAmt = 0.5; l.RayAmt = 0.0; break;
+                case 9: // ragged white-grey patches (about half the surface) over a red-brown ground with dense small craters (real: Qiedea HD-O c8-2 2 a, 439 K, 0.06 g, silicate vapour geysers)
+                    l.Light = rgb(116, 76, 66); l.Dark = rgb(74, 56, 52); l.Accent = rgb(130, 80, 66); l.Bright = rgb(186, 182, 176);
+                    l.Contrast = 1.1; l.RustAmt = 0.3; l.BrightAmt = 0.95; l.CraterAmt = 1.0; l.RayAmt = 0.0; break;
                 case 6: // very dark dim blue-grey with grey-green and cream-grey patches under a thick blue limb (real: AB 6 f a, CO2 1.7 kPa, 166 K, far from its star)
                     l.Light = rgb(74, 82, 94); l.Dark = rgb(46, 50, 58); l.Accent = rgb(84, 90, 76); l.Bright = rgb(122, 126, 130);
                     l.Contrast = 0.6; l.RustAmt = 0.3; l.BrightAmt = 0.4; l.CraterAmt = 0.4; l.RayAmt = 0.0; l.AtmGlow = 0.6; break;
@@ -1210,26 +1250,17 @@ namespace EliteBioRadar
                     look.BandCount = 12; look.Turb = 1.1; look.StormAmt = 0.85; look.Contrast = 1.1; look.Tilt = -0.45 + tiltJitter * 0.3;   // real B6 shows many small dark and pale storms
                     break;
                 case "GGW":
-                    // Two real looks: seen nearly pole-on (concentric rings, ~1 in 3), or - as in a later reference (A3,
-                    // 242 K) - a normal pale grey-white giant with tan belts and small pale/tan oval storms.
+                    // A normal giant, never seen pole-on (the app never draws a giant with its pole facing the view): a pale grey-white
+                    // giant with tan belts and small pale/tan oval storms (real: A3, 242 K), or dark-brown / tan with dark belts.
                     bool ggwRinged = detail.Rings.Any(rg => rg.OuterRad > 0 && rg.InnerRad > 0 && !rg.Name.Contains("Belt", StringComparison.OrdinalIgnoreCase));
-                    if (!ggwRinged && ((hash >> 10) % 3) == 0)   // pole-on only without rings
+                    look.C0 = rgb(0x6e, 0x6e, 0x6a); look.C1 = rgb(0x96, 0x98, 0x94); look.C2 = rgb(0xc8, 0xca, 0xc6);
+                    look.C3 = rgb(0xd2, 0xac, 0x84); look.Band4 = rgb(0x78, 0x68, 0x58); look.Glow = rgb(0xbe, 0xc0, 0xbc);
+                    look.BandCount = 12; look.Turb = 0.9; look.StormAmt = 0.9; look.Contrast = 0.55; look.Pitch = 0.0; look.Tilt = 0.02;   // real A3 bands run dead horizontal
+                    if (variantB || ggwRinged)   // dark-brown / tan with dark belts (real: ringed A4, 176 K); ringed water-life giants are always brown
                     {
-                        look.C0 = rgb(0x24, 0x20, 0x1a); look.C1 = rgb(0x4a, 0x46, 0x3c); look.C2 = rgb(0x8a, 0x88, 0x78);
-                        look.C3 = rgb(0x9a, 0x98, 0x88); look.Band4 = rgb(0x16, 0x12, 0x0e); look.Glow = rgb(0x7a, 0x78, 0x68);
-                        look.BandCount = 14; look.Turb = 0.5; look.StormAmt = 0.8; look.Contrast = 0.6; look.Pitch = 1.40;
-                    }
-                    else
-                    {
-                        look.C0 = rgb(0x6e, 0x6e, 0x6a); look.C1 = rgb(0x96, 0x98, 0x94); look.C2 = rgb(0xc8, 0xca, 0xc6);
-                        look.C3 = rgb(0xd2, 0xac, 0x84); look.Band4 = rgb(0x78, 0x68, 0x58); look.Glow = rgb(0xbe, 0xc0, 0xbc);
-                        look.BandCount = 12; look.Turb = 0.9; look.StormAmt = 0.9; look.Contrast = 0.55; look.Pitch = 0.0; look.Tilt = 0.02;   // real A3 bands run dead horizontal
-                        if (variantB || ggwRinged)   // dark-brown / tan with dark belts (real: ringed A4, 176 K); ringed water-life giants are always brown
-                        {
-                            look.C0 = rgb(0x24, 0x16, 0x10); look.C1 = rgb(0x50, 0x34, 0x22); look.C2 = rgb(0x8c, 0x6a, 0x46);
-                            look.C3 = rgb(0xaa, 0x86, 0x5c); look.Band4 = rgb(0x14, 0x0a, 0x06); look.Glow = rgb(0x7a, 0x5c, 0x3c);
-                            look.Contrast = 0.85; look.Turb = 1.1;
-                        }
+                        look.C0 = rgb(0x24, 0x16, 0x10); look.C1 = rgb(0x50, 0x34, 0x22); look.C2 = rgb(0x8c, 0x6a, 0x46);
+                        look.C3 = rgb(0xaa, 0x86, 0x5c); look.Band4 = rgb(0x14, 0x0a, 0x06); look.Glow = rgb(0x7a, 0x5c, 0x3c);
+                        look.Contrast = 0.85; look.Turb = 1.1;
                     }
                     break;
                 case "WTG":

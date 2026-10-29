@@ -75,7 +75,7 @@ namespace EliteBioRadar
         // sinkFrac: how far the planet has sunk, 0 = on the ground .. 1 = fully below the frame.
         private void DrawAscentBase(Canvas c, BodyScanDetail? body, double p, double t, double sinkFrac = -1)
         {
-            const double W = DescentW, H = DescentH, CX = DescentCx;
+            double W = DescentW, H = DescentH, CX = DescentCx;
             if (sinkFrac < 0) sinkFrac = Math.Pow(DSmooth(0, 0.8, p), 0.8);   // jump screen: sinks within the short charge
             var (skyC, hazeC, density) = body != null ? DescentAtmosphere(body) : (Color.FromRgb(100, 120, 140), Color.FromRgb(180, 200, 220), 0.4);
             double ap = DSmooth(0.05, 0.7, p);
@@ -99,10 +99,10 @@ namespace EliteBioRadar
             {
                 var sg = new StreamGeometry();
                 double ang = 0.06 * Math.Sin(t * 0.05), ca = Math.Cos(ang), sa = Math.Sin(ang);
-                const double pvx = CX, pvy = H * 1.3;
+                double pvx = CX, pvy = H * 1.3;
                 using (var gc = sg.Open())
                 {
-                    for (int i = 0; i < 130; i++)
+                    for (int i = 0; i < (int)(130 * W / DesignW); i++)
                     {
                         double bx = -W * 0.3 + Frac(Math.Sin(i * 12.9898) * 43758.5453) * W * 1.6;
                         double by = -H * 0.3 + Frac(Math.Sin(i * 78.233 + 4.1) * 43758.5453) * H * 1.3;
@@ -121,7 +121,7 @@ namespace EliteBioRadar
 
             // The planet sinks to a thin curve at the bottom.
             double hy = DLerp(H * 0.58, H * 1.16, sinkFrac);
-            double R = W * 2.2, cyp = hy + R;
+            double R = DesignW * 2.2, cyp = hy + R;
             string? iconCode = body != null ? MapPlanetClassToIconCode(body.PlanetClass) : null;
             bool real = body != null && iconCode != null && PlanetRenderer.IsTerrainFamily(iconCode);
             if (real) EnsureDescentSurface(body!, iconCode!);
@@ -169,10 +169,10 @@ namespace EliteBioRadar
                 });
                 var glowRect = new Ellipse
                 {
-                    Width = 1000, Height = 320, IsHitTestVisible = false,
+                    Width = Math.Max(1000, W + 200), Height = 320, IsHitTestVisible = false,
                     Fill = new RadialGradientBrush(DAlpha(hazeC, 0.40 * hazeAmt), DAlpha(hazeC, 0)),
                 };
-                Canvas.SetLeft(glowRect, CX - 500); Canvas.SetTop(glowRect, hy - 170);
+                Canvas.SetLeft(glowRect, CX - glowRect.Width / 2); Canvas.SetTop(glowRect, hy - 170);
                 c.Children.Add(glowRect);
             }
             var limb = LimbGeometry(CX, cyp, R);
@@ -182,9 +182,9 @@ namespace EliteBioRadar
             c.Children.Add(new Path { Data = limb, Stroke = new SolidColorBrush(DAlpha(DMix(hazeC, Colors.White, 0.4), 0.9 * limbA)), StrokeThickness = 2.4, IsHitTestVisible = false });
         }
 
-        private static void DrawAscentFrame(Canvas c)
+        private void DrawAscentFrame(Canvas c)
         {
-            const double W = DescentW, H = DescentH;
+            double W = DescentW, H = DescentH;
             var fr = new StreamGeometry();
             using (var gc = fr.Open())
             {
@@ -213,7 +213,7 @@ namespace EliteBioRadar
         // Normal climb: the descent's gates lead up out of the centre and fade as the air thins. No target.
         private void DrawClimbScene(Canvas c, BodyScanDetail? body, double altitudeM, double climbRateMps, double dt)
         {
-            const double H = DescentH, CX = DescentCx;
+            double H = DescentH, CX = DescentCx;
             // A climb in supercruise spans the ground to roughly 1,700 km (where position data first appears on the way down), so
             // progress is log-scaled over that range: ~1 km = 0.09, 10 km = 0.32, 100 km = 0.62, 400 km = 0.81.
             double target = Math.Clamp(Math.Log10(1 + Math.Max(altitudeM, 0) / 1000.0) / Math.Log10(1 + 1700.0), 0, 1);
@@ -255,7 +255,7 @@ namespace EliteBioRadar
         // The hyperspace tunnel shown from the end of the flash until arrival: streaks pouring out of the centre.
         private void DrawHyperspaceTunnel(Canvas c, double t, string next)
         {
-            const double W = DescentW, H = DescentH, CX = DescentCx;
+            double W = DescentW, H = DescentH, CX = DescentCx;
             double fx = CX, fy = H * 0.40;
             c.Children.Add(new Rectangle { Width = W, Height = H, IsHitTestVisible = false, Fill = new SolidColorBrush(Color.FromRgb(2, 4, 10)) });
             var core = new Ellipse { Width = 460, Height = 460, IsHitTestVisible = false, Fill = new RadialGradientBrush(DAlpha(Color.FromRgb(150, 190, 255), 0.38), DAlpha(Color.FromRgb(150, 190, 255), 0)) };
@@ -290,7 +290,7 @@ namespace EliteBioRadar
         // Jump from atmosphere. Returns the short status text for the HUD plate.
         private string DrawJumpScene(Canvas c, BodyScanDetail? body, double altitudeM, double dt)
         {
-            const double W = DescentW, H = DescentH, CX = DescentCx;
+            double W = DescentW, H = DescentH, CX = DescentCx;
             var now = DateTime.UtcNow;
             double t = Environment.TickCount64 / 1000.0;
             double p;

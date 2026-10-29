@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 
 namespace EliteBioRadar
 {
@@ -29,6 +30,26 @@ namespace EliteBioRadar
             Log.Write($"Animation '{request.Def.Id}' playing in the System Notifications window: {request.Subject}");
             firstDiscoveryVisual.BackdropOpacity = request.Def.BackdropOpacity;
             firstDiscoveryVisual.Start(request.Subject, request.Detail);
+        }
+
+        // The canvas MainWindow draws the atmosphere scene into while a phase this window is switched on for is under way (a wide layout, scaled to
+        // the window with the aspect kept). Called every frame; returns the canvas to fill.
+        public Canvas ShowLiveScene(double width, double height)
+        {
+            if (liveSceneBox.Visibility != Visibility.Visible)
+            {
+                liveSceneCanvas.Width = width; liveSceneCanvas.Height = height;
+                liveSceneBox.Visibility = Visibility.Visible;
+                Log.Write("Live atmosphere scene shown in the System Notifications window");
+            }
+            return liveSceneCanvas;
+        }
+
+        public void HideLiveScene()
+        {
+            if (liveSceneBox.Visibility == Visibility.Collapsed) return;
+            liveSceneBox.Visibility = Visibility.Collapsed;
+            liveSceneCanvas.Children.Clear();
         }
 
         private void RestorePlacement()

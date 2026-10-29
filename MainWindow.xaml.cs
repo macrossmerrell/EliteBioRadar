@@ -472,6 +472,7 @@ namespace EliteBioRadar
             bool showDeorbitNow = ShouldShowDeorbit(status);
             if (showDeorbitNow != _wasGliding) _manualMode = null;
             _wasGliding = showDeorbitNow;
+            if (showDeorbitNow != _sceneActive) OnAtmoSceneEdge(showDeorbitNow);
             bool fssActive = status.GuiFocus == 9;
             if (fssActive != _wasFssActive) _manualMode = null;
             _wasFssActive = fssActive;
@@ -486,7 +487,8 @@ namespace EliteBioRadar
                 // the reset rarely happened and the NEXT visit started with the previous one's
                 // leftovers: an ascent opened on the old descent arc instead of INITIALIZING (real
                 // report). Reset on every entry to and exit from Deorbit instead.
-                if (mode == InfoPanelMode.Deorbit || _lastMode == InfoPanelMode.Deorbit) ResetDeorbitState();
+                // (Mid-scene changes caused by a phase the tab is switched off for do not reset; the scene's own start and end do, in OnAtmoSceneEdge.)
+                if ((mode == InfoPanelMode.Deorbit || _lastMode == InfoPanelMode.Deorbit) && !showDeorbitNow) ResetDeorbitState();
                 // Same reasoning as the Deorbit reset above — UpdateStarPanel simply stops being
                 // called once the mode leaves Star, so a running neutron jet timer would
                 // otherwise keep redrawing an Image nobody's looking at indefinitely.
@@ -740,7 +742,7 @@ namespace EliteBioRadar
             if (PreviewStarType() != null) return InfoPanelMode.Star;
             // At the game's main menu Status.json is stale: do not keep showing the last flight (a failed hyperspace jump out of orbital cruise left the launch animation up).
             if (_watcher != null && _watcher.InMainMenu) return InfoPanelMode.Star;
-            if (ShouldShowDeorbit(status)) return InfoPanelMode.Deorbit;
+            if (ShouldShowDeorbit(status) && AtmoMainWanted()) return InfoPanelMode.Deorbit;
 
             // FSD spooling up for a real hyperspace jump wins next — even from an
             // atmospheric planet's surface. Odyssey allows charging the FSD directly from
@@ -807,7 +809,7 @@ namespace EliteBioRadar
                 if (re.RenderingTime == _animLastRenderTime) return;
                 _animLastRenderTime = re.RenderingTime;
             }
-            if (_lastMode == InfoPanelMode.Deorbit) { long t0 = System.Diagnostics.Stopwatch.GetTimestamp(); UpdateDeorbitPanel(force: true); NoteDeorbitFrame(System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds); }
+            if (_lastMode == InfoPanelMode.Deorbit || _sceneActive) { long t0 = System.Diagnostics.Stopwatch.GetTimestamp(); UpdateDeorbitPanel(force: true); NoteDeorbitFrame(System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds); }
             else if (_lastMode == InfoPanelMode.FssScanner) UpdateFssScannerPanel(force: true);
         }
 
@@ -831,9 +833,7 @@ namespace EliteBioRadar
 
             // The per-frame repaint (AnimFrame) only needs to run for these two - everything else is either static until its next real event
             // or already animated by RadarRenderer.
-            bool needsFastAnim = mode == InfoPanelMode.Deorbit || mode == InfoPanelMode.FssScanner;
-            if (needsFastAnim && !_animRunning) { CompositionTarget.Rendering += AnimFrame; _animRunning = true; }
-            else if (!needsFastAnim && _animRunning) { CompositionTarget.Rendering -= AnimFrame; _animRunning = false; }
+            SyncAnimSubscription();
 
             // Hide the right BIO SURVEY sidebar in every non-Radar mode without touching the
             // persisted _showSidebar setting — it restores exactly as configured the moment
@@ -883,7 +883,7 @@ namespace EliteBioRadar
             // mid-glide. Clicking the tab should always resolve to whichever of the pair is
             // actually current right now, matching what the button itself displays.
             var status = _watcher?.CurrentStatus ?? new EliteStatus();
-            if (clicked == InfoPanelMode.Radar && ShouldShowDeorbit(status)) clicked = InfoPanelMode.Deorbit;
+            if (clicked == InfoPanelMode.Radar && ShouldShowDeorbit(status) && AtmoMainWanted()) clicked = InfoPanelMode.Deorbit;
             else if (clicked == InfoPanelMode.Star && status.GuiFocus == 9) clicked = InfoPanelMode.FssScanner;
 
             _manualMode = clicked;
@@ -2522,8 +2522,6 @@ namespace EliteBioRadar
                 _deorbitDevTarget = (_deorbitDevRandom.NextDouble() * 2 - 1) * 1.4;
             _deorbitDevValue += (_deorbitDevTarget - _deorbitDevValue) * Math.Min(1, dt * 1.2);
 
-            deorbitPanelCanvas.Children.Clear();
-            deorbitPanelCanvas.Children.Add(MakeGridBackground(620, 580));
             // The placeholder planet below deliberately extends past the canvas edge (same
             // composition as the reference mockup) — clip so it doesn't bleed into whatever
             // sits beside this panel once the Viewbox scales it up.
@@ -2571,8 +2569,18 @@ namespace EliteBioRadar
                 estAltForScene = Math.Min(_deorbitLastAltitude.Value + Math.Max(_deorbitCachedVs, 0) * since, Math.Max(_deorbitLastAltitude.Value * 1.5, 1000));
             }
             bool jumpScene = JumpSceneActive(status);
+            _atmoPhase = jumpScene ? AnimationCatalog.AtmosphericJump : isDescending ? AnimationCatalog.Descent : undecided ? null : AnimationCatalog.Climb;
+            if (!PrepareAtmoOutputs()) return;
+            // The scene is built by one local function so it can be drawn twice per frame: into the Deorbit tab's canvas (dtDraw = the real elapsed time, which
+            // is what advances the animation state) and, when the System Notifications window wants it, into that window's wider canvas with dtDraw = 0
+            // so the second pass reads the same state instead of advancing it again. Layout follows the width of the canvas being filled (DescentW).
+            void BuildFrame(Canvas c, double dtDraw)
+            {
+            double w = DescentW;
+            c.Children.Clear();
+            c.Children.Add(MakeGridBackground(w, DescentH));
             string jumpPhase = "";
-            if (jumpScene) jumpPhase = DrawJumpScene(deorbitPanelCanvas, bodyDetail, estAltForScene, dt);
+            if (jumpScene) jumpPhase = DrawJumpScene(c, bodyDetail, estAltForScene, dtDraw);
             else if (isDescending)
             {
             // ---- Descent-arc scene — first WPF port of the "Deorbit Trajectory Concept"
@@ -2639,10 +2647,10 @@ namespace EliteBioRadar
             // Still smoothed on top of the extrapolated target (not snapped) — mainly to erase
             // the small discontinuity at the instant a fresh real reading supersedes the
             // extrapolation (if the real sink rate shifted slightly since the last update).
-            if (dt > 0)
+            if (dtDraw > 0)
             {
                 const double SmoothingPerSecond = 2.0;
-                double lerp = 1.0 - Math.Exp(-SmoothingPerSecond * dt);
+                double lerp = 1.0 - Math.Exp(-SmoothingPerSecond * dtDraw);
                 // Forward only: a descent never runs the ship back up the arc, whatever one
                 // noisy reading says (the arc restarts cleanly with the next approach).
                 if (altitudeT > _deorbitProgress.Value)
@@ -2682,11 +2690,11 @@ namespace EliteBioRadar
                 // overwhelming common case — the target was already scanned in orbit before the
                 // glide began — resolves this within a frame or two; this hold is rarely even
                 // visible.
-                deorbitPanelCanvas.Children.Add(MakeCenterLabel("RESOLVING BODY DATA…", 310, 270, InfoDimBrush, 14));
+                c.Children.Add(MakeCenterLabel("RESOLVING BODY DATA…", w / 2, 270, InfoDimBrush, 14));
             }
             else
             {
-                DrawDescentScene(deorbitPanelCanvas, bodyDetail!, deorbitIconCode!, descentT, dt, _deorbitDevValue, _deorbitCachedVs);
+                DrawDescentScene(c, bodyDetail!, deorbitIconCode!, descentT, dtDraw, _deorbitDevValue, _deorbitCachedVs);
             }
             }
             else if (undecided)
@@ -2699,11 +2707,11 @@ namespace EliteBioRadar
                 // what shows while nothing's committed yet. Better to show nothing committal for
                 // the one or two ticks this usually lasts than commit to the wrong one, however
                 // briefly.
-                deorbitPanelCanvas.Children.Add(MakeCenterLabel("INITIALIZING…", 310, 270, InfoDimBrush, 14));
+                c.Children.Add(MakeCenterLabel("INITIALIZING…", w / 2, 270, InfoDimBrush, 14));
             }
             else
             {
-                DrawClimbScene(deorbitPanelCanvas, bodyDetail, estAltForScene, _deorbitCachedVs, dt);
+                DrawClimbScene(c, bodyDetail, estAltForScene, _deorbitCachedVs, dtDraw);
             }
 
             // The glide flag doesn't distinguish direction — it's Frontier's general assisted-
@@ -2741,9 +2749,9 @@ namespace EliteBioRadar
                 Child = statusLabelInner,
             };
             statusPlate.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            Canvas.SetLeft(statusPlate, 310 - statusPlate.DesiredSize.Width / 2);
+            Canvas.SetLeft(statusPlate, w / 2 - statusPlate.DesiredSize.Width / 2);
             Canvas.SetTop(statusPlate, 10);
-            deorbitPanelCanvas.Children.Add(statusPlate);
+            c.Children.Add(statusPlate);
 
             // Large numbers (tens of thousands of m/s during the high-altitude approach, well
             // before glide proper) read as km/s instead, same treatment as altitude.
@@ -2751,15 +2759,29 @@ namespace EliteBioRadar
 
             string altText = status.Altitude >= 1000 ? $"{status.Altitude / 1000:N1} km"
                 : status.Altitude > 0 ? $"{status.Altitude:N0} m" : "—";
-            AddHudStat(deorbitPanelCanvas, 20, 24, false, "ALTITUDE", altText, InfoBrightValueBrush);
-            AddHudStat(deorbitPanelCanvas, 600, 24, true, "GRAVITY", $"{gravityG:F2} G", InfoBrightValueBrush);
+            AddHudStat(c, 20, 24, false, "ALTITUDE", altText, InfoBrightValueBrush);
+            AddHudStat(c, w - 20, 24, true, "GRAVITY", $"{gravityG:F2} G", InfoBrightValueBrush);
             // One speed reading, not two — a separate "vertical speed" stat here and a total
             // speed label at the bottom both showing numbers at once read as two conflicting
             // speeds. This is the total (always non-negative — it's a vector magnitude), with
             // the known glide-speed constant as a placeholder before there's a real reading yet.
-            AddHudStat(deorbitPanelCanvas, 20, 516, false, "SPEED",
+            AddHudStat(c, 20, 516, false, "SPEED",
                 haveRealSpeed ? FormatRate(totalSpeed) : "~2.5 km/s", InfoBrightValueBrush);
-            AddHudStat(deorbitPanelCanvas, 600, 516, true, "ATMOSPHERE", atmosphere, InfoBrightValueBrush);
+            AddHudStat(c, w - 20, 516, true, "ATMOSPHERE", atmosphere, InfoBrightValueBrush);
+            }
+
+            BuildFrame(deorbitPanelCanvas, dt);
+            if (_atmoWideCanvas != null)
+            {
+                _slotOverride = _wideSlot;
+                try { BuildFrame(_atmoWideCanvas, 0); }
+                catch (Exception ex)
+                {
+                    // The wide copy is secondary: a failure there must never take the app down mid-flight.
+                    if (!_atmoWideFailed) { _atmoWideFailed = true; Log.Write($"Wide atmosphere scene failed: {ex}"); }
+                }
+                finally { _slotOverride = null; }
+            }
         }
 
         // ---------------------------------------------------------------

@@ -18,7 +18,7 @@
 
         <TextBlock Grid.Row="0" Text="NOTIFICATIONS" Foreground="#00e5ff" FontSize="14" FontWeight="Bold" Margin="0,0,0,6"/>
         <TextBlock Grid.Row="1" Foreground="#446666" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"
-                   Text="Choose which window shows each animation. Tick both to show it in both windows; tick neither to turn it off. Changes apply immediately. System Notifications shows animations only while that window is open (the bell button in the header)."/>
+                   Text="Choose which window shows each animation. Tick both to show it in both windows; tick neither to turn it off. Changes apply immediately. System Notifications shows animations only while that window is open (the bell button in the header). Rows marked live follow the ship and show for as long as it is in that phase; with neither window ticked the screen is skipped."/>
 
         <!-- Column headings; the rows below use the same column widths (built in code, see NotificationSettingsWindow.cs). -->
         <Grid Grid.Row="2" Margin="0,0,0,4">

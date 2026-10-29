@@ -16,14 +16,20 @@ namespace EliteBioRadar
     // log-scaled altitude) - see UpdateDeorbitPanel.
     public partial class MainWindow
     {
-        private const double DescentW = 620, DescentH = 580, DescentCx = 310;
+        // The scenes are laid out for a 620 x 580 canvas (DesignW: planet radius, pad offsets) but are drawn at the width of whichever canvas
+        // is being filled (the Deorbit tab, or the wider System Notifications view): the current width is the active slot's, see AtmosphereRouting.cs.
+        private const double DesignW = 620, DescentH = 580;
+        private double DescentW => Slot.W;
+        private double DescentCx => Slot.W / 2;
 
         // The planet surface persists across frames (the deorbit canvas is rebuilt every tick): rebuilding the shader
-        // each frame would restart its animation and cost far too much.
-        private FrameworkElement? _descentSurface;
-        private string _descentSurfaceBody = "";
-        private LandableWorldShaderEffect? _descentEffect;        // set when the GPU shader draws the surface
-        private double _descentFrameCx, _descentFrameCy, _descentFrameR0;   // CPU fallback: sphere centre/radius inside its bitmap
+        // each frame would restart its animation and cost far too much. One per canvas (an element can only have one parent).
+        private FrameworkElement? _descentSurface { get => Slot.Surface; set => Slot.Surface = value; }
+        private string _descentSurfaceBody { get => Slot.SurfaceBody; set => Slot.SurfaceBody = value; }
+        private LandableWorldShaderEffect? _descentEffect { get => Slot.Effect; set => Slot.Effect = value; }   // set when the GPU shader draws the surface
+        private double _descentFrameCx { get => Slot.FrameCx; set => Slot.FrameCx = value; }   // CPU fallback: sphere centre/radius inside its bitmap
+        private double _descentFrameCy { get => Slot.FrameCy; set => Slot.FrameCy = value; }
+        private double _descentFrameR0 { get => Slot.FrameR0; set => Slot.FrameR0 = value; }
         private double _descentGatePhase, _descentGridPhase, _descentSpin;
 
         private static readonly Color DescentCyan = Color.FromRgb(0x55, 0xf2, 0xff);
@@ -125,7 +131,7 @@ namespace EliteBioRadar
 
         private void DrawDescentScene(Canvas c, BodyScanDetail body, string iconCode, double e, double dt, double dev, double sinkRate)
         {
-            const double W = DescentW, H = DescentH, CX = DescentCx;
+            double W = DescentW, H = DescentH, CX = DescentCx;
             var (skyC, hazeC, density) = DescentAtmosphere(body);
             double skyAmt = density * DSmooth(0.10, 0.85, e);
             double hazeAmt = density * (0.45 + 0.55 * DSmooth(0.0, 0.6, e));
@@ -133,7 +139,7 @@ namespace EliteBioRadar
             // Horizon rises and the planet flattens as the descent proceeds.
             double ease = 1 - Math.Pow(1 - e, 2);
             double hy = DLerp(H * 0.80, H * 0.40, ease);
-            double R = W * DLerp(0.95, 1.7, Math.Pow(e, 0.9));
+            double R = DesignW * DLerp(0.95, 1.7, Math.Pow(e, 0.9));   // the planet is the same size on a wider canvas: more of it shows
             double cyp = hy + R;
 
             _descentGatePhase = (_descentGatePhase + dt * (0.10 + 0.28 * e)) % 1.0;
@@ -159,7 +165,7 @@ namespace EliteBioRadar
                 var sg = new StreamGeometry();
                 using (var gc = sg.Open())
                 {
-                    for (int i = 0; i < 60; i++)
+                    for (int i = 0; i < (int)(60 * W / DesignW); i++)
                     {
                         double sx = Frac(Math.Sin(i * 12.9898) * 43758.5453) * W;
                         double sy = Frac(Math.Sin(i * 78.233 + 4.1) * 43758.5453) * Math.Max(20, hy - 20);
@@ -211,10 +217,10 @@ namespace EliteBioRadar
                 });
                 var glowRect = new Ellipse
                 {
-                    Width = 1000, Height = 320, IsHitTestVisible = false,
+                    Width = Math.Max(1000, W + 200), Height = 320, IsHitTestVisible = false,
                     Fill = new RadialGradientBrush(DAlpha(hazeC, 0.45 * hazeAmt), DAlpha(hazeC, 0)),
                 };
-                Canvas.SetLeft(glowRect, CX - 500); Canvas.SetTop(glowRect, hy - 170);
+                Canvas.SetLeft(glowRect, CX - glowRect.Width / 2); Canvas.SetTop(glowRect, hy - 170);
                 c.Children.Add(glowRect);
                 var limb = LimbGeometry(CX, cyp, R);
                 limb.Freeze();
@@ -361,7 +367,7 @@ namespace EliteBioRadar
 
         // The planet's edge over the visible width as a plain polyline (a huge arc segment is drawn with artifacts when its
         // ends are far off-screen).
-        private static StreamGeometry LimbGeometry(double cx, double cyp, double R)
+        private StreamGeometry LimbGeometry(double cx, double cyp, double R)
         {
             var geo = new StreamGeometry();
             using (var gc = geo.Open())
