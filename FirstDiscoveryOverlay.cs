@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
@@ -10,12 +11,12 @@ namespace EliteBioRadar
     // drawing in, bodies circling, drifting and slowly zooming) with rings pulsing out of the star, corner brackets locking on, then
     // the title spreading in over the system name. About 4 seconds, then it fades and the tab underneath is back. Drawn frame by
     // frame from one clock, so the title's letter-spacing animation (which a TextBlock cannot do) stays in step with the rest.
-    public sealed class FirstDiscoveryVisual : FrameworkElement
+    public sealed class FirstDiscoveryVisual : AnimationVisual
     {
         // The build-up runs 20% slower than first drawn (Slow), then holds for four more seconds before the final fade.
         private const double Slow = 1.2;
         private const double FadeOutAt = 3.3 * Slow + 4.0;           // seconds
-        private const double Duration = FadeOutAt + 0.6 * Slow;      // seconds, including the final fade
+        protected override double Duration => FadeOutAt + 0.6 * Slow;      // seconds, including the final fade
 
         private static readonly Brush Backdrop   = Frozen(Color.FromRgb(0x08, 0x0d, 0x0d));
         private static readonly Brush TitleStrip = Frozen(Color.FromArgb(0xd9, 0x08, 0x0d, 0x0d));
@@ -36,53 +37,17 @@ namespace EliteBioRadar
         private static readonly Typeface TitleFace = new(AppFonts.Mono, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
         private static readonly Typeface SubFace   = new(AppFonts.Mono, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
 
-        private readonly Stopwatch _clock = new();
-        private bool _running;
         private string _subtitle = "";
 
-        public event Action? Finished;
-
-        // How much of what lies underneath is hidden while it plays (1 = fully covered); set from the animation's catalog entry.
-        public double BackdropOpacity { get; set; } = 1.0;
-
-        public FirstDiscoveryVisual() { IsHitTestVisible = false; }
-
-        public void Start(string systemName, string starClass)
+        // Subject = system name, detail = star class.
+        protected override void OnStart(string systemName, string starClass)
         {
             _subtitle = starClass.Length > 0 ? $"{systemName}  ·  {starClass}" : systemName;
             _subtitle = _subtitle.ToUpperInvariant();
-            _clock.Restart();
-            if (!_running) { _running = true; CompositionTarget.Rendering += OnFrame; }
-            InvalidateVisual();
         }
 
-        public void Stop()
+        protected override void Render(DrawingContext dc, double w, double h, double real)
         {
-            if (_running) { CompositionTarget.Rendering -= OnFrame; _running = false; }
-            _clock.Stop();
-            InvalidateVisual();
-        }
-
-        private void OnFrame(object? sender, EventArgs e)
-        {
-            if (_clock.Elapsed.TotalSeconds >= Duration) { Stop(); Finished?.Invoke(); return; }
-            InvalidateVisual();
-        }
-
-        private static Brush Frozen(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
-        private static Pen FrozenPen(Color c, double w) { var p = new Pen(Frozen(c), w); p.Freeze(); return p; }
-
-        private static double Clamp01(double x) => x < 0 ? 0 : x > 1 ? 1 : x;
-        private static double EaseOut(double x) { x = Clamp01(x); return 1 - Math.Pow(1 - x, 3); }
-        // Fraction (0..1) of an animation that starts at `start` and lasts `len`.
-        private static double Phase(double t, double start, double len) => Clamp01((t - start) / len);
-
-        protected override void OnRender(DrawingContext dc)
-        {
-            if (!_running) return;
-            double w = ActualWidth, h = ActualHeight;
-            if (w < 10 || h < 10) return;
-            double real = _clock.Elapsed.TotalSeconds;
             double fadeOut = real > FadeOutAt ? Clamp01(1 - (real - FadeOutAt) / (Duration - FadeOutAt)) : 1;
             double t = real / Slow;   // animation time: every phase below is written in the original timings
             double env = Math.Min(1, t / 0.5) * fadeOut;
@@ -202,26 +167,6 @@ namespace EliteBioRadar
             if (ps > 0) DrawSpaced(dc, _subtitle, SubFace, subSize, Pale, w / 2, subY, 0.14, ps * fadeOut);
         }
 
-        // Centred text with an explicit gap (in em) between the letters; FormattedText has no letter-spacing of its own.
-        private void DrawSpaced(DrawingContext dc, string text, Typeface face, double size, Brush brush, double centreX, double y, double spacingEm, double opacity)
-        {
-            double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-            var glyphs = new FormattedText[text.Length];
-            double total = 0;
-            for (int i = 0; i < text.Length; i++)
-            {
-                glyphs[i] = new FormattedText(text[i].ToString(), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, face, size, brush, dpi);
-                total += glyphs[i].WidthIncludingTrailingWhitespace + (i < text.Length - 1 ? spacingEm * size : 0);
-            }
-            double x = centreX - total / 2;
-            dc.PushOpacity(opacity);
-            for (int i = 0; i < text.Length; i++)
-            {
-                dc.DrawText(glyphs[i], new Point(x, y));
-                x += glyphs[i].WidthIncludingTrailingWhitespace + spacingEm * size;
-            }
-            dc.Pop();
-        }
     }
 
     public partial class MainWindow
@@ -232,6 +177,22 @@ namespace EliteBioRadar
             svc.SystemFirstDiscovered += (system, starType) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.FirstDiscovery, system,
                     starType.Length > 0 ? StarClassNames.GetDisplayName(starType) : "")));
+            svc.ShipLanded += body => Dispatcher.InvokeAsync(() =>
+            {
+                var d = svc.GetKnownBodyDetail(body);
+                string stats = "";
+                if (d != null)
+                {
+                    var parts = new List<string>();
+                    if (d.SurfaceGravity > 0) parts.Add($"GRAVITY={d.SurfaceGravity / 9.80665:F2} G");
+                    if (d.SurfaceTemperature > 0) parts.Add($"SURFACE={d.SurfaceTemperature:F0} K");
+                    parts.Add($"ATMOSPHERE={FormatAtmosphere(d.AtmosphereType)}");
+                    stats = string.Join("|", parts);
+                }
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Landed, body, stats));
+            });
+            svc.ShipDocked += (station, stats) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Docked, station, stats)));
         }
 
         // The Elite Bio Radar window as an animation surface: the overlay layer sits over whichever tab is showing.
@@ -243,11 +204,12 @@ namespace EliteBioRadar
             public MainWindowAnimationSurface(MainWindow w)
             {
                 _w = w;
-                _w.firstDiscoveryVisual.Finished += () =>
-                {
-                    _w.firstDiscoveryLayer.Visibility = Visibility.Collapsed;
-                    var d = _done; _done = null; d?.Invoke();
-                };
+                foreach (var v in new AnimationVisual[] { _w.firstDiscoveryVisual, _w.landedVisual, _w.dockedVisual })
+                    v.Finished += () =>
+                    {
+                        _w.firstDiscoveryLayer.Visibility = Visibility.Collapsed;
+                        var d = _done; _done = null; d?.Invoke();
+                    };
             }
 
             public AnimationSurfaces Kind => AnimationSurfaces.Main;
@@ -257,9 +219,10 @@ namespace EliteBioRadar
             {
                 _done = done;
                 Log.Write($"Animation '{request.Def.Id}' playing in the Elite Bio Radar window: {request.Subject}");
-                _w.firstDiscoveryVisual.BackdropOpacity = request.Def.BackdropOpacity;
+                AnimationVisual v = request.Def.Id switch { "landed" => _w.landedVisual, "docked" => _w.dockedVisual, _ => _w.firstDiscoveryVisual };
+                v.BackdropOpacity = request.Def.BackdropOpacity;
                 _w.firstDiscoveryLayer.Visibility = Visibility.Visible;
-                _w.firstDiscoveryVisual.Start(request.Subject, request.Detail);
+                v.Start(request.Subject, request.Detail);
             }
         }
     }

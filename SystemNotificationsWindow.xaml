@@ -18,5 +18,7 @@
             <Canvas x:Name="liveSceneCanvas" Background="#080d0d" ClipToBounds="True"/>
         </Viewbox>
         <local:FirstDiscoveryVisual x:Name="firstDiscoveryVisual"/>
+        <local:LandedVisual x:Name="landedVisual"/>
+        <local:DockedVisual x:Name="dockedVisual"/>
     </Grid>
 </Window>

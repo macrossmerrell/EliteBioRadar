@@ -298,6 +298,8 @@
             <!-- Animation overlay: plays over whichever tab is showing (First Discovery today). See AnimationRouter.cs / FirstDiscoveryOverlay.cs. -->
             <Grid x:Name="firstDiscoveryLayer" Grid.Column="0" Grid.ColumnSpan="3" Panel.ZIndex="20" IsHitTestVisible="False" Visibility="Collapsed">
                 <local:FirstDiscoveryVisual x:Name="firstDiscoveryVisual"/>
+                <local:LandedVisual x:Name="landedVisual"/>
+                <local:DockedVisual x:Name="dockedVisual"/>
             </Grid>
 
             <!-- STAR / PLANET info panels — replace radarCanvas when no Lat/Lon is present.

@@ -16,7 +16,8 @@ namespace EliteBioRadar
         {
             InitializeComponent();
             RestorePlacement();
-            firstDiscoveryVisual.Finished += () => { var d = _done; _done = null; d?.Invoke(); };
+            foreach (var v in new AnimationVisual[] { firstDiscoveryVisual, landedVisual, dockedVisual })
+                v.Finished += () => { var d = _done; _done = null; d?.Invoke(); };
             AnimationRouter.Register(this);
             Closed += (_, _) => { AnimationRouter.Unregister(this); SaveWindowState(); };
         }
@@ -28,8 +29,9 @@ namespace EliteBioRadar
         {
             _done = done;
             Log.Write($"Animation '{request.Def.Id}' playing in the System Notifications window: {request.Subject}");
-            firstDiscoveryVisual.BackdropOpacity = request.Def.BackdropOpacity;
-            firstDiscoveryVisual.Start(request.Subject, request.Detail);
+            AnimationVisual v = request.Def.Id switch { "landed" => landedVisual, "docked" => dockedVisual, _ => firstDiscoveryVisual };
+            v.BackdropOpacity = request.Def.BackdropOpacity;
+            v.Start(request.Subject, request.Detail);
         }
 
         // The canvas MainWindow draws the atmosphere scene into while a phase this window is switched on for is under way (a wide layout, scaled to

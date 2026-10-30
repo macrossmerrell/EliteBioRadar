@@ -20,6 +20,12 @@ namespace EliteBioRadar
         public static readonly AnimationDef FirstDiscovery =
             new("first-discovery", "First discovery", "Discovery", AnimationSurfaces.Main, 1.0, "Sample System", "M-Type");
 
+        // Detail = "LABEL=value|LABEL=value": the stats line each of these shows under its title.
+        public static readonly AnimationDef Landed =
+            new("landed", "Landed on a planet", "Surface", AnimationSurfaces.Main, 1.0, "Qiedea EI-O c8-1 A 1", "GRAVITY=0.89 G|SURFACE=214 K|ATMOSPHERE=None");
+        public static readonly AnimationDef Docked =
+            new("docked", "Docked at a station or carrier", "Docking", AnimationSurfaces.Main, 1.0, "Sample Station", "TYPE=Coriolis|ECONOMY=Refinery|DISTANCE=432 ls");
+
         public static readonly AnimationDef Descent =
             new("descent", "Descent to a planet", "Atmosphere", AnimationSurfaces.Main, 1.0, "", "", Live: true);
         public static readonly AnimationDef Climb =
@@ -27,7 +33,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef AtmosphericJump =
             new("atmospheric-jump", "Hyperspace jump from an atmosphere", "Atmosphere", AnimationSurfaces.Main, 1.0, "", "", Live: true);
 
-        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, Descent, Climb, AtmosphericJump };
+        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, Landed, Docked, Descent, Climb, AtmosphericJump };
 
         // The user's choice from the settings file, else the animation's own default.
         public static AnimationSurfaces SurfacesFor(AnimationDef def, AppSettingsData settings) =>

@@ -25,6 +25,11 @@ namespace EliteBioRadar
         public event EventHandler? StarScanUpdated;
         // Raised once, live only, when the arrival star's automatic scan says nobody had discovered the system (system name, star type).
         public event Action<string, string>? SystemFirstDiscovered;
+        // The commander's ship touched down on a planet (body name) / docked (station name, "LABEL=value|..." stats). Live events only; see ProcessJournalLine.
+        public event Action<string>? ShipLanded;
+        public event Action<string, string>? ShipDocked;
+        private string _landedRaisedFor = "", _dockedRaisedFor = "";
+        private DateTime _landedRaisedAt = DateTime.MinValue, _dockedRaisedAt = DateTime.MinValue;
         private string _firstDiscoveryRaisedFor = "";
         public event EventHandler? PlanetTargetUpdated;
         public event EventHandler? DestinationUpdated;
@@ -4201,6 +4206,28 @@ namespace EliteBioRadar
                     }
                     break;
 
+                // Docked at a station, outpost, settlement or carrier (landing at a surface port also logs this, not a Touchdown): the Docked moment.
+                case "Docked":
+                    if (!backfill)
+                    {
+                        string station = obj.Value<string>("StationName_Localised") ?? obj.Value<string>("StationName") ?? "";
+                        if (!string.IsNullOrEmpty(station) &&
+                            !(string.Equals(station, _dockedRaisedFor, StringComparison.OrdinalIgnoreCase) && (DateTime.UtcNow - _dockedRaisedAt).TotalSeconds < 60))
+                        {
+                            _dockedRaisedFor = station; _dockedRaisedAt = DateTime.UtcNow;
+                            var stats = new List<string>();
+                            string stype = obj.Value<string>("StationType") ?? "";
+                            if (stype.Length > 0) stats.Add("TYPE=" + System.Text.RegularExpressions.Regex.Replace(stype, "(?<=[a-z])(?=[A-Z])", " "));
+                            string econ = obj.Value<string>("StationEconomy_Localised") ?? "";
+                            if (econ.Length > 0) stats.Add("ECONOMY=" + econ);
+                            double? dist = obj.Value<double?>("DistFromStarLS");
+                            if (dist.HasValue && dist.Value > 0) stats.Add($"DISTANCE={dist.Value:N0} ls");
+                            Log.Write($"Docked: '{station}' ({stype})");
+                            ShipDocked?.Invoke(station, string.Join("|", stats));
+                        }
+                    }
+                    break;
+
                 // The ship taking off on its own for orbit (the player left its vicinity on foot or in the SRV): the game's own word that it has departed, so the departure flag
                 // no longer has to wait for the distance guess.
                 case "Liftoff":
@@ -4215,6 +4242,19 @@ namespace EliteBioRadar
                 case "Touchdown":
                 {
                     var body = obj.Value<string>("Body") ?? obj.Value<string>("BodyName") ?? "";
+
+                    // The Landed moment: only a touchdown the commander flew (not a recall or a taxi), live, and not a bounce on the same body a minute ago.
+                    if (evt == "Touchdown" && !backfill && obj.Value<bool?>("PlayerControlled") != false && obj.Value<bool?>("Taxi") != true)
+                    {
+                        string landedBody = !string.IsNullOrEmpty(body) ? body : CurrentBody;
+                        if (!string.IsNullOrEmpty(landedBody) &&
+                            !(string.Equals(landedBody, _landedRaisedFor, StringComparison.OrdinalIgnoreCase) && (DateTime.UtcNow - _landedRaisedAt).TotalSeconds < 60))
+                        {
+                            _landedRaisedFor = landedBody; _landedRaisedAt = DateTime.UtcNow;
+                            Log.Write($"Landed: '{landedBody}'");
+                            ShipLanded?.Invoke(landedBody);
+                        }
+                    }
 
                     // A real Touchdown always tells us exactly where the ship now sits — whether
                     // the player flew it down (PlayerControlled:true) or it auto-flew to a recall
