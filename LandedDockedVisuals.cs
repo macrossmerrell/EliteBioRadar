@@ -15,19 +15,36 @@ namespace EliteBioRadar
         private const double FadeOutAt = 5.8;
         protected override double Duration => FadeOutAt + 0.6;
 
-        private static readonly Typeface Mono = new(AppFonts.Mono, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
-        private static readonly Brush Amber = Frozen(Color.FromRgb(0xf2, 0xb8, 0x4b));
-        private static readonly Brush Pale = Frozen(Color.FromRgb(0xff, 0xd9, 0xa0));
-        private static readonly Brush Dim = Frozen(Color.FromRgb(0x5a, 0xa8, 0xb0));
-        private static readonly Brush White = Frozen(Color.FromRgb(0xff, 0xff, 0xff));
-        private static readonly Brush Green = Frozen(Color.FromRgb(0x7d, 0xff, 0xb0));
-        private static readonly Brush Strip = Frozen(Color.FromArgb(0xd9, 0x08, 0x0d, 0x0d));
         private static readonly Brush Ground = Frozen(Color.FromRgb(0x1d, 0x12, 0x10));
         private static readonly Brush Frame = Frozen(Color.FromRgb(0x07, 0x0b, 0x0e));
         private static readonly Pen Horizon = FrozenPen(Color.FromRgb(0x3a, 0x24, 0x20), 1.5);
         private static readonly Pen Lines = FrozenPen(Color.FromArgb(64, 120, 80, 64), 0.8);
         private static readonly Pen FrameEdge = FrozenPen(Color.FromArgb(128, 85, 242, 255), 1);
         private static readonly Brush Disc = Frozen(Color.FromRgb(0xff, 0xe0, 0xb0));
+
+        private static readonly Brush Glow = MakeGlow();
+        private static readonly Brush DustBrush = MakeDust();   // opacity per cloud is applied when drawing
+
+        private static Brush MakeGlow()
+        {
+            var b = new RadialGradientBrush();
+            b.GradientStops.Add(new GradientStop(Color.FromArgb(230, 255, 200, 130), 0));
+            b.GradientStops.Add(new GradientStop(Color.FromArgb(102, 255, 150, 90), 0.25));
+            b.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 120, 80), 1));
+            b.Freeze(); return b;
+        }
+
+        private static Brush MakeDust()
+        {
+            var b = new RadialGradientBrush(Color.FromRgb(176, 112, 88), Color.FromArgb(0, 176, 112, 88));
+            b.Freeze(); return b;
+        }
+
+        // Depends only on the size of the area, so they are rebuilt when that changes, not every frame.
+        private Brush? _sky;
+        private double _skyHz;
+        private Geometry? _leftPillar, _rightPillar;
+        private double _pillarW, _pillarH;
 
         // Rocks and dust clouds are laid out once: fractions of the width and of the depth of the ground.
         private static readonly (double x, double d, double w, double h)[] Rocks = MakeRocks();
@@ -60,11 +77,9 @@ namespace EliteBioRadar
 
         protected override void Render(DrawingContext dc, double w, double h, double t)
         {
-            double fadeOut = t > FadeOutAt ? Clamp01(1 - (t - FadeOutAt) / (Duration - FadeOutAt)) : 1;
-            double env = Math.Min(1, t / 0.35) * fadeOut;
+            var (fadeOut, env, u, W, H) = LayoutScene(w, h, t, FadeOutAt);
             if (env <= 0) return;
-            double u = Math.Max(0.8, Math.Min(h / 210.0, w / 300.0));
-            double W = w / u, H = h / u, hz = H * 0.585;
+            double hz = H * 0.585;
 
             dc.PushTransform(new ScaleTransform(u, u));
             dc.PushOpacity(BackdropOpacity * env);
@@ -73,20 +88,20 @@ namespace EliteBioRadar
             double shake = 5 * Math.Exp(-t * 5) * Math.Sin(t * 30) + 0.7 * Math.Exp(-t * 1.1) * Math.Sin(t * 53);
             dc.PushTransform(new TranslateTransform(0, shake));
 
-            var sky = new LinearGradientBrush { MappingMode = BrushMappingMode.Absolute, StartPoint = new Point(0, 0), EndPoint = new Point(0, hz) };
-            sky.GradientStops.Add(new GradientStop(Color.FromRgb(4, 7, 12), 0));
-            sky.GradientStops.Add(new GradientStop(Color.FromRgb(26, 20, 32), 0.6));
-            sky.GradientStops.Add(new GradientStop(Color.FromRgb(90, 58, 50), 1));
-            dc.DrawRectangle(sky, null, new Rect(-40, -40, W + 80, hz + 40));
+            if (_sky == null || _skyHz != hz)
+            {
+                var sky = new LinearGradientBrush { MappingMode = BrushMappingMode.Absolute, StartPoint = new Point(0, 0), EndPoint = new Point(0, hz) };
+                sky.GradientStops.Add(new GradientStop(Color.FromRgb(4, 7, 12), 0));
+                sky.GradientStops.Add(new GradientStop(Color.FromRgb(26, 20, 32), 0.6));
+                sky.GradientStops.Add(new GradientStop(Color.FromRgb(90, 58, 50), 1));
+                sky.Freeze(); _sky = sky; _skyHz = hz;
+            }
+            dc.DrawRectangle(_sky, null, new Rect(-40, -40, W + 80, hz + 40));
 
             // The star, low on the horizon, climbing a little.
             double sx = W * 0.69, sy = hz + 2 - 22 * Smooth(0, 5, t);
             dc.PushClip(new RectangleGeometry(new Rect(-40, -40, W + 80, hz + 40)));
-            var glow = new RadialGradientBrush();
-            glow.GradientStops.Add(new GradientStop(Color.FromArgb(230, 255, 200, 130), 0));
-            glow.GradientStops.Add(new GradientStop(Color.FromArgb(102, 255, 150, 90), 0.25));
-            glow.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 120, 80), 1));
-            dc.DrawEllipse(glow, null, new Point(sx, sy), 86, 86);
+            dc.DrawEllipse(Glow, null, new Point(sx, sy), 86, 86);
             dc.DrawEllipse(Disc, null, new Point(sx, sy), 9, 9);
             dc.Pop();
 
@@ -110,19 +125,24 @@ namespace EliteBioRadar
                 {
                     double x = (((q.x * W + t * q.speed * 1.6) % span) + span) % span - 80;
                     double y = hz + 10 + q.d * Math.Max(20, H - hz - 50) - 14 * Smooth(0.5, 4.8, t);
-                    byte a = (byte)Math.Clamp(da * q.alpha * 255, 0, 255);
-                    var b = new RadialGradientBrush(Color.FromArgb(a, 176, 112, 88), Color.FromArgb(0, 176, 112, 88));
-                    dc.DrawEllipse(b, null, new Point(x, y), q.rx, q.ry);
+                    dc.PushOpacity(Clamp01(da * q.alpha));
+                    dc.DrawEllipse(DustBrush, null, new Point(x, y), q.rx, q.ry);
+                    dc.Pop();
                 }
             }
             dc.Pop();   // shake
 
             // Cockpit frame: side pillars and the dash, with a ground readout.
-            var left = new StreamGeometry();
-            using (var g = left.Open()) { g.BeginFigure(new Point(0, 0), true, true); g.LineTo(new Point(34, 0), true, false); g.LineTo(new Point(8, H), true, false); g.LineTo(new Point(0, H), true, false); }
-            var right = new StreamGeometry();
-            using (var g = right.Open()) { g.BeginFigure(new Point(W, 0), true, true); g.LineTo(new Point(W - 34, 0), true, false); g.LineTo(new Point(W - 8, H), true, false); g.LineTo(new Point(W, H), true, false); }
-            dc.DrawGeometry(Frame, null, left); dc.DrawGeometry(Frame, null, right);
+            if (_leftPillar == null || _pillarW != W || _pillarH != H)
+            {
+                var left = new StreamGeometry();
+                using (var g = left.Open()) { g.BeginFigure(new Point(0, 0), true, true); g.LineTo(new Point(34, 0), true, false); g.LineTo(new Point(8, H), true, false); g.LineTo(new Point(0, H), true, false); }
+                var right = new StreamGeometry();
+                using (var g = right.Open()) { g.BeginFigure(new Point(W, 0), true, true); g.LineTo(new Point(W - 34, 0), true, false); g.LineTo(new Point(W - 8, H), true, false); g.LineTo(new Point(W, H), true, false); }
+                left.Freeze(); right.Freeze();
+                _leftPillar = left; _rightPillar = right; _pillarW = W; _pillarH = H;
+            }
+            dc.DrawGeometry(Frame, null, _leftPillar); dc.DrawGeometry(Frame, null, _rightPillar);
             dc.DrawLine(FrameEdge, new Point(34, 0), new Point(8, H)); dc.DrawLine(FrameEdge, new Point(W - 34, 0), new Point(W - 8, H));
             dc.DrawRectangle(Frame, null, new Rect(0, H - 30, W, 30));
             dc.DrawRectangle(Frame, null, new Rect(8, H - 30, W - 16, 1));
@@ -130,27 +150,21 @@ namespace EliteBioRadar
             dc.Pop();   // backdrop opacity
 
             // Text, drawn at full strength over the scene.
-            DrawText(dc, "ALT", Mono, 10, Dim, 30, H - 22, env * 0.9, TextAlignment.Left);
-            DrawText(dc, "0 m", Mono, 13, White, 52, H - 24, env, TextAlignment.Left);
-            DrawText(dc, "ON GROUND", Mono, 11, Green, W - 30, H - 22, env, TextAlignment.Right);
+            DrawText(dc, "ALT", MonoFace, 10, DimBrush, 30, H - 22, env * 0.9, TextAlignment.Left);
+            DrawText(dc, "0 m", MonoFace, 13, WhiteBrush, 52, H - 24, env, TextAlignment.Left);
+            DrawText(dc, "ON GROUND", MonoFace, 11, GreenBrush, W - 30, H - 22, env, TextAlignment.Right);
 
             double pt = Phase(t, 1.5, 0.8);
             if (pt > 0)
             {
                 double ease = EaseOut(pt), titleY = H * 0.28;
                 dc.PushOpacity(ease * fadeOut);
-                dc.DrawRectangle(Strip, null, new Rect(-40, titleY - 14, W + 80, 86));
+                dc.DrawRectangle(StripBrush, null, new Rect(-40, titleY - 14, W + 80, 86));
                 dc.Pop();
-                DrawSpaced(dc, "LANDED", Mono, 22, Amber, W / 2, titleY, 1.0 - 0.58 * ease, ease * fadeOut);
+                DrawSpaced(dc, "LANDED", MonoFace, 22, TitleBrush, W / 2, titleY, 1.0 - 0.58 * ease, ease * fadeOut);
                 double ps = Phase(t, 2.1, 0.5);
-                DrawText(dc, _subject, Mono, 12, Pale, W / 2, titleY + 34, ps * fadeOut);
-                for (int i = 0; i < _stats.Length && i < 3; i++)
-                {
-                    double a = Phase(t, 2.5 + i * 0.3, 0.5) * fadeOut;
-                    double x = W / 2 + (i - (Math.Min(_stats.Length, 3) - 1) / 2.0) * 100;
-                    DrawText(dc, _stats[i].label, Mono, 9, Dim, x, titleY + 56, a * 0.85);
-                    DrawText(dc, _stats[i].value, Mono, 12, White, x, titleY + 68, a);
-                }
+                DrawText(dc, _subject, MonoFace, 12, SubjectBrush, W / 2, titleY + 34, ps * fadeOut);
+                DrawStats(dc, _stats, MonoFace, W / 2, titleY + 56, W - 80, t, 2.5, fadeOut);
             }
             dc.Pop();   // scale
         }
@@ -164,15 +178,29 @@ namespace EliteBioRadar
         private const double ContactAt = 1.1, FadeOutAt = 5.0;
         protected override double Duration => FadeOutAt + 0.6;
 
-        private static readonly Typeface Mono = new(AppFonts.Mono, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
         private static readonly Brush Backdrop = Frozen(Color.FromRgb(0x05, 0x09, 0x0b));
-        private static readonly Brush Amber = Frozen(Color.FromRgb(0xf2, 0xb8, 0x4b));
-        private static readonly Brush Pale = Frozen(Color.FromRgb(0xff, 0xd9, 0xa0));
-        private static readonly Brush Dim = Frozen(Color.FromRgb(0x5a, 0xa8, 0xb0));
-        private static readonly Brush White = Frozen(Color.FromRgb(0xff, 0xff, 0xff));
+        private static readonly Pen RingPen = MakeRingPen();
+        private static readonly Pen RipplePen = FrozenPen(Color.FromRgb(125, 255, 176), 2);   // fades by opacity when drawn
+        private static readonly Brush FlashBrush = Frozen(Color.FromRgb(255, 255, 255));
+        private static readonly Geometry Hull = MakeHull();
+
+        private static Pen MakeRingPen()
+        {
+            var p = new Pen(Frozen(Color.FromArgb(191, 255, 111, 210)), 1.3) { DashStyle = new DashStyle(new[] { 4.0, 3.2 }, 0) };
+            p.Freeze(); return p;
+        }
+
+        private static Geometry MakeHull()
+        {
+            var hull = new StreamGeometry();
+            using (var g = hull.Open())
+            {
+                g.BeginFigure(new Point(0, -24), true, true);
+                foreach (var p in new[] { new Point(17, 15), new Point(6, 11), new Point(0, 18), new Point(-6, 11), new Point(-17, 15) }) g.LineTo(p, true, false);
+            }
+            hull.Freeze(); return hull;
+        }
         private static readonly Brush Cyan = Frozen(Color.FromRgb(0x55, 0xf2, 0xff));
-        private static readonly Brush Green = Frozen(Color.FromRgb(0x7d, 0xff, 0xb0));
-        private static readonly Brush Strip = Frozen(Color.FromArgb(0xd9, 0x08, 0x0d, 0x0d));
         private static readonly Brush ShipFill = Frozen(Color.FromRgb(0x1b, 0x2a, 0x33));
         private static readonly Brush Shadow = Frozen(Color.FromArgb(90, 0, 0, 0));
         private static readonly Brush Canopy = Frozen(Color.FromArgb(153, 85, 242, 255));
@@ -192,11 +220,9 @@ namespace EliteBioRadar
 
         protected override void Render(DrawingContext dc, double w, double h, double t)
         {
-            double fadeOut = t > FadeOutAt ? Clamp01(1 - (t - FadeOutAt) / (Duration - FadeOutAt)) : 1;
-            double env = Math.Min(1, t / 0.35) * fadeOut;
+            var (fadeOut, env, u, W, H) = LayoutScene(w, h, t, FadeOutAt);
             if (env <= 0) return;
-            double u = Math.Max(0.8, Math.Min(h / 210.0, w / 300.0));
-            double W = w / u, H = h / u, cx = W / 2, cy = H * 0.46;
+            double cx = W / 2, cy = H * 0.46;
 
             dc.PushTransform(new ScaleTransform(u, u));
             dc.PushOpacity(BackdropOpacity * env);
@@ -216,18 +242,15 @@ namespace EliteBioRadar
             dc.PushTransform(new TranslateTransform(cx, cy + (1 - e) * 6));
             dc.PushTransform(new ScaleTransform(sc, sc));
             dc.DrawEllipse(Shadow, null, new Point(5 * (1 - e) + 2, 6), 20, 24);
-            var hull = new StreamGeometry();
-            using (var g = hull.Open())
-            {
-                g.BeginFigure(new Point(0, -24), true, true);
-                foreach (var p in new[] { new Point(17, 15), new Point(6, 11), new Point(0, 18), new Point(-6, 11), new Point(-17, 15) }) g.LineTo(p, true, false);
-            }
-            dc.DrawGeometry(ShipFill, ShipPen, hull);
+            dc.DrawGeometry(ShipFill, ShipPen, Hull);
             dc.DrawRectangle(Canopy, null, new Rect(-2, -12, 4, 8));
             dc.Pop(); dc.Pop();
 
-            var ring = new Pen(Frozen(Color.FromArgb(191, 255, 111, 210)), 1.3) { DashStyle = new DashStyle(new[] { 4.0, 3.2 }, -t * 15) };
-            dc.DrawEllipse(null, ring, new Point(cx, cy), s + 22 + (1 - e) * 30, s + 22 + (1 - e) * 30);
+            // The ring turns by rotating the dashed circle (15 pen-widths of dash a second along its edge), not by animating a new pen each frame.
+            double ringR = s + 22 + (1 - e) * 30;
+            dc.PushTransform(new RotateTransform(-t * 15 * 1.3 / ringR * 180 / Math.PI, cx, cy));
+            dc.DrawEllipse(null, RingPen, new Point(cx, cy), ringR, ringR);
+            dc.Pop();
 
             var pen = contact ? GreenPen : CyanPen;
             const double L = 13;
@@ -238,7 +261,7 @@ namespace EliteBioRadar
                 dc.DrawLine(pen, new Point(x, y), new Point(x - sx * L, y));
             }
 
-            if (!contact) DrawText(dc, "ALIGNING", Mono, 11, Cyan, cx, cy + 66, 1);
+            if (!contact) DrawText(dc, "ALIGNING", MonoFace, 11, Cyan, cx, cy + 66, 1);
             else
             {
                 double k = t - ContactAt;
@@ -246,11 +269,17 @@ namespace EliteBioRadar
                 {
                     double v = k - o;
                     if (v < 0) continue;
-                    var rp = new Pen(Frozen(Color.FromArgb((byte)(180 * Math.Exp(-v * 1.5)), 125, 255, 176)), 2);
-                    dc.DrawEllipse(null, rp, new Point(cx, cy), 10 + v * 120, 10 + v * 120);
+                    dc.PushOpacity(0.7 * Math.Exp(-v * 1.5));
+                    dc.DrawEllipse(null, RipplePen, new Point(cx, cy), 10 + v * 120, 10 + v * 120);
+                    dc.Pop();
                 }
-                if (k < 0.35) dc.DrawEllipse(Frozen(Color.FromArgb((byte)(128 * (1 - k / 0.35)), 255, 255, 255)), null, new Point(cx, cy), 60, 60);
-                if (((int)(t * 4)) % 2 == 0 || t > ContactAt + 1.2) DrawText(dc, "SECURE", Mono, 11, Green, cx, cy + 66, 1);
+                if (k < 0.35)
+                {
+                    dc.PushOpacity(0.5 * (1 - k / 0.35));
+                    dc.DrawEllipse(FlashBrush, null, new Point(cx, cy), 60, 60);
+                    dc.Pop();
+                }
+                if (((int)(t * 4)) % 2 == 0 || t > ContactAt + 1.2) DrawText(dc, "SECURE", MonoFace, 11, GreenBrush, cx, cy + 66, 1);
             }
             dc.Pop();   // env
 
@@ -259,18 +288,12 @@ namespace EliteBioRadar
             {
                 double ease = EaseOut(pt), titleY = H * 0.06;
                 dc.PushOpacity(ease * fadeOut);
-                dc.DrawRectangle(Strip, null, new Rect(-40, titleY - 12, W + 80, 66));
+                dc.DrawRectangle(StripBrush, null, new Rect(-40, titleY - 12, W + 80, 66));
                 dc.Pop();
-                DrawSpaced(dc, "DOCKED", Mono, 20, Amber, cx, titleY, 1.0 - 0.58 * ease, ease * fadeOut);
-                DrawText(dc, _subject, Mono, 12, Pale, cx, titleY + 28, Phase(t, 1.9, 0.5) * fadeOut);
+                DrawSpaced(dc, "DOCKED", MonoFace, 20, TitleBrush, cx, titleY, 1.0 - 0.58 * ease, ease * fadeOut);
+                DrawText(dc, _subject, MonoFace, 12, SubjectBrush, cx, titleY + 28, Phase(t, 1.9, 0.5) * fadeOut);
             }
-            for (int i = 0; i < _stats.Length && i < 3; i++)
-            {
-                double a = Phase(t, 2.0 + i * 0.3, 0.5) * fadeOut;
-                double x = cx + (i - (Math.Min(_stats.Length, 3) - 1) / 2.0) * 100, y = cy + 88;
-                DrawText(dc, _stats[i].label, Mono, 9, Dim, x, y, a * 0.85);
-                DrawText(dc, _stats[i].value, Mono, 12, White, x, y + 12, a);
-            }
+            DrawStats(dc, _stats, MonoFace, cx, cy + 88, W - 40, t, 2.0, fadeOut);
             dc.Pop();   // scale
         }
     }

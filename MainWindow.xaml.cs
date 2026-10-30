@@ -3580,7 +3580,7 @@ namespace EliteBioRadar
             _ => "Unknown"
         };
 
-        private static string FormatAtmosphere(string raw)
+        internal static string FormatAtmosphere(string raw)
         {
             if (string.IsNullOrEmpty(raw) || raw.Equals("None", StringComparison.OrdinalIgnoreCase)) return "None";
             var sb = new System.Text.StringBuilder();

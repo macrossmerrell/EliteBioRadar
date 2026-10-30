@@ -25,8 +25,8 @@ namespace EliteBioRadar
         public event EventHandler? StarScanUpdated;
         // Raised once, live only, when the arrival star's automatic scan says nobody had discovered the system (system name, star type).
         public event Action<string, string>? SystemFirstDiscovered;
-        // The commander's ship touched down on a planet (body name) / docked (station name, "LABEL=value|..." stats). Live events only; see ProcessJournalLine.
-        public event Action<string>? ShipLanded;
+        // The commander's ship touched down on a planet (body name, "LABEL=value|..." stats) / docked (station name, stats). Live events only; see ProcessJournalLine.
+        public event Action<string, string>? ShipLanded;
         public event Action<string, string>? ShipDocked;
         private string _landedRaisedFor = "", _dockedRaisedFor = "";
         private DateTime _landedRaisedAt = DateTime.MinValue, _dockedRaisedAt = DateTime.MinValue;
@@ -4252,7 +4252,18 @@ namespace EliteBioRadar
                         {
                             _landedRaisedFor = landedBody; _landedRaisedAt = DateTime.UtcNow;
                             Log.Write($"Landed: '{landedBody}'");
-                            ShipLanded?.Invoke(landedBody);
+                            // The stats are read here, on the thread that mutates the scan details, and handed over as plain text.
+                            var landedStats = new List<string>();
+                            var landedDetail = GetBodyDetail(landedBody);
+                            if (landedDetail != null)
+                            {
+                                if (landedDetail.SurfaceGravity > 0) landedStats.Add($"GRAVITY={landedDetail.SurfaceGravity / 9.80665:F2} G");
+                                if (landedDetail.SurfaceTemperature > 0) landedStats.Add($"SURFACE={landedDetail.SurfaceTemperature:F0} K");
+                                // Only a body that was really scanned has an atmosphere to report; an empty record must not read as "None".
+                                if (landedDetail.SurfaceGravity > 0 || !string.IsNullOrEmpty(landedDetail.PlanetClass))
+                                    landedStats.Add($"ATMOSPHERE={MainWindow.FormatAtmosphere(landedDetail.AtmosphereType)}");
+                            }
+                            ShipLanded?.Invoke(landedBody, string.Join("|", landedStats));
                         }
                     }
 

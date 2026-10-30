@@ -177,20 +177,8 @@ namespace EliteBioRadar
             svc.SystemFirstDiscovered += (system, starType) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.FirstDiscovery, system,
                     starType.Length > 0 ? StarClassNames.GetDisplayName(starType) : "")));
-            svc.ShipLanded += body => Dispatcher.InvokeAsync(() =>
-            {
-                var d = svc.GetKnownBodyDetail(body);
-                string stats = "";
-                if (d != null)
-                {
-                    var parts = new List<string>();
-                    if (d.SurfaceGravity > 0) parts.Add($"GRAVITY={d.SurfaceGravity / 9.80665:F2} G");
-                    if (d.SurfaceTemperature > 0) parts.Add($"SURFACE={d.SurfaceTemperature:F0} K");
-                    parts.Add($"ATMOSPHERE={FormatAtmosphere(d.AtmosphereType)}");
-                    stats = string.Join("|", parts);
-                }
-                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Landed, body, stats));
-            });
+            svc.ShipLanded += (body, stats) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Landed, body, stats)));
             svc.ShipDocked += (station, stats) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Docked, station, stats)));
         }
