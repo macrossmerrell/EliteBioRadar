@@ -179,6 +179,33 @@ namespace EliteBioRadar
                     starType.Length > 0 ? StarClassNames.GetDisplayName(starType) : "")));
             svc.ShipLanded += (body, stats) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Landed, body, stats)));
+            svc.ShipLiftoff += (body, stats) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Liftoff, body, stats)));
+            svc.JumpChargeStarted += next => Dispatcher.InvokeAsync(() =>
+            {
+                JumpDepartureState.ChargeStart = DateTime.UtcNow;
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.HyperspaceJump, next, ""));
+            });
+            svc.HyperspaceJumpStarted += () => Dispatcher.InvokeAsync(() => JumpDepartureState.DriveFiredAt = DateTime.UtcNow);
+            svc.JumpChargeCancelled += () => Dispatcher.InvokeAsync(JumpDepartureState.RequestEnd);
+            svc.SystemArrived +=(system, starClass) => Dispatcher.InvokeAsync(() =>
+            {
+                JumpDepartureState.RequestEnd();   // the tunnel (if one is playing) ends in a flash; this screen fades in from it
+                string type = SystemArrivalVisual.StarTypeLabel(starClass);
+                double k = SystemArrivalVisual.ClassKelvin(starClass);
+                string detail = (type.Length > 0 ? $"TYPE={type}" : "") + (k > 0 ? (type.Length > 0 ? "|" : "") + $"~STAR={k:F0}" : "");
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Arrival, system, detail));
+            });
+            svc.FuelScoopStarted += (star, detail) => Dispatcher.InvokeAsync(() =>
+            {
+                FuelScoopState.LastStart = DateTime.UtcNow;
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.FuelScoop, star, detail));
+            });
+            svc.HudModeChanged += analysis => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(analysis ? AnimationCatalog.AnalysisMode : AnimationCatalog.CombatMode, "", "")));
+            svc.FuelScoopEnded += () => Dispatcher.InvokeAsync(FuelScoopState.RequestEnd);
+            svc.FirstFootfall += (body, stats) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.FirstFootfall, body, stats)));
             svc.ShipDocked += (station, stats) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Docked, station, stats)));
         }
@@ -192,7 +219,7 @@ namespace EliteBioRadar
             public MainWindowAnimationSurface(MainWindow w)
             {
                 _w = w;
-                foreach (var v in new AnimationVisual[] { _w.firstDiscoveryVisual, _w.landedVisual, _w.dockedVisual })
+                foreach (var v in new AnimationVisual[] { _w.firstDiscoveryVisual, _w.landedVisual, _w.liftoffVisual, _w.firstFootfallVisual, _w.arrivalVisual, _w.jumpDepartureVisual, _w.fuelScoopVisual, _w.combatModeVisual, _w.analysisModeVisual, _w.dockedVisual })
                     v.Finished += () =>
                     {
                         _w.firstDiscoveryLayer.Visibility = Visibility.Collapsed;
@@ -207,7 +234,7 @@ namespace EliteBioRadar
             {
                 _done = done;
                 Log.Write($"Animation '{request.Def.Id}' playing in the Elite Bio Radar window: {request.Subject}");
-                AnimationVisual v = request.Def.Id switch { "landed" => _w.landedVisual, "docked" => _w.dockedVisual, _ => _w.firstDiscoveryVisual };
+                AnimationVisual v = request.Def.Id switch { "landed" => _w.landedVisual, "liftoff" => _w.liftoffVisual, "first-footfall" => _w.firstFootfallVisual, "arrival" => _w.arrivalVisual, "hyperspace-jump" => _w.jumpDepartureVisual, "fuel-scoop" => _w.fuelScoopVisual, "combat-mode" => _w.combatModeVisual, "analysis-mode" => _w.analysisModeVisual, "docked" => _w.dockedVisual, _ => _w.firstDiscoveryVisual };
                 v.BackdropOpacity = request.Def.BackdropOpacity;
                 _w.firstDiscoveryLayer.Visibility = Visibility.Visible;
                 v.Start(request.Subject, request.Detail);

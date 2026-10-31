@@ -167,6 +167,7 @@ namespace EliteBioRadar
         public bool ScoopingFuel => (Flags & (1u << 11)) != 0;
         public bool Landed      => (Flags & (1u << 1))  != 0;
         public bool Supercruise => (Flags & (1u << 4))  != 0;
+        public bool AnalysisMode => (Flags & (1u << 27)) != 0;   // the HUD is in Analysis mode (clear: Combat mode)
         public bool InSRV       => (Flags & (1u << 26)) != 0;
         public bool InFighter   => (Flags & (1u << 25)) != 0;
         // Bit 21 per the Status.json docs (bit 19 is Low Fuel); confirmed on a live landed ship.

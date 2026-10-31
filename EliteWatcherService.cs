@@ -28,8 +28,20 @@ namespace EliteBioRadar
         // The commander's ship touched down on a planet (body name, "LABEL=value|..." stats) / docked (station name, stats). Live events only; see ProcessJournalLine.
         public event Action<string, string>? ShipLanded;
         public event Action<string, string>? ShipDocked;
-        private string _landedRaisedFor = "", _dockedRaisedFor = "";
-        private DateTime _landedRaisedAt = DateTime.MinValue, _dockedRaisedAt = DateTime.MinValue;
+        public event Action<string>? JumpChargeStarted;        // (next system, or "") a hyperspace charge began in space; live only
+        public event Action? JumpChargeCancelled;              // that charge ended without the drive firing
+        public event Action? HyperspaceJumpStarted;            // the journal's StartJump: the drive fired and the countdown begins
+        private DateTime _jumpChargeBeganAt = DateTime.MinValue;
+        public event Action<string, string>? FuelScoopStarted;   // (star name, "TYPE=..|~STAR=..") the scoop began working at a star; live only
+        public event Action? FuelScoopEnded;
+        private bool _wasScooping;
+        public event Action<bool>? HudModeChanged;   // (analysis) the commander switched the HUD between Combat and Analysis mode; live only
+        private bool? _wasAnalysis;
+        public event Action<string, string>? SystemArrived;   // (system name, star class) a completed hyperspace jump into a new system, live only
+        public event Action<string, string>? FirstFootfall;   // (body name, scene tint) the commander's first step on a world nobody had walked on
+        public event Action<string, string>? ShipLiftoff;   // (body name, stats) a commander-flown takeoff from a planet
+        private string _landedRaisedFor = "", _dockedRaisedFor = "", _liftoffRaisedFor = "";
+        private DateTime _landedRaisedAt = DateTime.MinValue, _dockedRaisedAt = DateTime.MinValue, _liftoffRaisedAt = DateTime.MinValue;
         private string _firstDiscoveryRaisedFor = "";
         public event EventHandler? PlanetTargetUpdated;
         public event EventHandler? DestinationUpdated;
@@ -409,6 +421,43 @@ namespace EliteBioRadar
         // body Status.json's BodyName names mid-glide (not necessarily CurrentBody, since
         // you haven't landed yet) or the FSS Scanner needs a specific resolved body's detail.
         public BodyScanDetail? GetKnownBodyDetail(string bodyName) => GetBodyDetail(bodyName);
+
+        // The stats ("LABEL=value|...") and the hidden scene entries ("~KEY=value", not shown as stats) for a landing or a liftoff from this body. Read on the thread that
+        // mutates the scan details and handed over as plain text. The hidden entries tint the scene: the lighting star's temperature and relative light, and the ground
+        // colour the planet itself is drawn with (the same look as the radar's planet image, already lit by the star).
+        private string BuildSurfaceDetail(string bodyName)
+        {
+            var parts = new List<string>();
+            var d = GetBodyDetail(bodyName);
+            if (d != null)
+            {
+                if (d.SurfaceGravity > 0) parts.Add($"GRAVITY={d.SurfaceGravity / 9.80665:F2} G");
+                if (d.SurfaceTemperature > 0) parts.Add($"SURFACE={d.SurfaceTemperature:F0} K");
+                // Only a body that was really scanned has an atmosphere to report; an empty record must not read as "None".
+                if (d.SurfaceGravity > 0 || !string.IsNullOrEmpty(d.PlanetClass))
+                    parts.Add($"ATMOSPHERE={MainWindow.FormatAtmosphere(d.AtmosphereType)}");
+            }
+            try
+            {
+                double starK = d != null ? ParentStarTemperature(d) : (CurrentStarDetail?.SurfaceTemperature ?? 0);
+                if (starK > 0) parts.Add($"~STAR={starK:F0}");
+                if (d != null)
+                {
+                    double flux = PrimaryStarFlux(d);
+                    if (flux > 0) parts.Add($"~FLUX={flux.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)}");
+                    string? icon = MainWindow.MapPlanetClassToIconCode(d.PlanetClass);
+                    if (icon != null && PlanetRenderer.IsLandableWorld(d, icon))
+                    {
+                        var look = PlanetRenderer.GetLandableWorldLook(d, icon, starK, ParentStarDistanceM(d), flux);
+                        var g = System.Windows.Media.Color.FromRgb(
+                            (byte)((look.Dark.R + look.Light.R * 1.5) / 2.5), (byte)((look.Dark.G + look.Light.G * 1.5) / 2.5), (byte)((look.Dark.B + look.Light.B * 1.5) / 2.5));
+                        parts.Add($"~GROUND={g.R:X2}{g.G:X2}{g.B:X2}");
+                    }
+                }
+            }
+            catch (Exception ex) { Log.Write($"Surface tint skipped: {ex.Message}"); }
+            return string.Join("|", parts);
+        }
 
         // For the System Scan window — every locally-known detail for the CURRENT system only
         // (_bodyScanDetails already clears on a real system change, so no name-prefix filtering
@@ -936,6 +985,26 @@ namespace EliteBioRadar
                     CurrentDestination.CurrentJumpRange = ComputeJumpRange(CurrentDestination, status.FuelMain);
                 }
 
+                // HUD mode (Flags bit 27): the first read only sets the baseline, so nothing plays at start-up.
+                if (_wasAnalysis != null && _wasAnalysis != status.AnalysisMode) { Log.Write(status.AnalysisMode ? "HUD switched to Analysis mode" : "HUD switched to Combat mode"); HudModeChanged?.Invoke(status.AnalysisMode); }
+                _wasAnalysis = status.AnalysisMode;
+
+                // Fuel scooping (Flags bit 11): the scoop screen runs while it works, and reads the tank level from FuelScoopState.
+                FuelScoopState.Total = status.FuelMain + status.FuelReservoir;
+                FuelScoopState.Capacity = CurrentDestination?.FuelCapacityMain ?? 0;
+                if (status.ScoopingFuel && !_wasScooping)
+                {
+                    var star = CurrentStarDetail;
+                    string cls = star?.StarType ?? "";
+                    double k = star?.SurfaceTemperature > 0 ? star.SurfaceTemperature : SystemArrivalVisual.ClassKelvin(cls);
+                    string type = SystemArrivalVisual.StarTypeLabel(cls);
+                    string detail = (type.Length > 0 ? $"TYPE={type}" : "") + (k > 0 ? (type.Length > 0 ? "|" : "") + $"~STAR={k:F0}" : "");
+                    Log.Write("Fuel scooping started");
+                    FuelScoopStarted?.Invoke(star?.BodyName ?? StarSystem ?? "", detail);
+                }
+                else if (!status.ScoopingFuel && _wasScooping) { Log.Write("Fuel scooping ended"); FuelScoopEnded?.Invoke(); }
+                _wasScooping = status.ScoopingFuel;
+
                 // FSD hyperdrive charging read live from Status.json (Flags2 bit 19) rather than
                 // relying solely on the journal's "StartJump" event — that journal write can lag
                 // or occasionally not land promptly, while Status.json is polled every tick and
@@ -973,6 +1042,20 @@ namespace EliteBioRadar
                 {
                     FsdTargetedAt = DateTime.UtcNow;
                     DestinationUpdated?.Invoke(this, EventArgs.Empty);
+                    // The departure moment: a hyperspace charge made in space or supercruise (a charge at a planet has its own atmosphere screen).
+                    if (!(status.HasPosition && !status.Supercruise))
+                    {
+                        _jumpChargeBeganAt = DateTime.UtcNow;
+                        Log.Write("Hyperspace charge started");
+                        JumpChargeStarted?.Invoke(CurrentDestination?.NextSystem ?? "");
+                    }
+                }
+                else if (!IsChargingJump && wasChargingJump && _jumpChargeBeganAt > HyperspaceJumpStartedAt && _jumpChargeBeganAt != DateTime.MinValue)
+                {
+                    // The charge ended with no StartJump after it: the pilot cancelled it.
+                    _jumpChargeBeganAt = DateTime.MinValue;
+                    Log.Write("Hyperspace charge cancelled");
+                    JumpChargeCancelled?.Invoke();
                 }
 
                 UpdateShipDepartureTracking(status);
@@ -3476,6 +3559,12 @@ namespace EliteBioRadar
                             Log.Write($"Disembark: First Footfall confirmed for '{disembarkBody}'");
                             BodyChanged?.Invoke(this, new BodyChangedEventArgs
                                 { BodyName = disembarkBody, BioCount = BiologyCount, GeoCount = GeologyCount });
+                            // The First Footfall moment: the commander's own first step (on foot, not the SRV), live only.
+                            if (obj.Value<bool?>("SRV") != true && obj.Value<bool?>("Taxi") != true && obj.Value<bool?>("OnPlanet") != false)
+                            {
+                                Log.Write($"First Footfall: '{disembarkBody}'");
+                                FirstFootfall?.Invoke(disembarkBody, BuildSurfaceDetail(disembarkBody));
+                            }
                         }
                     }
                     break;
@@ -4236,6 +4325,14 @@ namespace EliteBioRadar
                         ShipDepartureCrossed = true;
                         Log.Write("Liftoff: the ship departed on its own (PlayerControlled:false), ShipDepartureCrossed set");
                     }
+                    // The Liftoff moment: a takeoff the commander flew (not an unmanned departure or a taxi), live, once per body in 20 seconds.
+                    else if (!backfill && obj.Value<bool?>("Taxi") != true && !string.IsNullOrEmpty(CurrentBody) &&
+                             !(string.Equals(CurrentBody, _liftoffRaisedFor, StringComparison.OrdinalIgnoreCase) && (DateTime.UtcNow - _liftoffRaisedAt).TotalSeconds < 20))
+                    {
+                        _liftoffRaisedFor = CurrentBody; _liftoffRaisedAt = DateTime.UtcNow;
+                        Log.Write($"Liftoff: '{CurrentBody}'");
+                        ShipLiftoff?.Invoke(CurrentBody, BuildSurfaceDetail(CurrentBody));
+                    }
                     break;
 
                 case "ApproachBody":
@@ -4252,18 +4349,8 @@ namespace EliteBioRadar
                         {
                             _landedRaisedFor = landedBody; _landedRaisedAt = DateTime.UtcNow;
                             Log.Write($"Landed: '{landedBody}'");
-                            // The stats are read here, on the thread that mutates the scan details, and handed over as plain text.
-                            var landedStats = new List<string>();
-                            var landedDetail = GetBodyDetail(landedBody);
-                            if (landedDetail != null)
-                            {
-                                if (landedDetail.SurfaceGravity > 0) landedStats.Add($"GRAVITY={landedDetail.SurfaceGravity / 9.80665:F2} G");
-                                if (landedDetail.SurfaceTemperature > 0) landedStats.Add($"SURFACE={landedDetail.SurfaceTemperature:F0} K");
-                                // Only a body that was really scanned has an atmosphere to report; an empty record must not read as "None".
-                                if (landedDetail.SurfaceGravity > 0 || !string.IsNullOrEmpty(landedDetail.PlanetClass))
-                                    landedStats.Add($"ATMOSPHERE={MainWindow.FormatAtmosphere(landedDetail.AtmosphereType)}");
-                            }
-                            ShipLanded?.Invoke(landedBody, string.Join("|", landedStats));
+                            string landedDetailText = BuildSurfaceDetail(landedBody);
+                            ShipLanded?.Invoke(landedBody, landedDetailText);
                         }
                     }
 
@@ -4468,6 +4555,8 @@ namespace EliteBioRadar
                             SystemPopulation = obj.Value<long?>("Population") ?? 0;
                             SystemArrivedAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
                             Log.Write($"FSDJump arrival: '{newSystem}' arrivedAt={SystemArrivedAt:O} fsdTargetedAt={FsdTargetedAt:O} nextSystem='{CurrentDestination?.NextSystem}'");
+                            // The Arrival moment (system name, star class). Raised before the arrival star's scan, so a First Discovery screen queues behind it.
+                            SystemArrived?.Invoke(newSystem, obj.Value<string>("StarClass") ?? "");
                             // SystemMiningPlanets was missing from this clear — Bio/Geo sidebar
                             // sections correctly emptied on a jump, but Mining Sites kept
                             // showing the previous system's list until BackfillSystemPlanets
@@ -4596,7 +4685,7 @@ namespace EliteBioRadar
                     if (string.Equals(jumpType, "Hyperspace", StringComparison.OrdinalIgnoreCase))
                     {
                         IsChargingJump = true;
-                        if (!backfill) HyperspaceJumpStartedAt = DateTime.UtcNow;
+                        if (!backfill) { HyperspaceJumpStartedAt = DateTime.UtcNow; HyperspaceJumpStarted?.Invoke(); }
                         FsdTargetedAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
                         if (!backfill) DestinationUpdated?.Invoke(this, EventArgs.Empty);
                     }

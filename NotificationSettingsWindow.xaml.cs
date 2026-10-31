@@ -44,12 +44,12 @@ namespace EliteBioRadar
         private Grid BuildRow(AnimationDef def, AnimationSurfaces current)
         {
             var g = new Grid { Margin = new Thickness(0, 3, 0, 3) };
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(170) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(300) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
             g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
 
-            var name = new TextBlock { Text = def.Name, Foreground = TextBrush, FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
+            var name = new TextBlock { Text = def.Name, Foreground = TextBrush, FontSize = 13, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
             var main = new CheckBox { IsChecked = current.HasFlag(AnimationSurfaces.Main), VerticalAlignment = VerticalAlignment.Center };
             var notif = new CheckBox { IsChecked = current.HasFlag(AnimationSurfaces.Notifications), VerticalAlignment = VerticalAlignment.Center };
             var play = new Button

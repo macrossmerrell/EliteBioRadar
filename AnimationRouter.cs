@@ -22,7 +22,21 @@ namespace EliteBioRadar
 
         // Detail = "LABEL=value|LABEL=value": the stats line each of these shows under its title.
         public static readonly AnimationDef Landed =
-            new("landed", "Landed on a planet", "Surface", AnimationSurfaces.Main, 1.0, "Qiedea EI-O c8-1 A 1", "GRAVITY=0.89 G|SURFACE=214 K|ATMOSPHERE=None");
+            new("landed", "Landed on a planet", "Surface", AnimationSurfaces.Main, 1.0, "Qiedea EI-O c8-1 A 1", "GRAVITY=0.89 G|SURFACE=214 K|ATMOSPHERE=None|~STAR=3800|~FLUX=0.8|~GROUND=8A7A6A");
+        public static readonly AnimationDef Liftoff =
+            new("liftoff", "Lift-off from a planet", "Surface", AnimationSurfaces.Main, 1.0, "Qiedea EI-O c8-1 A 1", "GRAVITY=0.89 G|ATMOSPHERE=None|~STAR=3800|~FLUX=0.8|~GROUND=8A7A6A");
+        public static readonly AnimationDef FirstFootfall =
+            new("first-footfall", "First footfall on a world", "Surface", AnimationSurfaces.Main, 1.0, "Qiedea EI-O c8-1 A 1", "~STAR=3800|~FLUX=0.8|~GROUND=8A7A6A");
+        public static readonly AnimationDef HyperspaceJump =
+            new("hyperspace-jump", "Hyperspace jump (departure)", "Jump", AnimationSurfaces.Main, 0.92, "Sample System", "PREVIEW");
+        public static readonly AnimationDef FuelScoop =
+            new("fuel-scoop", "Fuel scooping", "Jump", AnimationSurfaces.Main, 0.92, "Sample Star", "PREVIEW|TYPE=K-Star|~STAR=4500");
+        public static readonly AnimationDef CombatMode =
+            new("combat-mode", "Combat mode", "HUD", AnimationSurfaces.Main, 0.85, "", "");
+        public static readonly AnimationDef AnalysisMode =
+            new("analysis-mode", "Analysis mode", "HUD", AnimationSurfaces.Main, 0.85, "", "");
+        public static readonly AnimationDef Arrival =
+            new("arrival", "Arrival in a system", "Jump", AnimationSurfaces.Main, 1.0, "Sample System", "TYPE=K-Star|~STAR=4500");
         public static readonly AnimationDef Docked =
             new("docked", "Docked at a station or carrier", "Docking", AnimationSurfaces.Main, 1.0, "Sample Station", "TYPE=Coriolis|ECONOMY=Refinery|DISTANCE=432 ls");
 
@@ -33,7 +47,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef AtmosphericJump =
             new("atmospheric-jump", "Hyperspace jump from an atmosphere", "Atmosphere", AnimationSurfaces.Main, 1.0, "", "", Live: true);
 
-        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, Landed, Docked, Descent, Climb, AtmosphericJump };
+        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, FuelScoop, CombatMode, AnalysisMode, Arrival, Landed, Liftoff, FirstFootfall, Docked, Descent, Climb, AtmosphericJump };
 
         // The user's choice from the settings file, else the animation's own default.
         public static AnimationSurfaces SurfacesFor(AnimationDef def, AppSettingsData settings) =>

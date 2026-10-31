@@ -92,6 +92,10 @@ namespace EliteBioRadar
         // Draw one frame; `real` is the seconds since Start.
         protected abstract void Render(DrawingContext dc, double w, double h, double real);
 
+        // Opacity layers are slow here, so backdrops, strips and flashes are drawn with ready-made brushes at 33 alpha levels.
+        protected static readonly Brush[] Backdrops = MakeLevels(Color.FromRgb(0x03, 0x06, 0x0b)), Whites = MakeLevels(Color.FromRgb(235, 245, 255)), Strips = MakeLevels(Color.FromRgb(0x08, 0x0d, 0x0d));
+        private static Brush[] MakeLevels(Color c) { var a = new Brush[33]; for (int i = 0; i < a.Length; i++) a[i] = Frozen(Color.FromArgb((byte)Math.Round(255.0 * i / 32), c.R, c.G, c.B)); return a; }
+        protected static Brush Level(Brush[] set, double alpha) => set[(int)Math.Round(Clamp01(alpha) * 32)];
         protected static Brush Frozen(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
         protected static Pen FrozenPen(Color c, double w) { var p = new Pen(Frozen(c), w); p.Freeze(); return p; }
 
@@ -166,6 +170,41 @@ namespace EliteBioRadar
         }
 
 
+        // The hidden "~KEY=value" entries of the same detail string: data for the scene itself, not text to show.
+        protected static System.Collections.Generic.Dictionary<string, string> ParseExtras(string detail)
+        {
+            var d = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var part in detail.Split('|', StringSplitOptions.RemoveEmptyEntries))
+            {
+                int eq = part.IndexOf('=');
+                if (part.Length > 1 && part[0] == '~' && eq > 1 && eq < part.Length - 1) d[part[1..eq].Trim()] = part[(eq + 1)..].Trim();
+            }
+            return d;
+        }
+
+        // The surface scenes' tint, from the hidden entries (see ParseExtras): how the lighting star's colour differs from the one the scenes were drawn for (a ratio per
+        // channel, 1 = unchanged), its relative brightness (1 = unchanged, kept within 0.6..1.35) and the planet's own ground colour (null when not given).
+        protected readonly record struct SurfaceTint((double r, double g, double b) Star, double Lit, Color? Ground);
+        protected static SurfaceTint ReadSurfaceTint(System.Collections.Generic.Dictionary<string, string> x)
+        {
+            double Num(string key) => x.TryGetValue(key, out var s) && double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : 0;
+            double starK = Num("STAR"), flux = Num("FLUX");
+            (double r, double g, double b) rel = (1, 1, 1);
+            if (starK > 0)
+            {
+                var k = PlanetRenderer.StarLightTint(starK); var r0 = PlanetRenderer.StarLightTint(4800);   // 4800 K: the star the scenes' default colours were drawn for
+                rel = (Math.Clamp(k.r / r0.r, 0.35, 1.8), Math.Clamp(k.g / r0.g, 0.35, 1.8), Math.Clamp(k.b / r0.b, 0.35, 1.8));
+            }
+            Color? ground = null;
+            if (x.TryGetValue("GROUND", out var gh) && gh.Length == 6 && int.TryParse(gh, NumberStyles.HexNumber, null, out int rgb))
+                ground = Color.FromRgb((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+            return new SurfaceTint(rel, flux > 0 ? Math.Clamp(Math.Pow(flux, 0.25), 0.6, 1.35) : 1, ground);
+        }
+
+        protected static Color Mix(Color a, Color b, double f) => Color.FromRgb((byte)(a.R + (b.R - a.R) * f), (byte)(a.G + (b.G - a.G) * f), (byte)(a.B + (b.B - a.B) * f));
+        protected static Color Scale(Color c, (double r, double g, double b) k, double mul = 1) => Color.FromRgb(
+            (byte)Math.Clamp(c.R * k.r * mul, 0, 255), (byte)Math.Clamp(c.G * k.g * mul, 0, 255), (byte)Math.Clamp(c.B * k.b * mul, 0, 255));
+
         // "LABEL=value|LABEL=value": the stats lines the animations show under their title. Entries without a value are dropped.
         protected static (string label, string value)[] ParseStats(string detail)
         {
@@ -173,7 +212,7 @@ namespace EliteBioRadar
             foreach (var part in detail.Split('|', StringSplitOptions.RemoveEmptyEntries))
             {
                 int eq = part.IndexOf('=');
-                if (eq <= 0 || eq == part.Length - 1) continue;
+                if (eq <= 0 || eq == part.Length - 1 || part[0] == '~') continue;   // "~KEY=value" entries are hidden (see ParseExtras)
                 list.Add((part[..eq].Trim().ToUpperInvariant(), part[(eq + 1)..].Trim()));
             }
             return list.ToArray();

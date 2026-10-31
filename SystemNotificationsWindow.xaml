@@ -19,6 +19,13 @@
         </Viewbox>
         <local:FirstDiscoveryVisual x:Name="firstDiscoveryVisual"/>
         <local:LandedVisual x:Name="landedVisual"/>
+        <local:LiftoffVisual x:Name="liftoffVisual"/>
+        <local:FirstFootfallVisual x:Name="firstFootfallVisual"/>
+        <local:SystemArrivalVisual x:Name="arrivalVisual"/>
+        <local:JumpDepartureVisual x:Name="jumpDepartureVisual"/>
+        <local:FuelScoopVisual x:Name="fuelScoopVisual"/>
+        <local:CombatModeVisual x:Name="combatModeVisual"/>
+        <local:AnalysisModeVisual x:Name="analysisModeVisual"/>
         <local:DockedVisual x:Name="dockedVisual"/>
     </Grid>
 </Window>

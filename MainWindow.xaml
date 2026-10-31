@@ -299,6 +299,13 @@
             <Grid x:Name="firstDiscoveryLayer" Grid.Column="0" Grid.ColumnSpan="3" Panel.ZIndex="20" IsHitTestVisible="False" Visibility="Collapsed">
                 <local:FirstDiscoveryVisual x:Name="firstDiscoveryVisual"/>
                 <local:LandedVisual x:Name="landedVisual"/>
+                <local:LiftoffVisual x:Name="liftoffVisual"/>
+                <local:FirstFootfallVisual x:Name="firstFootfallVisual"/>
+                <local:SystemArrivalVisual x:Name="arrivalVisual"/>
+                <local:JumpDepartureVisual x:Name="jumpDepartureVisual"/>
+                <local:FuelScoopVisual x:Name="fuelScoopVisual"/>
+                <local:CombatModeVisual x:Name="combatModeVisual"/>
+                <local:AnalysisModeVisual x:Name="analysisModeVisual"/>
                 <local:DockedVisual x:Name="dockedVisual"/>
             </Grid>
 
@@ -607,9 +614,9 @@
                         <TextBlock x:Name="txtScreenshotStatus" Text="" Foreground="#446666"
                                    FontFamily="Consolas" FontSize="10.5" Margin="0,4,0,8" TextWrapping="Wrap"/>
 
-                        <TextBlock Text="─────────────────" Foreground="#1a4444"
-                                   FontFamily="Consolas" FontSize="10" Margin="0,10,0,6"/>
+                    </StackPanel>
 
+                    <StackPanel Grid.Column="2">
                         <TextBlock Text="Notifications" Foreground="#00e5ff" FontFamily="Consolas"
                                    FontSize="13" FontWeight="Bold" Margin="0,0,0,6"/>
                         <TextBlock Text="  Choose which window shows each animation: Elite Bio Radar, System Notifications, or both"
@@ -622,9 +629,10 @@
                                 BorderBrush="#1a4444" Padding="8,4"
                                 HorizontalAlignment="Left"
                                 Click="BtnNotificationSettings_Click"/>
-                    </StackPanel>
 
-                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="─────────────────" Foreground="#1a4444"
+                                   FontFamily="Consolas" FontSize="10" Margin="0,10,0,6"/>
+
                         <TextBlock Text="Earnings" Foreground="#00e5ff" FontFamily="Consolas"
                                    FontSize="13" FontWeight="Bold" Margin="0,0,0,6"/>
                         <TextBlock x:Name="txtTotalEarned" Text="Total: —"
