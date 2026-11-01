@@ -43,6 +43,18 @@ namespace EliteBioRadar
         private string? _wasLights;
         public event Action<bool>? NightVisionChanged;   // (on) night vision went on or off; live only
         private bool? _wasNightVision;
+        public event Action<string>? PlayerEmbarked;   // (vehicle: "SHIP", "SRV", "NOMAD", "TAXI") the commander boarded a vehicle; live only
+        public event Action<string>? PlayerDisembarked;   // (vehicle: "SHIP", "SRV", "NOMAD", "TAXI") the commander stepped out of a vehicle; live only
+        public event Action<bool>? FlightAssistChanged;   // (assistOn) flight assist went on or off; live only
+        private bool? _wasFlightAssistOff;
+        private const double HudQuietSeconds = 3;
+        private int? _statusContext;
+        private DateTime _hudQuietUntil = DateTime.MinValue;
+        private void StartHudQuiet(string why)
+        {
+            if (DateTime.UtcNow >= _hudQuietUntil) Log.Write($"HUD flag animations quiet for {HudQuietSeconds:0} s ({why})");
+            _hudQuietUntil = DateTime.UtcNow.AddSeconds(HudQuietSeconds);
+        }
         private bool? _wasAnalysis;
         private bool? _wasGear;
         private bool? _wasHardpoints;
@@ -690,7 +702,9 @@ namespace EliteBioRadar
                 lock (ScannedOrganisms)
                 {
                     ScannedOrganisms.Clear();
+                    // Unfinished sampling comes back too: the journal alone cannot rebuild it (ScanOrganic has no position).
                     ScannedOrganisms.AddRange(completedOnly);
+                    ScannedOrganisms.AddRange(cachedData.Organisms.Where(o => !o.IsComplete));
                 }
                 // Populate CompletedGenera so sidebar Total Payout shows correctly after restart
                 lock (CompletedGenera)
@@ -995,29 +1009,40 @@ namespace EliteBioRadar
                     CurrentDestination.CurrentJumpRange = ComputeJumpRange(CurrentDestination, status.FuelMain);
                 }
 
+                // Changing vehicle or context (out of the ship, into the SRV, into supercruise, docking, a menu or loading screen with empty flags) makes the HUD flags rearrange
+                // themselves. That isn't the commander's doing, so for a few seconds the flag animations below only track the new state and stay silent.
+                int ctx = (status.InSRV ? 1 : 0) | (status.OnFoot ? 2 : 0) | (status.InFighter ? 4 : 0) | (status.Docked ? 8 : 0) | (status.Landed ? 16 : 0) | (status.Supercruise ? 32 : 0) | (status.Flags == 0 ? 64 : 0);
+                if (_statusContext != null && _statusContext != ctx) StartHudQuiet("context change");
+                _statusContext = ctx;
+                bool quiet = DateTime.UtcNow < _hudQuietUntil;
+
                 // HUD mode (Flags bit 27): the first read only sets the baseline, so nothing plays at start-up.
-                if (_wasAnalysis != null && _wasAnalysis != status.AnalysisMode) { Log.Write(status.AnalysisMode ? "HUD switched to Analysis mode" : "HUD switched to Combat mode"); HudModeChanged?.Invoke(status.AnalysisMode); }
+                if (!quiet && _wasAnalysis != null && _wasAnalysis != status.AnalysisMode) { Log.Write(status.AnalysisMode ? "HUD switched to Analysis mode" : "HUD switched to Combat mode"); HudModeChanged?.Invoke(status.AnalysisMode); }
                 _wasAnalysis = status.AnalysisMode;
 
                 // Landing gear (Flags bit 2): the first read only sets the baseline.
-                if (_wasGear != null && _wasGear != status.LandingGearDown) { Log.Write(status.LandingGearDown ? "Landing gear down" : "Landing gear up"); GearChanged?.Invoke(status.LandingGearDown); }
+                if (!quiet && _wasGear != null && _wasGear != status.LandingGearDown) { Log.Write(status.LandingGearDown ? "Landing gear down" : "Landing gear up"); GearChanged?.Invoke(status.LandingGearDown); }
                 _wasGear = status.LandingGearDown;
 
                 // Hardpoints (Flags bit 6): the first read only sets the baseline.
-                if (_wasHardpoints != null && _wasHardpoints != status.HardpointsDeployed) { Log.Write(status.HardpointsDeployed ? "Hardpoints deployed" : "Hardpoints retracted"); HardpointsChanged?.Invoke(status.HardpointsDeployed); }
+                if (!quiet && _wasHardpoints != null && _wasHardpoints != status.HardpointsDeployed) { Log.Write(status.HardpointsDeployed ? "Hardpoints deployed" : "Hardpoints retracted"); HardpointsChanged?.Invoke(status.HardpointsDeployed); }
                 _wasHardpoints = status.HardpointsDeployed;
 
                 // Cargo scoop (Flags bit 9): the first read only sets the baseline.
-                if (_wasCargoScoop != null && _wasCargoScoop != status.CargoScoopDeployed) { Log.Write(status.CargoScoopDeployed ? "Cargo scoop deployed" : "Cargo scoop retracted"); CargoScoopChanged?.Invoke(status.CargoScoopDeployed); }
+                if (!quiet && _wasCargoScoop != null && _wasCargoScoop != status.CargoScoopDeployed) { Log.Write(status.CargoScoopDeployed ? "Cargo scoop deployed" : "Cargo scoop retracted"); CargoScoopChanged?.Invoke(status.CargoScoopDeployed); }
                 _wasCargoScoop = status.CargoScoopDeployed;
 
                 // Headlights (Flags bit 8 lights on, bit 31 SRV high beam): the first read only sets the baseline.
-                if (_wasLights != null && _wasLights != status.HeadlightMode) { Log.Write($"Headlights {status.HeadlightMode.ToLowerInvariant()}"); HeadlightsChanged?.Invoke(status.HeadlightMode); }
+                if (!quiet && _wasLights != null && _wasLights != status.HeadlightMode) { Log.Write($"Headlights {status.HeadlightMode.ToLowerInvariant()}"); HeadlightsChanged?.Invoke(status.HeadlightMode); }
                 _wasLights = status.HeadlightMode;
 
                 // Night vision (Flags bit 28): the first read only sets the baseline.
-                if (_wasNightVision != null && _wasNightVision != status.NightVisionOn) { Log.Write(status.NightVisionOn ? "Night vision on" : "Night vision off"); NightVisionChanged?.Invoke(status.NightVisionOn); }
+                if (!quiet && _wasNightVision != null && _wasNightVision != status.NightVisionOn) { Log.Write(status.NightVisionOn ? "Night vision on" : "Night vision off"); NightVisionChanged?.Invoke(status.NightVisionOn); }
                 _wasNightVision = status.NightVisionOn;
+
+                // Flight assist (Flags bit 5 is set when it is OFF): the first read only sets the baseline.
+                if (!quiet && _wasFlightAssistOff != null && _wasFlightAssistOff != status.FlightAssistOff) { Log.Write(status.FlightAssistOff ? "Flight assist off" : "Flight assist on"); FlightAssistChanged?.Invoke(!status.FlightAssistOff); }
+                _wasFlightAssistOff = status.FlightAssistOff;
 
                 // Fuel scooping (Flags bit 11): the scoop screen runs while it works, and reads the tank level from FuelScoopState.
                 FuelScoopState.Total = status.FuelMain + status.FuelReservoir;
@@ -3391,6 +3416,18 @@ namespace EliteBioRadar
             if (!backfill) MaterialInventory.Apply(evt, obj);
             if (!backfill) ShipEvents.ObserveJournal(evt, obj);
 
+            // Moments that rearrange the HUD flags by themselves (see the context check in ReadStatus); the journal line can arrive before or after the Status.json change.
+            if (!backfill && evt is "Disembark" or "Embark" or "LaunchSRV" or "DockSRV" or "LaunchFighter" or "DockFighter" or "VehicleSwitch" or "SupercruiseEntry" or "SupercruiseExit" or "FSDJump" or "StartJump" or "LoadGame" or "Resurrect")
+                StartHudQuiet(evt);
+
+            // The Embark animation, with the vehicle boarded (the full event is logged once so the Nomad's wording can be checked).
+            if (!backfill && evt == "Embark")
+            {
+                string boarded = obj.Value<bool?>("SRV") == true ? "SRV" : obj.Value<bool?>("Taxi") == true ? "TAXI" : obj.Value<bool?>("Nomad") == true ? "NOMAD" : "SHIP";
+                Log.Write($"Embark to {boarded}: {obj.ToString(Newtonsoft.Json.Formatting.None)}");
+                PlayerEmbarked?.Invoke(boarded);
+            }
+
             switch (evt)
             {
                 // The initial "honk" — hands us the total body count for the FSS Scanner's
@@ -3552,6 +3589,11 @@ namespace EliteBioRadar
                 {
                     if (!backfill)
                     {
+                        // The Disembark animation, with the vehicle left (the full event is logged once so the Nomad's wording can be checked).
+                        string leftVehicle = obj.Value<bool?>("SRV") == true ? "SRV" : obj.Value<bool?>("Taxi") == true ? "TAXI" : obj.Value<bool?>("Nomad") == true ? "NOMAD" : "SHIP";
+                        Log.Write($"Disembark from {leftVehicle}: {obj.ToString(Newtonsoft.Json.Formatting.None)}");
+                        PlayerDisembarked?.Invoke(leftVehicle);
+
                         var disembarkBody = obj.Value<string>("Body") ?? obj.Value<string>("BodyName") ?? CurrentBody;
                         if (obj.Value<bool?>("SRV") == false && obj.Value<bool?>("Taxi") == false && obj.Value<bool?>("OnPlanet") == true)
                             DiscoveryIndex.MarkWalkedByMe(disembarkBody);

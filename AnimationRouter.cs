@@ -43,6 +43,12 @@ namespace EliteBioRadar
             new("headlights", "Headlights on / high beam / off", "HUD", AnimationSurfaces.Both, 0.85, "", "HIGH");
         public static readonly AnimationDef NightVision =
             new("night-vision", "Night vision activated / deactivated", "HUD", AnimationSurfaces.Both, 0.85, "", "ON");
+        public static readonly AnimationDef FlightAssist =
+            new("flight-assist", "Flight assist on / off", "HUD", AnimationSurfaces.Both, 0.85, "", "OFF");
+        public static readonly AnimationDef Disembark =
+            new("disembark", "Disembark from a vehicle", "Surface", AnimationSurfaces.Both, 0.85, "", "SHIP");
+        public static readonly AnimationDef Embark =
+            new("embark", "Board a vehicle", "Surface", AnimationSurfaces.Both, 0.85, "", "SHIP");
         public static readonly AnimationDef AnalysisMode =
             new("analysis-mode", "Analysis mode", "HUD", AnimationSurfaces.Main, 0.85, "", "");
         public static readonly AnimationDef Arrival =
@@ -57,7 +63,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef AtmosphericJump =
             new("atmospheric-jump", "Hyperspace jump from an atmosphere", "Atmosphere", AnimationSurfaces.Main, 1.0, "", "", Live: true);
 
-        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, Arrival, Landed, Liftoff, FirstFootfall, Docked, Descent, Climb, AtmosphericJump };
+        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, FlightAssist, Disembark, Embark, Arrival, Landed, Liftoff, FirstFootfall, Docked, Descent, Climb, AtmosphericJump };
 
         // The user's choice from the settings file, else the animation's own default.
         public static AnimationSurfaces SurfacesFor(AnimationDef def, AppSettingsData settings) =>

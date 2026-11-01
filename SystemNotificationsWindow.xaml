@@ -31,6 +31,9 @@
         <local:CargoScoopVisual x:Name="cargoScoopVisual"/>
         <local:HeadlightsVisual x:Name="headlightsVisual"/>
         <local:NightVisionVisual x:Name="nightVisionVisual"/>
+        <local:FlightAssistVisual x:Name="flightAssistVisual"/>
+        <local:DisembarkVisual x:Name="disembarkVisual"/>
+        <local:EmbarkVisual x:Name="embarkVisual"/>
         <local:DockedVisual x:Name="dockedVisual"/>
     </Grid>
 </Window>

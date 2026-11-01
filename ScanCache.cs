@@ -44,6 +44,10 @@ namespace EliteBioRadar
         public bool                    WasFootfalled { get; set; }
         public List<string>            KnownGenera   { get; set; } = new();
         public List<CachedOrganism>    Scans         { get; set; } = new();
+
+        // Sampling that has started but not finished (a Log or Sample with no Analyse yet). A journal replay cannot rebuild these: ScanOrganic carries no position,
+        // so a restart used to lose them and the next Sample then showed as the first dot.
+        public List<CachedOrganism>    InProgress    { get; set; } = new();
         public List<CachedGeoSite>     GeoSites      { get; set; } = new();
         public List<CachedPhenomenon>  Phenomena     { get; set; } = new();
         public AnchorPoint?            ShipAnchor    { get; set; }
@@ -125,8 +129,8 @@ namespace EliteBioRadar
                     if (all.Count == 0) return ("", new LoadedBodyData());
 
                     var best = all
-                        .Where(kvp => kvp.Value.Scans.Count > 0)
-                        .OrderByDescending(kvp => kvp.Value.Scans.Max(o => o.LastSeen))
+                        .Where(kvp => kvp.Value.Scans.Count > 0 || kvp.Value.InProgress.Count > 0)
+                        .OrderByDescending(kvp => kvp.Value.Scans.Concat(kvp.Value.InProgress).Max(o => o.LastSeen))
                         .FirstOrDefault();
 
                     if (best.Key == null) return ("", new LoadedBodyData());
@@ -232,7 +236,16 @@ namespace EliteBioRadar
                             LastSeen   = o.LastSeen,
                         }).ToList();
 
-                    if (toSave.Count == 0 && bioCount == 0 && genera.Count == 0)
+                    // Unfinished sampling is kept apart from the completed scans, so nothing that reads Scans mistakes it for a finished genus.
+                    var inProgress = organisms
+                        .Where(o => !o.IsComplete)
+                        .Select(o => new CachedOrganism
+                        {
+                            Latitude = o.Latitude, Longitude = o.Longitude, Genus = o.Genus, Species = o.Species,
+                            ScanCount = o.ScanCount, IsComplete = false, LastSeen = o.LastSeen,
+                        }).ToList();
+
+                    if (toSave.Count == 0 && inProgress.Count == 0 && bioCount == 0 && genera.Count == 0)
                         all.Remove(bodyName);
                     else
                         all[bodyName] = new CachedBodyData
@@ -242,6 +255,7 @@ namespace EliteBioRadar
                             WasFootfalled = footfalled,
                             KnownGenera   = genera,
                             Scans         = toSave,
+                            InProgress    = inProgress,
                             GeoSites      = existing?.GeoSites ?? new List<CachedGeoSite>(),
                             System        = systemName,
                         };
@@ -293,6 +307,7 @@ namespace EliteBioRadar
                         WasFootfalled = finalFF,
                         KnownGenera   = finalGenera,
                         Scans         = existing?.Scans ?? new List<CachedOrganism>(),
+                        InProgress    = existing?.InProgress ?? new List<CachedOrganism>(),
                         GeoSites      = existing?.GeoSites ?? new List<CachedGeoSite>(),
                     };
                     WriteAll(all);
@@ -313,6 +328,7 @@ namespace EliteBioRadar
                     var all = ReadAll();
                     if (!all.TryGetValue(bodyName, out var cached)) return;
                     cached.Scans.RemoveAll(c => string.Equals(c.Genus, genus, StringComparison.OrdinalIgnoreCase));
+                    cached.InProgress?.RemoveAll(c => string.Equals(c.Genus, genus, StringComparison.OrdinalIgnoreCase));
                     all[bodyName] = cached;
                     WriteAll(all);
                     Log.Write($"ScanCache: cleared genus {genus} from '{bodyName}'");
@@ -605,7 +621,16 @@ namespace EliteBioRadar
                     ScanCount  = c.ScanCount,
                     IsComplete = c.IsComplete || c.ScanCount >= 3,
                     LastSeen   = c.LastSeen,
-                }).ToList(),
+                })
+                // Sampling in progress when the app last ran: only recent, and only for a genus with no finished record (a finished one supersedes it).
+                .Concat((cached.InProgress ?? new List<CachedOrganism>())
+                    .Where(c => (DateTime.UtcNow - c.LastSeen).TotalHours < 12 &&
+                                !cached.Scans.Any(s => s.IsComplete && string.Equals(s.Genus, c.Genus, StringComparison.OrdinalIgnoreCase)))
+                    .Select(c => new ScannedOrganism
+                    {
+                        Latitude = c.Latitude, Longitude = c.Longitude, Genus = c.Genus, Species = c.Species,
+                        ScanCount = c.ScanCount, IsComplete = false, LastSeen = c.LastSeen,
+                    })).ToList(),
                 GeoSites = (cached.GeoSites ?? new List<CachedGeoSite>()).Select(g => new ScannedGeoSite
                 {
                     Latitude  = g.Latitude,

@@ -173,6 +173,7 @@ namespace EliteBioRadar
         public bool CargoScoopDeployed => (Flags & (1u << 9)) != 0;   // the cargo scoop is out (clear: retracted)
         public bool LightsOn => (Flags & (1u << 8)) != 0;   // the ship's or SRV's lights are on
         public bool SrvHighBeam => (Flags & (1u << 31)) != 0;   // the SRV's lights are on high beam
+        public bool FlightAssistOff => (Flags & (1u << 5)) != 0;   // flight assist is off (clear: on)
         public bool NightVisionOn => (Flags & (1u << 28)) != 0;   // night vision is on
         public string HeadlightMode => !LightsOn ? "OFF" : SrvHighBeam ? "HIGH" : "ON";
         public bool InSRV       => (Flags & (1u << 26)) != 0;
