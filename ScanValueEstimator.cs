@@ -102,14 +102,20 @@ namespace EliteBioRadar
         // support the calculation (e.g. a belt/non-star entry, or radius/temp not yet scanned).
         public static (double innerAU, double outerAU)? HabitableZoneAU(BodyScanDetail star)
         {
+            double? luminositySuns = LuminositySuns(star);
+            if (luminositySuns is not > 0) return null;
+            return (Math.Sqrt(luminositySuns.Value / 1.1), Math.Sqrt(luminositySuns.Value / 0.53));
+        }
+
+        // The star's luminosity in Suns (Stefan-Boltzmann from its own radius and surface temperature), or null when either isn't known yet.
+        public static double? LuminositySuns(BodyScanDetail star)
+        {
             if (!star.IsStar || star.Radius <= 0 || star.SurfaceTemperature <= 0) return null;
             const double sunRadiusM = 695_700_000.0;
             const double sunTempK   = 5778.0;
             double rRatio = star.Radius / sunRadiusM;
             double tRatio = star.SurfaceTemperature / sunTempK;
-            double luminositySuns = rRatio * rRatio * Math.Pow(tRatio, 4);
-            if (luminositySuns <= 0) return null;
-            return (Math.Sqrt(luminositySuns / 1.1), Math.Sqrt(luminositySuns / 0.53));
+            return rRatio * rRatio * Math.Pow(tRatio, 4);
         }
     }
 }

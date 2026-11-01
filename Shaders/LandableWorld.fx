@@ -35,6 +35,7 @@ float  Mottle    : register(c21);  // pattern scale multiplier
 float  SpecAmt   : register(c22);  // 0..1 glossy sun-glint (icy surfaces are shiny, bare rock is not)
 float  LineFine  : register(c24);  // 0..1 thin, wandering, broken cracks plus a second set of hairline cracks (0 = the bold arcs)
 float  LineAmt   : register(c23);  // 0..1 long thin fracture lines drawn in ColIce (icy crevasses; 0 = none)
+float  Flow      : register(c25);  // extra turn of the whole surface in radians, added to the slow Time spin (the descent drives it so the ground streams toward the viewer)
 
 static const float PI  = 3.14159265;
 static const float TAU = 6.28318531;
@@ -58,7 +59,8 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     float3 Pt = float3(Pz.x, Pz.y * cp - Pz.z * sp, Pz.y * sp + Pz.z * cp);
 
     float lat = asin(clamp(Pt.y, -0.999, 0.999));
-    float lonW = atan2(Pt.x, Pt.z) - Time * 0.006;
+    float spin = Time * 0.006 + Flow;
+    float lonW = atan2(Pt.x, Pt.z) - spin;
     float2 ps = float2(lonW / PI, lat / PI * 2.0);
     float polar = smoothstep(1.20, 1.45, abs(lat));       // hide the lat/lon pinch at the poles
     float polar2 = smoothstep(1.05, 1.42, abs(lat)) * 0.85;   // fade the fine detail out toward the pole, where the mapping streaks into a star: later and not fully, so the top is not a flat smooth cap
@@ -88,8 +90,7 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
 
     // Long fracture lines (icy crevasses): arcs of random great circles, wobbled by noise, broken into
     // segments and varying in width, drawn in ColIce. Rotates with the planet.
-    float spin = Time * 0.006;
-    float3 Pr = float3(Pt.x * cos(spin) + Pt.z * sin(spin), Pt.y, -Pt.x * sin(spin) + Pt.z * cos(spin));
+    float3 Pr = float3(Pt.x * cos(spin) - Pt.z * sin(spin), Pt.y, Pt.x * sin(spin) + Pt.z * cos(spin));   // turns the same way as the terrain (lonW above)
     float lines = 0.0;
     for (int ci = 0; ci < 7; ci++)
     {
@@ -193,7 +194,9 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
         float pEx = (0.15 + 0.45 * CraterAmt) * ((k == 0) ? 1.0 : ((k == 1) ? 0.9 : 0.7));
         float ex = step(1.0 - pEx, frac(hh.z * 9.0 + 0.4));
         float t = length(dd) / Rc;
-        float3 dv = float3(dd.x * cs - dd.z * sn, dd.y, dd.x * sn + dd.z * cs);   // offset back in view space, to compare with the light
+        float3 dv = float3(dd.x * cs + dd.z * sn, dd.y, -dd.x * sn + dd.z * cs);   // offset back out of the turning frame
+        float3 d1 = float3(dv.x, dv.y * cp + dv.z * sp, -dv.y * sp + dv.z * cp);   // and out of the pitch and tilt, so it is in view space to compare with the light
+        dv = float3(d1.x * ct + d1.y * st, -d1.x * st + d1.y * ct, d1.z);
         float2 rh = dv.xy / max(length(dv.xy), 1e-4);
         float slope = (t < 1.0 ? 1.1 * t : 0.0) - 1.6 * (t - 1.0) * exp(-(t - 1.0) * (t - 1.0) * 30.0);   // bowl wall rising outwards, then the rim falling off
         float wallLight = -slope * dot(rh, float2(Lw.x, Lw.y)) * 0.50 * smoothstep(2.0, 1.0, t);

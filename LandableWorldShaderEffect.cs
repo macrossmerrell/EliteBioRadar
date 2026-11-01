@@ -58,6 +58,7 @@ namespace EliteBioRadar
         public static readonly DependencyProperty SpecAmtProperty   = Reg("SpecAmt", 22, 0.0);
         public static readonly DependencyProperty LineAmtProperty   = Reg("LineAmt", 23, 0.0);
         public static readonly DependencyProperty LineFineProperty  = Reg("LineFine", 24, 0.0);
+        public static readonly DependencyProperty FlowProperty      = Reg("Flow", 25, 0.0);
 
         public LandableWorldShaderEffect()
         {
@@ -70,7 +71,7 @@ namespace EliteBioRadar
                 TimeProperty, SeedProperty, CenterProperty, RadiusProperty, ColLightProperty, ColDarkProperty,
                 ColAccentProperty, ColBrightProperty, ColIceProperty, ColHotProperty, ContrastProperty,
                 CraterAmtProperty, RayAmtProperty, RustAmtProperty, BrightAmtProperty, IceAmtProperty,
-                HotAmtProperty, AtmGlowProperty, TiltProperty, PitchProperty, LightDirProperty, MottleProperty, SpecAmtProperty, LineAmtProperty, LineFineProperty,
+                HotAmtProperty, AtmGlowProperty, TiltProperty, PitchProperty, LightDirProperty, MottleProperty, SpecAmtProperty, LineAmtProperty, LineFineProperty, FlowProperty,
             })
                 UpdateShaderValue(p);
         }

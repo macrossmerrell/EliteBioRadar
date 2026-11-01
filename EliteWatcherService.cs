@@ -36,7 +36,17 @@ namespace EliteBioRadar
         public event Action? FuelScoopEnded;
         private bool _wasScooping;
         public event Action<bool>? HudModeChanged;   // (analysis) the commander switched the HUD between Combat and Analysis mode; live only
+        public event Action<bool>? GearChanged;   // (down) the landing gear went down or came up; live only
+        public event Action<bool>? HardpointsChanged;   // (deployed) the hardpoints went out or came in; live only
+        public event Action<bool>? CargoScoopChanged;   // (deployed) the cargo scoop went out or came in; live only
+        public event Action<string>? HeadlightsChanged;   // ("OFF" / "ON" / "HIGH") the lights changed; live only
+        private string? _wasLights;
+        public event Action<bool>? NightVisionChanged;   // (on) night vision went on or off; live only
+        private bool? _wasNightVision;
         private bool? _wasAnalysis;
+        private bool? _wasGear;
+        private bool? _wasHardpoints;
+        private bool? _wasCargoScoop;
         public event Action<string, string>? SystemArrived;   // (system name, star class) a completed hyperspace jump into a new system, live only
         public event Action<string, string>? FirstFootfall;   // (body name, scene tint) the commander's first step on a world nobody had walked on
         public event Action<string, string>? ShipLiftoff;   // (body name, stats) a commander-flown takeoff from a planet
@@ -988,6 +998,26 @@ namespace EliteBioRadar
                 // HUD mode (Flags bit 27): the first read only sets the baseline, so nothing plays at start-up.
                 if (_wasAnalysis != null && _wasAnalysis != status.AnalysisMode) { Log.Write(status.AnalysisMode ? "HUD switched to Analysis mode" : "HUD switched to Combat mode"); HudModeChanged?.Invoke(status.AnalysisMode); }
                 _wasAnalysis = status.AnalysisMode;
+
+                // Landing gear (Flags bit 2): the first read only sets the baseline.
+                if (_wasGear != null && _wasGear != status.LandingGearDown) { Log.Write(status.LandingGearDown ? "Landing gear down" : "Landing gear up"); GearChanged?.Invoke(status.LandingGearDown); }
+                _wasGear = status.LandingGearDown;
+
+                // Hardpoints (Flags bit 6): the first read only sets the baseline.
+                if (_wasHardpoints != null && _wasHardpoints != status.HardpointsDeployed) { Log.Write(status.HardpointsDeployed ? "Hardpoints deployed" : "Hardpoints retracted"); HardpointsChanged?.Invoke(status.HardpointsDeployed); }
+                _wasHardpoints = status.HardpointsDeployed;
+
+                // Cargo scoop (Flags bit 9): the first read only sets the baseline.
+                if (_wasCargoScoop != null && _wasCargoScoop != status.CargoScoopDeployed) { Log.Write(status.CargoScoopDeployed ? "Cargo scoop deployed" : "Cargo scoop retracted"); CargoScoopChanged?.Invoke(status.CargoScoopDeployed); }
+                _wasCargoScoop = status.CargoScoopDeployed;
+
+                // Headlights (Flags bit 8 lights on, bit 31 SRV high beam): the first read only sets the baseline.
+                if (_wasLights != null && _wasLights != status.HeadlightMode) { Log.Write($"Headlights {status.HeadlightMode.ToLowerInvariant()}"); HeadlightsChanged?.Invoke(status.HeadlightMode); }
+                _wasLights = status.HeadlightMode;
+
+                // Night vision (Flags bit 28): the first read only sets the baseline.
+                if (_wasNightVision != null && _wasNightVision != status.NightVisionOn) { Log.Write(status.NightVisionOn ? "Night vision on" : "Night vision off"); NightVisionChanged?.Invoke(status.NightVisionOn); }
+                _wasNightVision = status.NightVisionOn;
 
                 // Fuel scooping (Flags bit 11): the scoop screen runs while it works, and reads the tank level from FuelScoopState.
                 FuelScoopState.Total = status.FuelMain + status.FuelReservoir;

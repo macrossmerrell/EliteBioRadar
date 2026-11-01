@@ -60,7 +60,12 @@ namespace EliteBioRadar
             bool onMainTab = _lastMode == InfoPanelMode.Deorbit && AtmoMainWanted();
             var win = _systemNotificationsWindow;
             bool wide = win is { IsAvailable: true } && AtmoWants(AnimationSurfaces.Notifications);
-            if (wide) _atmoWideCanvas = win!.ShowLiveScene(WideSceneWidth, DescentH);
+            if (wide)
+            {
+                double sceneW = win!.SceneWidthFor(DescentH);   // laid out for the window's own shape, so the scene fills it whatever size or aspect it has
+                _wideSlot.W = sceneW;
+                _atmoWideCanvas = win.ShowLiveScene(sceneW, DescentH);
+            }
             else { _atmoWideCanvas = null; win?.HideLiveScene(); }
             return onMainTab || wide;
         }

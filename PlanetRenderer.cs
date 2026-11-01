@@ -121,7 +121,7 @@ namespace EliteBioRadar
         // Rings are tinted from A stars up: the rocky rings of Qiedea JC-U d3-1 A 3 (A5 star) read cream-white and tan in game, lighter than their class colours.
         public const double RingTintMinK = 8000;   // an A9 (7712 K, Qiedea OS-T d3-2) had plain brown-tan rings
         // The coolest stars (L dwarfs, about 1500 K): the body is lit almost purely red and reads monochrome red-pink (real: Qiedea TU-M c8-0 B 1, an L6 star at 1521 K, 6 ls away).
-        public const double LowStarTintMaxK = 2400;   // was 1800: the L1 dwarf B of Qiedea DL-N c7-0 (1866 K) tints its bodies pink-red too; this is the top of the L class
+        public const double LowStarTintMaxK = 2100;   // was 2400 (1800 before that): the L1 dwarfs of Qiedea DL-N c7-0 (1866 K) and ES-P c7-2 (1879 K) tint their bodies pink-red, but the very cool M dwarfs of YT-D b17-0 (2262 K) and SS-F b16-0 (2233 K) lit white icy bodies plain white in game
 
         public static (double r, double g, double b) StarLightTint(double kelvin)
         {

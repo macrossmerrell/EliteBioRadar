@@ -182,6 +182,15 @@ namespace EliteBioRadar
             c.Children.Add(new Path { Data = limb, Stroke = new SolidColorBrush(DAlpha(DMix(hazeC, Colors.White, 0.4), 0.9 * limbA)), StrokeThickness = 2.4, IsHitTestVisible = false });
         }
 
+        private static readonly Brush FrameStroke = FrozenBrush(Color.FromArgb(217, 0x55, 0xf2, 0xff));
+        private static readonly Brush FrameVignette = MakeFrameVignette();
+        private static Brush MakeFrameVignette()
+        {
+            var b = new RadialGradientBrush(new GradientStopCollection { new GradientStop(Color.FromArgb(0, 0, 0, 0), 0.55), new GradientStop(Color.FromArgb(150, 0, 0, 0), 1.0) })
+                { Center = new Point(0.5, 0.5), GradientOrigin = new Point(0.5, 0.5), RadiusX = 0.78, RadiusY = 0.78 };
+            b.Freeze(); return b;
+        }
+
         private void DrawAscentFrame(Canvas c)
         {
             double W = DescentW, H = DescentH;
@@ -198,16 +207,8 @@ namespace EliteBioRadar
                 }
             }
             fr.Freeze();
-            c.Children.Add(new Path { Data = fr, Stroke = new SolidColorBrush(DAlpha(DescentCyan, 0.85)), StrokeThickness = 1.8, IsHitTestVisible = false });
-            c.Children.Add(new Rectangle
-            {
-                Width = W, Height = H, IsHitTestVisible = false,
-                Fill = new RadialGradientBrush(new GradientStopCollection
-                {
-                    new GradientStop(Color.FromArgb(0, 0, 0, 0), 0.55),
-                    new GradientStop(Color.FromArgb(150, 0, 0, 0), 1.0),
-                }) { Center = new Point(0.5, 0.5), GradientOrigin = new Point(0.5, 0.5), RadiusX = 0.78, RadiusY = 0.78 },
-            });
+            c.Children.Add(new Path { Data = fr, Stroke = FrameStroke, StrokeThickness = 1.8, IsHitTestVisible = false });
+            c.Children.Add(new Rectangle { Width = W, Height = H, IsHitTestVisible = false, Fill = FrameVignette });
         }
 
         // Normal climb: the descent's gates lead up out of the centre and fade as the air thins. No target.
@@ -252,16 +253,42 @@ namespace EliteBioRadar
             DrawAscentFrame(c);
         }
 
+        // The tunnel's parts, kept per canvas (the main window's and the System Notifications window's canvas are both drawn every frame) and reused: the scene
+        // is cleared and refilled each frame, but rebuilding the full-size backdrop, the large glow with its gradient and the labels every frame made it choppy.
+        private sealed class TunnelParts
+        {
+            public Rectangle Back = null!; public Ellipse Core = null!; public readonly Path[] Streaks = new Path[3];
+            public TextBlock Title = null!, Next = null!; public string NextText = "";
+            public double W, H, Fx, Fy;
+        }
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Canvas, TunnelParts> TunnelCache = new();
+        private static readonly Brush TunnelBack = FrozenBrush(Color.FromRgb(2, 4, 10));
+        private static readonly Brush TunnelCore = MakeTunnelCore();
+        private static readonly Brush[] TunnelStreakBrushes = { FrozenBrush(DAlpha(Color.FromRgb(255, 111, 210), 0.8)), FrozenBrush(DAlpha(Color.FromRgb(95, 255, 240), 0.8)), FrozenBrush(DAlpha(Colors.White, 0.8)) };
+        private static Brush FrozenBrush(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
+        private static Brush MakeTunnelCore() { var b = new RadialGradientBrush(DAlpha(Color.FromRgb(150, 190, 255), 0.38), DAlpha(Color.FromRgb(150, 190, 255), 0)); b.Freeze(); return b; }
+
         // The hyperspace tunnel shown from the end of the flash until arrival: streaks pouring out of the centre.
         private void DrawHyperspaceTunnel(Canvas c, double t, string next)
         {
             double W = DescentW, H = DescentH, CX = DescentCx;
             double fx = CX, fy = H * 0.40;
-            c.Children.Add(new Rectangle { Width = W, Height = H, IsHitTestVisible = false, Fill = new SolidColorBrush(Color.FromRgb(2, 4, 10)) });
-            var core = new Ellipse { Width = 460, Height = 460, IsHitTestVisible = false, Fill = new RadialGradientBrush(DAlpha(Color.FromRgb(150, 190, 255), 0.38), DAlpha(Color.FromRgb(150, 190, 255), 0)) };
-            Canvas.SetLeft(core, fx - 230); Canvas.SetTop(core, fy - 230);
-            c.Children.Add(core);
-            var cols = new[] { Color.FromRgb(255, 111, 210), Color.FromRgb(95, 255, 240), Colors.White };
+            var tp = TunnelCache.GetValue(c, _ => new TunnelParts());
+            if (tp.Back == null || tp.W != W || tp.H != H || tp.Fx != fx || tp.Fy != fy)
+            {
+                tp.W = W; tp.H = H; tp.Fx = fx; tp.Fy = fy;
+                tp.Back = new Rectangle { Width = W, Height = H, IsHitTestVisible = false, Fill = TunnelBack };
+                tp.Core = new Ellipse { Width = 460, Height = 460, IsHitTestVisible = false, Fill = TunnelCore };
+                Canvas.SetLeft(tp.Core, fx - 230); Canvas.SetTop(tp.Core, fy - 230);
+                for (int ci = 0; ci < 3; ci++) tp.Streaks[ci] = new Path { Stroke = TunnelStreakBrushes[ci], StrokeThickness = 1.2 + ci * 0.7, IsHitTestVisible = false };
+                tp.Title = MakeCenterLabel("IN HYPERSPACE", fx, fy + 150, Brushes.White, 18);
+                tp.Title.FontWeight = FontWeights.Bold;
+                tp.Next = null!; tp.NextText = "";
+            }
+            if (next != tp.NextText) { tp.NextText = next; tp.Next = string.IsNullOrEmpty(next) ? null! : MakeCenterLabel(next, fx, fy + 176, new SolidColorBrush(DAlpha(Colors.White, 0.8)), 13); }
+
+            c.Children.Add(tp.Back);
+            c.Children.Add(tp.Core);
             for (int ci = 0; ci < 3; ci++)
             {
                 var sg = new StreamGeometry();
@@ -278,15 +305,13 @@ namespace EliteBioRadar
                     }
                 }
                 sg.Freeze();
-                c.Children.Add(new Path { Data = sg, Stroke = new SolidColorBrush(DAlpha(cols[ci], 0.8)), StrokeThickness = 1.2 + ci * 0.7, IsHitTestVisible = false });
+                tp.Streaks[ci].Data = sg;
+                c.Children.Add(tp.Streaks[ci]);
             }
-            var lbl = MakeCenterLabel("IN HYPERSPACE", fx, fy + 150, Brushes.White, 18);
-            lbl.FontWeight = FontWeights.Bold;
-            c.Children.Add(lbl);
-            if (!string.IsNullOrEmpty(next)) c.Children.Add(MakeCenterLabel(next, fx, fy + 176, new SolidColorBrush(DAlpha(Colors.White, 0.8)), 13));
+            c.Children.Add(tp.Title);
+            if (tp.Next != null) c.Children.Add(tp.Next);
             DrawAscentFrame(c);
         }
-
         // Jump from atmosphere. Returns the short status text for the HUD plate.
         private string DrawJumpScene(Canvas c, BodyScanDetail? body, double altitudeM, double dt)
         {

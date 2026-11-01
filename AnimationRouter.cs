@@ -33,6 +33,16 @@ namespace EliteBioRadar
             new("fuel-scoop", "Fuel scooping", "Jump", AnimationSurfaces.Main, 0.92, "Sample Star", "PREVIEW|TYPE=K-Star|~STAR=4500");
         public static readonly AnimationDef CombatMode =
             new("combat-mode", "Combat mode", "HUD", AnimationSurfaces.Main, 0.85, "", "");
+        public static readonly AnimationDef LandingGear =
+            new("landing-gear", "Landing gear deployed / retracted", "HUD", AnimationSurfaces.Both, 0.85, "", "DOWN");
+        public static readonly AnimationDef Hardpoints =
+            new("hardpoints", "Hardpoints deployed / retracted", "HUD", AnimationSurfaces.Both, 0.85, "", "OUT");
+        public static readonly AnimationDef CargoScoop =
+            new("cargo-scoop", "Cargo scoop deployed / retracted", "HUD", AnimationSurfaces.Both, 0.85, "", "OUT");
+        public static readonly AnimationDef Headlights =
+            new("headlights", "Headlights on / high beam / off", "HUD", AnimationSurfaces.Both, 0.85, "", "HIGH");
+        public static readonly AnimationDef NightVision =
+            new("night-vision", "Night vision activated / deactivated", "HUD", AnimationSurfaces.Both, 0.85, "", "ON");
         public static readonly AnimationDef AnalysisMode =
             new("analysis-mode", "Analysis mode", "HUD", AnimationSurfaces.Main, 0.85, "", "");
         public static readonly AnimationDef Arrival =
@@ -47,7 +57,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef AtmosphericJump =
             new("atmospheric-jump", "Hyperspace jump from an atmosphere", "Atmosphere", AnimationSurfaces.Main, 1.0, "", "", Live: true);
 
-        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, FuelScoop, CombatMode, AnalysisMode, Arrival, Landed, Liftoff, FirstFootfall, Docked, Descent, Climb, AtmosphericJump };
+        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, Arrival, Landed, Liftoff, FirstFootfall, Docked, Descent, Climb, AtmosphericJump };
 
         // The user's choice from the settings file, else the animation's own default.
         public static AnimationSurfaces SurfacesFor(AnimationDef def, AppSettingsData settings) =>

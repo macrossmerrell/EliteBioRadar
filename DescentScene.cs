@@ -31,6 +31,7 @@ namespace EliteBioRadar
         private double _descentFrameCy { get => Slot.FrameCy; set => Slot.FrameCy = value; }
         private double _descentFrameR0 { get => Slot.FrameR0; set => Slot.FrameR0 = value; }
         private double _descentGatePhase, _descentGridPhase, _descentSpin;
+        private double _descentFlow, _descentPrevHy = -1, _descentPrevR;   // how far the ground has streamed toward the viewer (radians of surface turn), and last frame's horizon and radius
 
         private static readonly Color DescentCyan = Color.FromRgb(0x55, 0xf2, 0xff);
         private static readonly Color DescentPink = Color.FromRgb(0xff, 0x6f, 0xd2);
@@ -87,6 +88,7 @@ namespace EliteBioRadar
             _descentSurfaceBody = body.BodyName;
             _descentSurface = null;
             _descentEffect = null;
+            _descentPrevHy = -1;
             try
             {
                 if (PlanetRenderer.IsLandableWorld(body, iconCode) && (System.Windows.Media.RenderCapability.Tier >> 16) != 0)
@@ -94,10 +96,12 @@ namespace EliteBioRadar
                     var look = PlanetRenderer.GetLandableWorldLook(body, iconCode, _watcher?.ParentStarTemperature(body) ?? 0, _watcher?.ParentStarDistanceM(body) ?? 0, _watcher?.PrimaryStarFlux(body) ?? 0);
                     look.AtmGlow = 0;   // the haze is drawn separately, in the atmosphere's own colour
                     // The visible ground here is the TOP of a very large sphere, and the top of the sphere is the shader's pole, where its
-                    // latitude/longitude texture mapping pinches into a star of converging streaks. Pitching the planet a quarter turn puts that top
-                    // cap on the equator instead (the pole ends up at the sphere's near side, which is off screen); the body's own small pitch stays
-                    // as a gentle variation.
-                    look.Pitch = Math.PI / 2 + look.Pitch * 0.5;
+                    // latitude/longitude texture mapping pinches into a star of converging streaks. Turning the planet's axis to point along the
+                    // screen's horizontal puts the pole far off to the side instead, and makes the surface's turn (Flow) run top to bottom, so the
+                    // ground streams down toward the viewer. (The old axis along the view direction made it slide sideways around a point below the
+                    // screen.) The body's own small tilt stays as a gentle variation.
+                    look.Tilt = Math.PI / 2 + look.Tilt * 0.5;
+                    look.Pitch = 0;
                     var effect = LandableWorldShaderEffect.Create(look, new Point(0.5, 3), new Point(2, 2));
                     effect.BeginAnimation(LandableWorldShaderEffect.TimeProperty,
                         new DoubleAnimation(0, 36000, TimeSpan.FromSeconds(36000)));
@@ -141,6 +145,15 @@ namespace EliteBioRadar
             double hy = DLerp(H * 0.80, H * 0.40, ease);
             double R = DesignW * DLerp(0.95, 1.7, Math.Pow(e, 0.9));   // the planet is the same size on a wider canvas: more of it shows
             double cyp = hy + R;
+
+            // The ground streams toward the viewer, faster the lower the ship is. The planet is also scaled up and its top edge raised as the descent
+            // goes on, which on its own carries the surface UP the screen; the flow cancels that at mid-screen so the net motion is always downward.
+            double midPy = 1 - 0.5 * (H - hy) / R, midZ = Math.Sqrt(Math.Max(0.05, 1 - midPy * midPy));
+            double riseUp = _descentPrevHy < 0 ? 0 : -((hy - _descentPrevHy) + (R - _descentPrevR) * (1 - midPy));   // px the mid-screen surface rose this frame
+            _descentPrevHy = hy; _descentPrevR = R;
+            double streamPx = dt * DLerp(4, 24, e);
+            _descentFlow += (streamPx + Math.Clamp(riseUp, -40, 40)) / (R * midZ);
+            _descentEffect?.SetValue(LandableWorldShaderEffect.FlowProperty, _descentFlow);
 
             _descentGatePhase = (_descentGatePhase + dt * (0.10 + 0.28 * e)) % 1.0;
             _descentGridPhase = (_descentGridPhase + dt * DLerp(0.03, 0.11, e)) % 1.0;

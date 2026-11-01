@@ -276,7 +276,7 @@ namespace EliteBioRadar
                     : detail.SurfaceTemperature >= 5600 ? Mix(core, Color.FromRgb(0xff, 0xf0, 0xc8), 0.55)   // G/F: patches stay pale cream
                     : Mix(Mix(core, Mix(Color.FromRgb(0xff, 0xe6, 0x82), Color.FromRgb(0xff, 0xdc, 0x48), coolT), 0.60 + 0.25 * (1 - coolT)),
                           Mix(core, Color.FromRgb(0xff, 0xf0, 0xc8), 0.55), Math.Clamp((detail.SurfaceTemperature - 4500) / 1100.0, 0, 1)),   // K stars turn from golden to cream patches as they get hotter (the real 5,149 K K0 had white-cream ones)
-                PatchCover = hot ? 1.0 : detail.StarType == "L" ? 0.10 : brownDwarf ? 0.5 : detail.StarType == "TTS" ? 1.0 : 0.2 + 0.8 * coolT,
+                PatchCover = hot ? 1.0 : detail.StarType == "L" ? 0.10 : brownDwarf ? 0.5 : detail.StarType == "TTS" ? 1.0 : 0.7 + 0.3 * coolT,   // cool M dwarfs keep dense patches (real M8, 2,323 K, Qiedea RI-E b17-0: yellow-white patches over most of the disc)
                 Seed = seed,
                 Activity = activity,
                 Contrast = (0.55 + 0.55 * activity) * (!hot && detail.SurfaceTemperature >= 5600 ? 0.65 : 1.0),

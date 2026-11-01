@@ -1206,7 +1206,13 @@ namespace EliteBioRadar
             var trueStarRing = detail.Rings.FirstOrDefault(r => !r.Name.Contains("Belt", StringComparison.OrdinalIgnoreCase));
             double ringsBottomY = AddStackedStat(starPanelCanvas, rightX, rowY, true, "RINGS",
                 trueStarRing != null ? FormatRingClass(trueStarRing.RingClass) : "None", InfoLabelGreenBrush, sizeBump: starSizeBump);
-            rowY = ringsBottomY + sectionGap;
+
+            // Luminosity under the habitable zone, in Suns, worked out from the star's own radius and temperature (the journal only gives a class like "Va").
+            string luminosityText = "—";
+            if (ScanValueEstimator.LuminositySuns(detail) is double lum)
+                luminosityText = (lum < 0.01 ? lum.ToString("0.0000") : lum < 10 ? lum.ToString("N2") : lum < 1000 ? lum.ToString("N1") : lum.ToString("N0")) + " Sol";
+            double lumBottomY = AddStackedStat(starPanelCanvas, leftX, rowY, false, "LUMINOSITY", luminosityText, InfoLabelGreenBrush, sizeBump: starSizeBump);
+            rowY = Math.Max(ringsBottomY, lumBottomY) + sectionGap;
 
             bool isPrimary = _watcher != null && ReferenceEquals(detail, _watcher.CurrentStarDetail);
             var bottomLabel = EliteWatcherService.GetShortBodyName(detail.BodyName, _watcher?.StarSystem ?? "");
@@ -2578,7 +2584,7 @@ namespace EliteBioRadar
             {
             double w = DescentW;
             c.Children.Clear();
-            c.Children.Add(MakeGridBackground(w, DescentH));
+            // The faint grid sits behind the two holding screens only: every real scene paints an opaque sky over it, and its fade mask is a costly extra render pass per frame.
             string jumpPhase = "";
             if (jumpScene) jumpPhase = DrawJumpScene(c, bodyDetail, estAltForScene, dtDraw);
             else if (isDescending)
@@ -2690,6 +2696,7 @@ namespace EliteBioRadar
                 // overwhelming common case — the target was already scanned in orbit before the
                 // glide began — resolves this within a frame or two; this hold is rarely even
                 // visible.
+                c.Children.Add(MakeGridBackground(w, DescentH));
                 c.Children.Add(MakeCenterLabel("RESOLVING BODY DATA…", w / 2, 270, InfoDimBrush, 14));
             }
             else
@@ -2707,6 +2714,7 @@ namespace EliteBioRadar
                 // what shows while nothing's committed yet. Better to show nothing committal for
                 // the one or two ticks this usually lasts than commit to the wrong one, however
                 // briefly.
+                c.Children.Add(MakeGridBackground(w, DescentH));
                 c.Children.Add(MakeCenterLabel("INITIALIZING…", w / 2, 270, InfoDimBrush, 14));
             }
             else

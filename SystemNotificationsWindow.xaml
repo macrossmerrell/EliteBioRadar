@@ -26,6 +26,11 @@
         <local:FuelScoopVisual x:Name="fuelScoopVisual"/>
         <local:CombatModeVisual x:Name="combatModeVisual"/>
         <local:AnalysisModeVisual x:Name="analysisModeVisual"/>
+        <local:LandingGearVisual x:Name="landingGearVisual"/>
+        <local:HardpointsVisual x:Name="hardpointsVisual"/>
+        <local:CargoScoopVisual x:Name="cargoScoopVisual"/>
+        <local:HeadlightsVisual x:Name="headlightsVisual"/>
+        <local:NightVisionVisual x:Name="nightVisionVisual"/>
         <local:DockedVisual x:Name="dockedVisual"/>
     </Grid>
 </Window>

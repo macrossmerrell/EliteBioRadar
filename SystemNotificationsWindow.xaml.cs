@@ -16,7 +16,7 @@ namespace EliteBioRadar
         {
             InitializeComponent();
             RestorePlacement();
-            foreach (var v in new AnimationVisual[] { firstDiscoveryVisual, landedVisual, liftoffVisual, firstFootfallVisual, arrivalVisual, jumpDepartureVisual, fuelScoopVisual, combatModeVisual, analysisModeVisual, dockedVisual })
+            foreach (var v in new AnimationVisual[] { firstDiscoveryVisual, landedVisual, liftoffVisual, firstFootfallVisual, arrivalVisual, jumpDepartureVisual, fuelScoopVisual, combatModeVisual, analysisModeVisual, landingGearVisual, hardpointsVisual, cargoScoopVisual, headlightsVisual, nightVisionVisual, dockedVisual })
                 v.Finished += () => { var d = _done; _done = null; d?.Invoke(); };
             AnimationRouter.Register(this);
             Closed += (_, _) => { AnimationRouter.Unregister(this); SaveWindowState(); };
@@ -29,18 +29,26 @@ namespace EliteBioRadar
         {
             _done = done;
             Log.Write($"Animation '{request.Def.Id}' playing in the System Notifications window: {request.Subject}");
-            AnimationVisual v = request.Def.Id switch { "landed" => landedVisual, "liftoff" => liftoffVisual, "first-footfall" => firstFootfallVisual, "arrival" => arrivalVisual, "hyperspace-jump" => jumpDepartureVisual, "fuel-scoop" => fuelScoopVisual, "combat-mode" => combatModeVisual, "analysis-mode" => analysisModeVisual, "docked" => dockedVisual, _ => firstDiscoveryVisual };
+            AnimationVisual v = request.Def.Id switch { "landed" => landedVisual, "liftoff" => liftoffVisual, "first-footfall" => firstFootfallVisual, "arrival" => arrivalVisual, "hyperspace-jump" => jumpDepartureVisual, "fuel-scoop" => fuelScoopVisual, "combat-mode" => combatModeVisual, "analysis-mode" => analysisModeVisual, "landing-gear" => landingGearVisual, "hardpoints" => hardpointsVisual, "cargo-scoop" => cargoScoopVisual, "headlights" => headlightsVisual, "night-vision" => nightVisionVisual,"docked" => dockedVisual, _ => firstDiscoveryVisual };
             v.BackdropOpacity = request.Def.BackdropOpacity;
             v.Start(request.Subject, request.Detail);
         }
 
         // The canvas MainWindow draws the atmosphere scene into while a phase this window is switched on for is under way (a wide layout, scaled to
         // the window with the aspect kept). Called every frame; returns the canvas to fill.
+        // The scene width that matches this window's shape at the given scene height (in 10-unit steps, so a drag-resize does not rebuild it every pixel).
+        public double SceneWidthFor(double height)
+        {
+            double cw = liveSceneBox.Parent is FrameworkElement p && p.ActualHeight > 0 ? p.ActualWidth / p.ActualHeight : 16.0 / 9;
+            return Math.Round(Math.Clamp(height * cw, height * 1.2, height * 3.2) / 10) * 10;
+        }
+
         public Canvas ShowLiveScene(double width, double height)
         {
+            if (liveSceneCanvas.Width != width) liveSceneCanvas.Width = width;
             if (liveSceneBox.Visibility != Visibility.Visible)
             {
-                liveSceneCanvas.Width = width; liveSceneCanvas.Height = height;
+                liveSceneCanvas.Height = height;
                 liveSceneBox.Visibility = Visibility.Visible;
                 Log.Write("Live atmosphere scene shown in the System Notifications window");
             }

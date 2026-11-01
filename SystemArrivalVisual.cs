@@ -49,7 +49,7 @@ namespace EliteBioRadar
             return char.ToUpperInvariant(c[0]) switch
             {
                 'O' => 35000, 'B' => 20000, 'A' => 8500, 'F' => 6700, 'G' => 5700, 'K' => 4500, 'M' => 3200,
-                'L' => 1800, 'T' => 1000, 'Y' => 700, 'N' => 20000, 'W' => 30000, _ => 0
+                'L' => 1800, 'T' => 1000, 'Y' => 700, 'N' => 20000, 'W' => 30000, 'D' => 12000, _ => 0
             };
         }
 
@@ -58,17 +58,21 @@ namespace EliteBioRadar
             _subject = subject.ToUpperInvariant();
             var stats = ParseStats(detail);
             _type = stats.Length > 0 ? stats[0].value : "";
-            var tint = ReadSurfaceTint(ParseExtras(detail));   // the colour of this star against the default (a K star)
 
+            // The star's own colours, the same ones the Star tab draws (not the mild light tint planets get): the glow, the corona rays and the core all follow the class.
+            var ex = ParseExtras(detail);
+            string cls = ex.TryGetValue("CLS", out var cv) ? cv : (_type.Length >= 6 && _type[1] == '-' ? _type[0].ToString() : "");
+            double kelvin = ex.TryGetValue("STAR", out var kv) && double.TryParse(kv, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var kd) ? kd : 0;
+            var (sCore, sMid, sEdge) = StarRenderer.GetStarColors(kelvin, cls);
             RadialGradientBrush Glow(Color c0)
             {
                 var b = new RadialGradientBrush(Color.FromArgb(255, c0.R, c0.G, c0.B), Color.FromArgb(0, c0.R, c0.G, c0.B));
                 b.Freeze(); return b;
             }
-            _outer = Glow(Scale(Color.FromRgb(255, 150, 70), tint.Star));
-            _inner = Glow(Scale(Color.FromRgb(255, 214, 150), tint.Star));
-            _core = Frozen(Scale(Color.FromRgb(255, 246, 228), tint.Star, 0.95));
-            var ray = Scale(Color.FromRgb(255, 200, 130), tint.Star);
+            _outer = Glow(Mix(sMid, sEdge, 0.55));
+            _inner = Glow(Mix(sMid, sCore, 0.45));
+            _core = Frozen(Mix(sCore, Colors.White, 0.55));
+            var ray = Mix(sMid, sCore, 0.5);
             _rayThin = FrozenPen(Color.FromArgb(150, ray.R, ray.G, ray.B), 1);
             _rayThick = FrozenPen(Color.FromArgb(150, ray.R, ray.G, ray.B), 2);
             _ring = FrozenPen(ray, 1.5);

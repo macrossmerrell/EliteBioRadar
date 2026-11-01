@@ -94,7 +94,7 @@ namespace EliteBioRadar
         {
             var (fadeOut, env, u, W, H) = LayoutScene(w, h, t, FadeOutAt);
             if (env <= 0) return;
-            double cx = W * 0.47, cy = H * 0.59;
+            double cx = W * 0.5, cy = H * 0.59;
 
             dc.PushTransform(new ScaleTransform(u, u));
             dc.PushOpacity(BackdropOpacity * env);

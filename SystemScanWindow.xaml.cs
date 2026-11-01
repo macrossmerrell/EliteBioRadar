@@ -1222,6 +1222,17 @@ namespace EliteBioRadar
         // ---------------------------------------------------------------
         //  Notable body card + nested moons (top-down, same as the mockup/EDDiscovery)
         // ---------------------------------------------------------------
+        // A moon's own letter ("C 10 a", "C 10 b", ...) is the game's real order around its parent, including co-orbiting pairs, which get consecutive letters. Their
+        // SemiMajorAxis is measured around the pair's barycenter, so sorting on it alone put a co-orbiting pair ahead of the nearer moons. Unlettered names sort after.
+        private static (int unlettered, int letter) MoonLetterKey(BodyScanDetail m)
+        {
+            string last = (m.BodyName ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? "";
+            if (last.Length == 0 || !last.All(char.IsLetter)) return (1, 0);
+            int letter = 0;
+            foreach (var ch in last.ToLowerInvariant()) letter = letter * 26 + (ch - 'a' + 1);
+            return (0, letter);
+        }
+
         private UIElement BuildBodyGroup(BodyScanDetail b, (double innerAU, double outerAU)? hz, ILookup<int, BodyScanDetail> childrenByParent, Dictionary<string, int> beltNumbers)
         {
             // Belt cards are half the width of a planet card per feedback — they carry far less
@@ -1231,7 +1242,7 @@ namespace EliteBioRadar
             int beltNumber = beltNumbers.TryGetValue(b.BodyName, out var bn) ? bn : 0;
             stack.Children.Add(BuildCard(b, hz, beltNumber));
 
-            var moons = childrenByParent[b.BodyID].OrderBy(m => m.SemiMajorAxis).ToList();
+            var moons = childrenByParent[b.BodyID].OrderBy(MoonLetterKey).ThenBy(m => m.SemiMajorAxis).ToList();
             if (moons.Count > 0)
             {
                 // Indent halved (was ~32px combined margin+padding) per feedback — frees up
@@ -1305,7 +1316,7 @@ namespace EliteBioRadar
             var stack = new StackPanel { Margin = new Thickness(0, 0, 0, 6) };
             stack.Children.Add(BuildMoonRow(m, hz));
 
-            var subMoons = childrenByParent[m.BodyID].OrderBy(x => x.SemiMajorAxis).ToList();
+            var subMoons = childrenByParent[m.BodyID].OrderBy(MoonLetterKey).ThenBy(x => x.SemiMajorAxis).ToList();
             if (subMoons.Count > 0)
             {
                 var sub = new StackPanel { Margin = new Thickness(7, 6, 0, 0) };

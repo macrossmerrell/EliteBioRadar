@@ -168,6 +168,13 @@ namespace EliteBioRadar
         public bool Landed      => (Flags & (1u << 1))  != 0;
         public bool Supercruise => (Flags & (1u << 4))  != 0;
         public bool AnalysisMode => (Flags & (1u << 27)) != 0;   // the HUD is in Analysis mode (clear: Combat mode)
+        public bool LandingGearDown => (Flags & (1u << 2)) != 0;   // the landing gear is down (clear: retracted)
+        public bool HardpointsDeployed => (Flags & (1u << 6)) != 0;   // the hardpoints are out (clear: retracted)
+        public bool CargoScoopDeployed => (Flags & (1u << 9)) != 0;   // the cargo scoop is out (clear: retracted)
+        public bool LightsOn => (Flags & (1u << 8)) != 0;   // the ship's or SRV's lights are on
+        public bool SrvHighBeam => (Flags & (1u << 31)) != 0;   // the SRV's lights are on high beam
+        public bool NightVisionOn => (Flags & (1u << 28)) != 0;   // night vision is on
+        public string HeadlightMode => !LightsOn ? "OFF" : SrvHighBeam ? "HIGH" : "ON";
         public bool InSRV       => (Flags & (1u << 26)) != 0;
         public bool InFighter   => (Flags & (1u << 25)) != 0;
         // Bit 21 per the Status.json docs (bit 19 is Low Fuel); confirmed on a live landed ship.

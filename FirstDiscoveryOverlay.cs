@@ -194,6 +194,7 @@ namespace EliteBioRadar
                 string type = SystemArrivalVisual.StarTypeLabel(starClass);
                 double k = SystemArrivalVisual.ClassKelvin(starClass);
                 string detail = (type.Length > 0 ? $"TYPE={type}" : "") + (k > 0 ? (type.Length > 0 ? "|" : "") + $"~STAR={k:F0}" : "");
+                if (!string.IsNullOrWhiteSpace(starClass)) detail += (detail.Length > 0 ? "|" : "") + $"~CLS={starClass.Trim()}";   // the class itself, for the star's real colours
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Arrival, system, detail));
             });
             svc.FuelScoopStarted += (star, detail) => Dispatcher.InvokeAsync(() =>
@@ -203,6 +204,16 @@ namespace EliteBioRadar
             });
             svc.HudModeChanged += analysis => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(analysis ? AnimationCatalog.AnalysisMode : AnimationCatalog.CombatMode, "", "")));
+            svc.GearChanged += down => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.LandingGear, "", down ? "DOWN" : "UP")));
+            svc.HardpointsChanged += deployed => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Hardpoints, "", deployed ? "OUT" : "IN")));
+            svc.CargoScoopChanged += deployed => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.CargoScoop, "", deployed ? "OUT" : "IN")));
+            svc.HeadlightsChanged += mode => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Headlights, "", mode)));
+            svc.NightVisionChanged += on => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.NightVision, "", on ? "ON" : "OFF")));
             svc.FuelScoopEnded += () => Dispatcher.InvokeAsync(FuelScoopState.RequestEnd);
             svc.FirstFootfall += (body, stats) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.FirstFootfall, body, stats)));
@@ -219,7 +230,7 @@ namespace EliteBioRadar
             public MainWindowAnimationSurface(MainWindow w)
             {
                 _w = w;
-                foreach (var v in new AnimationVisual[] { _w.firstDiscoveryVisual, _w.landedVisual, _w.liftoffVisual, _w.firstFootfallVisual, _w.arrivalVisual, _w.jumpDepartureVisual, _w.fuelScoopVisual, _w.combatModeVisual, _w.analysisModeVisual, _w.dockedVisual })
+                foreach (var v in new AnimationVisual[] { _w.firstDiscoveryVisual, _w.landedVisual, _w.liftoffVisual, _w.firstFootfallVisual, _w.arrivalVisual, _w.jumpDepartureVisual, _w.fuelScoopVisual, _w.combatModeVisual, _w.analysisModeVisual, _w.landingGearVisual, _w.hardpointsVisual, _w.cargoScoopVisual, _w.headlightsVisual, _w.nightVisionVisual, _w.dockedVisual })
                     v.Finished += () =>
                     {
                         _w.firstDiscoveryLayer.Visibility = Visibility.Collapsed;
@@ -234,7 +245,7 @@ namespace EliteBioRadar
             {
                 _done = done;
                 Log.Write($"Animation '{request.Def.Id}' playing in the Elite Bio Radar window: {request.Subject}");
-                AnimationVisual v = request.Def.Id switch { "landed" => _w.landedVisual, "liftoff" => _w.liftoffVisual, "first-footfall" => _w.firstFootfallVisual, "arrival" => _w.arrivalVisual, "hyperspace-jump" => _w.jumpDepartureVisual, "fuel-scoop" => _w.fuelScoopVisual, "combat-mode" => _w.combatModeVisual, "analysis-mode" => _w.analysisModeVisual, "docked" => _w.dockedVisual, _ => _w.firstDiscoveryVisual };
+                AnimationVisual v = request.Def.Id switch { "landed" => _w.landedVisual, "liftoff" => _w.liftoffVisual, "first-footfall" => _w.firstFootfallVisual, "arrival" => _w.arrivalVisual, "hyperspace-jump" => _w.jumpDepartureVisual, "fuel-scoop" => _w.fuelScoopVisual, "combat-mode" => _w.combatModeVisual, "analysis-mode" => _w.analysisModeVisual, "landing-gear" => _w.landingGearVisual, "hardpoints" => _w.hardpointsVisual, "cargo-scoop" => _w.cargoScoopVisual, "headlights" => _w.headlightsVisual, "night-vision" => _w.nightVisionVisual,"docked" => _w.dockedVisual, _ => _w.firstDiscoveryVisual };
                 v.BackdropOpacity = request.Def.BackdropOpacity;
                 _w.firstDiscoveryLayer.Visibility = Visibility.Visible;
                 v.Start(request.Subject, request.Detail);
