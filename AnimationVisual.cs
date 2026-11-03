@@ -21,8 +21,8 @@ namespace EliteBioRadar
 
         // Seconds from Start to the end of the final fade.
         protected abstract double Duration { get; }
-        // The look the full-area animations share.
-        protected static readonly Typeface MonoFace = new(AppFonts.Mono, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+        // The look the full-area animations share: Consolas, the same face as the atmosphere scenes and most of the app.
+        protected static readonly Typeface MonoFace = new(new FontFamily("Consolas"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
         protected static readonly Brush TitleBrush = Frozen(Color.FromRgb(0xf2, 0xb8, 0x4b));
         protected static readonly Brush SubjectBrush = Frozen(Color.FromRgb(0xff, 0xd9, 0xa0));
         protected static readonly Brush DimBrush = Frozen(Color.FromRgb(0x5a, 0xa8, 0xb0));
@@ -105,6 +105,8 @@ namespace EliteBioRadar
         protected static double Phase(double t, double start, double len) => Clamp01((t - start) / len);
         protected static double Smooth(double a, double b, double x) { double t = Clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); }
         protected static double Lerp(double a, double b, double t) => a + (b - a) * t;
+        // Consolas is narrower than the face these letter spacings were tuned for, so they are eased back a little.
+        private const double TrackScale = 0.8;
 
         // Centred text with an explicit gap (in em) between the letters; FormattedText has no letter-spacing of its own.
         protected void DrawSpaced(DrawingContext dc, string text, Typeface face, double size, Brush brush, double centreX, double y, double spacingEm, double opacity)
@@ -115,14 +117,14 @@ namespace EliteBioRadar
             for (int i = 0; i < text.Length; i++)
             {
                 glyphs[i] = new FormattedText(text[i].ToString(), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, face, size, brush, dpi);
-                total += glyphs[i].WidthIncludingTrailingWhitespace + (i < text.Length - 1 ? spacingEm * size : 0);
+                total += glyphs[i].WidthIncludingTrailingWhitespace + (i < text.Length - 1 ? spacingEm * TrackScale * size : 0);
             }
             double x = centreX - total / 2;
             dc.PushOpacity(opacity);
             for (int i = 0; i < text.Length; i++)
             {
                 dc.DrawText(glyphs[i], new Point(x, y));
-                x += glyphs[i].WidthIncludingTrailingWhitespace + spacingEm * size;
+                x += glyphs[i].WidthIncludingTrailingWhitespace + spacingEm * TrackScale * size;
             }
             dc.Pop();
         }

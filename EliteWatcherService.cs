@@ -42,6 +42,13 @@ namespace EliteBioRadar
         public event Action<string>? HeadlightsChanged;   // ("OFF" / "ON" / "HIGH") the lights changed; live only
         private string? _wasLights;
         public event Action<bool>? NightVisionChanged;   // (on) night vision went on or off; live only
+        public event Action<bool>? ShieldsChanged;   // (up) shields went up or down; live only
+        public event Action<string>? FuelWarning;   // ("LOW" below 25%, "CRITICAL" below 10%) fuel dropped to a worse level; live only
+        private int? _fuelLevel;
+        public event Action? OverheatStarted;   // heat went above 100%; live only
+        private bool? _wasOverheating;
+        private DateTime _lastOverheatBanner = DateTime.MinValue;
+        private bool? _wasShields;
         private bool? _wasNightVision;
         public event Action<string>? PlayerEmbarked;   // (vehicle: "SHIP", "SRV", "NOMAD", "TAXI") the commander boarded a vehicle; live only
         public event Action<string>? PlayerDisembarked;   // (vehicle: "SHIP", "SRV", "NOMAD", "TAXI") the commander stepped out of a vehicle; live only
@@ -1039,6 +1046,26 @@ namespace EliteBioRadar
                 // Night vision (Flags bit 28): the first read only sets the baseline.
                 if (!quiet && _wasNightVision != null && _wasNightVision != status.NightVisionOn) { Log.Write(status.NightVisionOn ? "Night vision on" : "Night vision off"); NightVisionChanged?.Invoke(status.NightVisionOn); }
                 _wasNightVision = status.NightVisionOn;
+
+                // Shields (Flags bit 3): the first read only sets the baseline.
+                if (!quiet && _wasShields != null && _wasShields != status.ShieldsUp) { Log.Write(status.ShieldsUp ? "Shields up" : "Shields down"); ShieldsChanged?.Invoke(status.ShieldsUp); }
+                _wasShields = status.ShieldsUp;
+
+                // Overheating (Flags bit 20): plays when it comes on, at most once every 10 s since heat flickers around 100%. The first read only sets the baseline.
+                if (!quiet && _wasOverheating == false && status.Overheating && (DateTime.UtcNow - _lastOverheatBanner).TotalSeconds >= 10) { Log.Write("Overheating"); _lastOverheatBanner = DateTime.UtcNow; OverheatStarted?.Invoke(); }
+                _wasOverheating = status.Overheating;
+
+                // Low fuel: below 25% of the main tank is LOW, below 10% CRITICAL. Each level plays once on the way down and re-arms only after fuel climbs 5 points back above it (scooping near the line stays quiet).
+                // Ship only (Status.json has no ship fuel on foot or in the SRV); without a tank size the game's own low-fuel flag (bit 19) gives LOW only.
+                if (!status.OnFoot && !status.InSRV && !status.InFighter && status.Flags != 0)
+                {
+                    double cap = CurrentDestination?.FuelCapacityMain ?? 0, frac = cap > 0 ? status.FuelMain / cap : -1;
+                    int cur = _fuelLevel ?? 0, lvl = frac >= 0
+                        ? (frac < 0.10 || (cur >= 2 && frac < 0.15) ? 2 : frac < 0.25 || (cur >= 1 && frac < 0.30) ? 1 : 0)
+                        : ((status.Flags & (1u << 19)) != 0 ? 1 : 0);
+                    if (!quiet && _fuelLevel != null && lvl > cur) { Log.Write($"Fuel {(lvl == 2 ? "critical" : "low")} ({(frac >= 0 ? frac.ToString("P0") : "flag")})"); FuelWarning?.Invoke(lvl == 2 ? "CRITICAL" : "LOW"); }
+                    _fuelLevel = lvl;
+                }
 
                 // Flight assist (Flags bit 5 is set when it is OFF): the first read only sets the baseline.
                 if (!quiet && _wasFlightAssistOff != null && _wasFlightAssistOff != status.FlightAssistOff) { Log.Write(status.FlightAssistOff ? "Flight assist off" : "Flight assist on"); FlightAssistChanged?.Invoke(!status.FlightAssistOff); }

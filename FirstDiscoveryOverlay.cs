@@ -212,6 +212,12 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.CargoScoop, "", deployed ? "OUT" : "IN")));
             svc.HeadlightsChanged += mode => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Headlights, "", mode)));
+            svc.FuelWarning += level => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.LowFuel, "", level)));
+            svc.OverheatStarted += () => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Overheat, "", "")));
+            svc.ShieldsChanged += up => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Shields, "", up ? "UP" : "DOWN")));
             svc.NightVisionChanged += on => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.NightVision, "", on ? "ON" : "OFF")));
             svc.FlightAssistChanged += assistOn => Dispatcher.InvokeAsync(() =>
@@ -236,7 +242,7 @@ namespace EliteBioRadar
             public MainWindowAnimationSurface(MainWindow w)
             {
                 _w = w;
-                foreach (var v in new AnimationVisual[] { _w.firstDiscoveryVisual, _w.landedVisual, _w.liftoffVisual, _w.firstFootfallVisual, _w.arrivalVisual, _w.jumpDepartureVisual, _w.fuelScoopVisual, _w.combatModeVisual, _w.analysisModeVisual, _w.landingGearVisual, _w.hardpointsVisual, _w.cargoScoopVisual, _w.headlightsVisual, _w.nightVisionVisual, _w.flightAssistVisual, _w.disembarkVisual, _w.embarkVisual, _w.dockedVisual })
+                foreach (var v in new AnimationVisual[] { _w.firstDiscoveryVisual, _w.landedVisual, _w.liftoffVisual, _w.firstFootfallVisual, _w.arrivalVisual, _w.jumpDepartureVisual, _w.fuelScoopVisual, _w.combatModeVisual, _w.analysisModeVisual, _w.landingGearVisual, _w.hardpointsVisual, _w.cargoScoopVisual, _w.headlightsVisual, _w.nightVisionVisual, _w.shieldsVisual, _w.lowFuelVisual, _w.overheatVisual, _w.flightAssistVisual, _w.disembarkVisual, _w.embarkVisual, _w.dockedVisual })
                     v.Finished += () =>
                     {
                         _w.firstDiscoveryLayer.Visibility = Visibility.Collapsed;
@@ -251,7 +257,7 @@ namespace EliteBioRadar
             {
                 _done = done;
                 Log.Write($"Animation '{request.Def.Id}' playing in the Elite Bio Radar window: {request.Subject}");
-                AnimationVisual v = request.Def.Id switch { "landed" => _w.landedVisual, "liftoff" => _w.liftoffVisual, "first-footfall" => _w.firstFootfallVisual, "arrival" => _w.arrivalVisual, "hyperspace-jump" => _w.jumpDepartureVisual, "fuel-scoop" => _w.fuelScoopVisual, "combat-mode" => _w.combatModeVisual, "analysis-mode" => _w.analysisModeVisual, "landing-gear" => _w.landingGearVisual, "hardpoints" => _w.hardpointsVisual, "cargo-scoop" => _w.cargoScoopVisual, "headlights" => _w.headlightsVisual, "night-vision" => _w.nightVisionVisual, "flight-assist" => _w.flightAssistVisual, "disembark" => _w.disembarkVisual, "embark" => _w.embarkVisual,"docked" => _w.dockedVisual, _ => _w.firstDiscoveryVisual };
+                AnimationVisual v = request.Def.Id switch { "landed" => _w.landedVisual, "liftoff" => _w.liftoffVisual, "first-footfall" => _w.firstFootfallVisual, "arrival" => _w.arrivalVisual, "hyperspace-jump" => _w.jumpDepartureVisual, "fuel-scoop" => _w.fuelScoopVisual, "combat-mode" => _w.combatModeVisual, "analysis-mode" => _w.analysisModeVisual, "landing-gear" => _w.landingGearVisual, "hardpoints" => _w.hardpointsVisual, "cargo-scoop" => _w.cargoScoopVisual, "headlights" => _w.headlightsVisual, "night-vision" => _w.nightVisionVisual, "shields" => _w.shieldsVisual, "low-fuel" => _w.lowFuelVisual, "overheat" => _w.overheatVisual, "flight-assist" => _w.flightAssistVisual, "disembark" => _w.disembarkVisual, "embark" => _w.embarkVisual,"docked" => _w.dockedVisual, _ => _w.firstDiscoveryVisual };
                 v.BackdropOpacity = request.Def.BackdropOpacity;
                 _w.firstDiscoveryLayer.Visibility = Visibility.Visible;
                 v.Start(request.Subject, request.Detail);

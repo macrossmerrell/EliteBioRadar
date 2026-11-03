@@ -10,10 +10,11 @@ namespace EliteBioRadar
     // One entry per animation the app can play. Group is the heading in the settings list; BackdropOpacity is how much of whatever lies
     // underneath is hidden while it plays (1 = fully covered).
     // PreviewSubject/PreviewDetail are the sample text the Notification Settings window's Play button uses.
+    // PreviewCycle = the details Play steps through, one per press, for animations with several modes (gear down / up); null = always PreviewDetail.
     // Live = a screen driven continuously by the ship's state (the atmosphere scenes) rather than a one-shot played through the router:
     // MainWindow shows it in the windows ticked here for as long as the phase lasts, so it has no Play preview.
     public sealed record AnimationDef(string Id, string Name, string Group, AnimationSurfaces DefaultSurfaces, double BackdropOpacity,
-                                      string PreviewSubject, string PreviewDetail, bool Live = false);
+                                      string PreviewSubject, string PreviewDetail, bool Live = false, string[]? PreviewCycle = null);
 
     public static class AnimationCatalog
     {
@@ -34,17 +35,23 @@ namespace EliteBioRadar
         public static readonly AnimationDef CombatMode =
             new("combat-mode", "Combat mode", "HUD", AnimationSurfaces.Main, 0.85, "", "");
         public static readonly AnimationDef LandingGear =
-            new("landing-gear", "Landing gear deployed / retracted", "HUD", AnimationSurfaces.Both, 0.85, "", "DOWN");
+            new("landing-gear", "Landing gear deployed / retracted", "HUD", AnimationSurfaces.Both, 0.85, "", "DOWN", PreviewCycle: new[] { "DOWN", "UP" });
         public static readonly AnimationDef Hardpoints =
-            new("hardpoints", "Hardpoints deployed / retracted", "HUD", AnimationSurfaces.Both, 0.85, "", "OUT");
+            new("hardpoints", "Hardpoints deployed / retracted", "HUD", AnimationSurfaces.Both, 0.85, "", "OUT", PreviewCycle: new[] { "OUT", "IN" });
         public static readonly AnimationDef CargoScoop =
-            new("cargo-scoop", "Cargo scoop deployed / retracted", "HUD", AnimationSurfaces.Both, 0.85, "", "OUT");
+            new("cargo-scoop", "Cargo scoop deployed / retracted", "HUD", AnimationSurfaces.Both, 0.85, "", "OUT", PreviewCycle: new[] { "OUT", "IN" });
         public static readonly AnimationDef Headlights =
-            new("headlights", "Headlights on / high beam / off", "HUD", AnimationSurfaces.Both, 0.85, "", "HIGH");
+            new("headlights", "Headlights on / high beam / off", "HUD", AnimationSurfaces.Both, 0.85, "", "HIGH", PreviewCycle: new[] { "ON", "HIGH", "OFF" });
         public static readonly AnimationDef NightVision =
-            new("night-vision", "Night vision activated / deactivated", "HUD", AnimationSurfaces.Both, 0.85, "", "ON");
+            new("night-vision", "Night vision activated / deactivated", "HUD", AnimationSurfaces.Both, 0.85, "", "ON", PreviewCycle: new[] { "ON", "OFF" });
+        public static readonly AnimationDef Shields =
+            new("shields", "Shields up / down", "HUD", AnimationSurfaces.Both, 0.85, "", "UP", PreviewCycle: new[] { "UP", "DOWN" });
+        public static readonly AnimationDef LowFuel =
+            new("low-fuel", "Low fuel / fuel critical", "HUD", AnimationSurfaces.Both, 0.85, "", "LOW", PreviewCycle: new[] { "LOW", "CRITICAL" });
+        public static readonly AnimationDef Overheat =
+            new("overheat", "Overheating", "HUD", AnimationSurfaces.Both, 0.85, "", "");
         public static readonly AnimationDef FlightAssist =
-            new("flight-assist", "Flight assist on / off", "HUD", AnimationSurfaces.Both, 0.85, "", "OFF");
+            new("flight-assist", "Flight assist on / off", "HUD", AnimationSurfaces.Both, 0.85, "", "OFF", PreviewCycle: new[] { "OFF", "ON" });
         public static readonly AnimationDef Disembark =
             new("disembark", "Disembark from a vehicle", "Surface", AnimationSurfaces.Both, 0.85, "", "SHIP");
         public static readonly AnimationDef Embark =
@@ -63,7 +70,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef AtmosphericJump =
             new("atmospheric-jump", "Hyperspace jump from an atmosphere", "Atmosphere", AnimationSurfaces.Main, 1.0, "", "", Live: true);
 
-        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, FlightAssist, Disembark, Embark, Arrival, Landed, Liftoff, FirstFootfall, Docked, Descent, Climb, AtmosphericJump };
+        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, Shields, LowFuel, Overheat, FlightAssist, Disembark, Embark, Arrival, Landed, Liftoff, FirstFootfall, Docked, Descent, Climb, AtmosphericJump };
 
         // The user's choice from the settings file, else the animation's own default.
         public static AnimationSurfaces SurfacesFor(AnimationDef def, AppSettingsData settings) =>

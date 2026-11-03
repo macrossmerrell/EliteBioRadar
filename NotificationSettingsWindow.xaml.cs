@@ -56,7 +56,7 @@ namespace EliteBioRadar
             {
                 Content = "Play", Padding = new Thickness(8, 2, 8, 2), HorizontalAlignment = HorizontalAlignment.Left,
                 Background = Frozen("#1a3333"), Foreground = GroupBrush, BorderBrush = Frozen("#1a4444"), FontSize = 12,
-                ToolTip = "Plays it now with sample text, in the window(s) ticked here",
+                ToolTip = "Plays it now with sample text, in the window(s) ticked here (alternates between modes where there are two)",
             };
 
             void Save()
@@ -70,7 +70,13 @@ namespace EliteBioRadar
             main.Unchecked += (_, _) => Save();
             notif.Checked += (_, _) => Save();
             notif.Unchecked += (_, _) => Save();
-            play.Click += (_, _) => AnimationRouter.Raise(new AnimationRequest(def, def.PreviewSubject, def.PreviewDetail));
+            int step = 0;
+            play.Click += (_, _) =>
+            {
+                var cycle = def.PreviewCycle;
+                var detail = cycle is { Length: > 0 } ? cycle[step++ % cycle.Length] : def.PreviewDetail;
+                AnimationRouter.Raise(new AnimationRequest(def, def.PreviewSubject, detail));
+            };
 
             Grid.SetColumn(name, 0); Grid.SetColumn(main, 1); Grid.SetColumn(notif, 2); Grid.SetColumn(play, 3);
             g.Children.Add(name); g.Children.Add(main); g.Children.Add(notif);
