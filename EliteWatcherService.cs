@@ -45,6 +45,13 @@ namespace EliteBioRadar
         public event Action<bool>? ShieldsChanged;   // (up) shields went up or down; live only
         public event Action<string>? FuelWarning;   // ("LOW" below 25%, "CRITICAL" below 10%) fuel dropped to a worse level; live only
         private int? _fuelLevel;
+        public event Action<bool>? DriveAssistChanged;   // (on) SRV drive assist went on or off; live only
+        private bool? _wasDriveAssist;
+        public event Action<bool>? SilentRunningChanged;   // (on) silent running went on or off; live only
+        private bool? _wasSilentRunning;
+        public event Action? InterdictionStarted;   // an interdiction began; live only
+        private bool? _wasInterdicted;
+        private DateTime _lastInterdictionBanner = DateTime.MinValue;
         public event Action? OverheatStarted;   // heat went above 100%; live only
         private bool? _wasOverheating;
         private DateTime _lastOverheatBanner = DateTime.MinValue;
@@ -1050,6 +1057,18 @@ namespace EliteBioRadar
                 // Shields (Flags bit 3): the first read only sets the baseline.
                 if (!quiet && _wasShields != null && _wasShields != status.ShieldsUp) { Log.Write(status.ShieldsUp ? "Shields up" : "Shields down"); ShieldsChanged?.Invoke(status.ShieldsUp); }
                 _wasShields = status.ShieldsUp;
+
+                // SRV drive assist (Flags bit 15, only meaningful in the SRV): the baseline follows the flag everywhere, but it only plays while in the SRV.
+                if (!quiet && status.InSRV && _wasDriveAssist != null && _wasDriveAssist != status.SrvDriveAssist) { Log.Write(status.SrvDriveAssist ? "Drive assist on" : "Drive assist off"); DriveAssistChanged?.Invoke(status.SrvDriveAssist); }
+                _wasDriveAssist = status.SrvDriveAssist;
+
+                // Silent running (Flags bit 10): the first read only sets the baseline.
+                if (!quiet && _wasSilentRunning != null && _wasSilentRunning != status.SilentRunning) { Log.Write(status.SilentRunning ? "Silent running on" : "Silent running off"); SilentRunningChanged?.Invoke(status.SilentRunning); }
+                _wasSilentRunning = status.SilentRunning;
+
+                // Being interdicted (Flags bit 23): plays when it comes on, not held back by the quiet window (the drop out of supercruise that follows would start one), at most once every 5 s.
+                if (_wasInterdicted == false && status.BeingInterdicted && (DateTime.UtcNow - _lastInterdictionBanner).TotalSeconds >= 5) { Log.Write("Interdiction started"); _lastInterdictionBanner = DateTime.UtcNow; InterdictionStarted?.Invoke(); }
+                _wasInterdicted = status.BeingInterdicted;
 
                 // Overheating (Flags bit 20): plays when it comes on, at most once every 10 s since heat flickers around 100%. The first read only sets the baseline.
                 if (!quiet && _wasOverheating == false && status.Overheating && (DateTime.UtcNow - _lastOverheatBanner).TotalSeconds >= 10) { Log.Write("Overheating"); _lastOverheatBanner = DateTime.UtcNow; OverheatStarted?.Invoke(); }

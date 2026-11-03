@@ -34,6 +34,9 @@
         <local:ShieldsVisual x:Name="shieldsVisual"/>
         <local:LowFuelVisual x:Name="lowFuelVisual"/>
         <local:OverheatVisual x:Name="overheatVisual"/>
+        <local:InterdictionVisual x:Name="interdictionVisual"/>
+        <local:SilentRunningVisual x:Name="silentRunningVisual"/>
+        <local:DriveAssistVisual x:Name="driveAssistVisual"/>
         <local:FlightAssistVisual x:Name="flightAssistVisual"/>
         <local:DisembarkVisual x:Name="disembarkVisual"/>
         <local:EmbarkVisual x:Name="embarkVisual"/>

@@ -176,7 +176,10 @@ namespace EliteBioRadar
         public bool FlightAssistOff => (Flags & (1u << 5)) != 0;   // flight assist is off (clear: on)
         public bool NightVisionOn => (Flags & (1u << 28)) != 0;   // night vision is on
         public bool ShieldsUp => (Flags & (1u << 3)) != 0;   // shields are up
+        public bool SrvDriveAssist => (Flags & (1u << 15)) != 0;   // SRV drive assist is on
+        public bool SilentRunning => (Flags & (1u << 10)) != 0;   // silent running is on
         public bool Overheating => (Flags & (1u << 20)) != 0;   // heat above 100%
+        public bool BeingInterdicted => (Flags & (1u << 23)) != 0;   // an interdiction is under way
         public string HeadlightMode => !LightsOn ? "OFF" : SrvHighBeam ? "HIGH" : "ON";
         public bool InSRV       => (Flags & (1u << 26)) != 0;
         public bool InFighter   => (Flags & (1u << 25)) != 0;
