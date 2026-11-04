@@ -18,7 +18,7 @@ namespace EliteBioRadar
         private static readonly Pen ShipEdge = FrozenPen(Color.FromArgb(204, Red.R, Red.G, Red.B), 1);
         private static readonly Pen[] Ring = MakeRings();
         private static readonly Pen[,] Streak = MakeStreaks();
-        private static readonly Geometry Ship = MakeShip();
+        private static readonly Geometry Ship = ShipOutline;
 
         private static Pen[] MakeRings()
         {
@@ -37,23 +37,6 @@ namespace EliteBioRadar
             return a;
         }
 
-        private static Geometry MakeShip()
-        {
-            var g = new StreamGeometry();
-            using (var c = g.Open())
-            {
-                c.BeginFigure(new Point(0, -14), true, true);
-                c.LineTo(new Point(11, 12), true, false);
-                c.LineTo(new Point(4, 8), true, false);
-                c.LineTo(new Point(0, 14), true, false);
-                c.LineTo(new Point(-4, 8), true, false);
-                c.LineTo(new Point(-11, 12), true, false);
-            }
-            g.Freeze();
-            return g;
-        }
-
-        private static double Hash(int i) { double s = Math.Sin(i * 127.1) * 43758.5453; return s - Math.Floor(s); }
 
         protected override void Render(DrawingContext dc, double w, double h, double t)
         {

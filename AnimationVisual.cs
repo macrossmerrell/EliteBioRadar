@@ -105,6 +105,21 @@ namespace EliteBioRadar
         protected static double Phase(double t, double start, double len) => Clamp01((t - start) / len);
         protected static double Smooth(double a, double b, double x) { double t = Clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); }
         protected static double Lerp(double a, double b, double t) => a + (b - a) * t;
+        // Small helpers the scene visuals share: a repeatable 0..1 hash, a closed polygon, and the ship outline (nose up, about 22 wide).
+        protected static double Hash(int i) { double s = Math.Sin(i * 127.1) * 43758.5453; return s - Math.Floor(s); }
+        protected static Geometry Poly((double x, double y)[] pts)
+        {
+            var g = new StreamGeometry();
+            using (var c = g.Open())
+                for (int i = 0; i < pts.Length; i++)
+                {
+                    var p = new Point(pts[i].x, pts[i].y);
+                    if (i == 0) c.BeginFigure(p, true, true); else c.LineTo(p, true, false);
+                }
+            g.Freeze();
+            return g;
+        }
+        protected static readonly Geometry ShipOutline = Poly(new[] { (0.0, -14.0), (11, 12), (4, 8), (0, 14), (-4, 8), (-11, 12) });
         // Consolas is narrower than the face these letter spacings were tuned for, so they are eased back a little.
         private const double TrackScale = 0.8;
 

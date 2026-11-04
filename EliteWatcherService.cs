@@ -49,7 +49,7 @@ namespace EliteBioRadar
         public event Action<bool>? HandbrakeChanged;   // (on) SRV handbrake went on or off; live only
         private bool? _wasHandbrake;
         public event Action<bool>? TurretChanged;   // (deployed) SRV turret deployed or retracted; live only
-        private bool? _wasTurretRetracted;
+        private bool? _wasTurretDeployed;
         private bool? _wasDriveAssist;
         public event Action<bool>? SilentRunningChanged;   // (on) silent running went on or off; live only
         private bool? _wasSilentRunning;
@@ -956,6 +956,13 @@ namespace EliteBioRadar
             _logPrevFlags = s.Flags; _logPrevFlags2 = s.Flags2; _logHavePrevFlags = true;
         }
 
+        // Raises a flag's event when it changed since the last read (and may play), logging which way it went; the first read only sets the baseline.
+        private static void FlagEdge(ref bool? was, bool now, bool mayPlay, string logOn, string logOff, Action<bool>? fire)
+        {
+            if (mayPlay && was != null && was != now) { Log.Write(now ? logOn : logOff); fire?.Invoke(now); }
+            was = now;
+        }
+
         // ---------------------------------------------------------------
         private void ReadStatus()
         {
@@ -1058,25 +1065,13 @@ namespace EliteBioRadar
                 if (!quiet && _wasNightVision != null && _wasNightVision != status.NightVisionOn) { Log.Write(status.NightVisionOn ? "Night vision on" : "Night vision off"); NightVisionChanged?.Invoke(status.NightVisionOn); }
                 _wasNightVision = status.NightVisionOn;
 
-                // Shields (Flags bit 3): the first read only sets the baseline.
-                if (!quiet && _wasShields != null && _wasShields != status.ShieldsUp) { Log.Write(status.ShieldsUp ? "Shields up" : "Shields down"); ShieldsChanged?.Invoke(status.ShieldsUp); }
-                _wasShields = status.ShieldsUp;
-
-                // SRV drive assist (Flags bit 15, only meaningful in the SRV): the baseline follows the flag everywhere, but it only plays while in the SRV.
-                if (!quiet && status.InSRV && _wasDriveAssist != null && _wasDriveAssist != status.SrvDriveAssist) { Log.Write(status.SrvDriveAssist ? "Drive assist on" : "Drive assist off"); DriveAssistChanged?.Invoke(status.SrvDriveAssist); }
-                _wasDriveAssist = status.SrvDriveAssist;
-
-                // SRV handbrake (Flags bit 12): same rules as drive assist.
-                if (!quiet && status.InSRV && _wasHandbrake != null && _wasHandbrake != status.SrvHandbrake) { Log.Write(status.SrvHandbrake ? "Handbrake on" : "Handbrake off"); HandbrakeChanged?.Invoke(status.SrvHandbrake); }
-                _wasHandbrake = status.SrvHandbrake;
-
-                // SRV turret (Flags bit 14 = retracted): same rules as the handbrake.
-                if (!quiet && status.InSRV && _wasTurretRetracted != null && _wasTurretRetracted != status.SrvTurretRetracted) { Log.Write(status.SrvTurretRetracted ? "Turret retracted" : "Turret deployed"); TurretChanged?.Invoke(!status.SrvTurretRetracted); }
-                _wasTurretRetracted = status.SrvTurretRetracted;
-
-                // Silent running (Flags bit 10): the first read only sets the baseline.
-                if (!quiet && _wasSilentRunning != null && _wasSilentRunning != status.SilentRunning) { Log.Write(status.SilentRunning ? "Silent running on" : "Silent running off"); SilentRunningChanged?.Invoke(status.SilentRunning); }
-                _wasSilentRunning = status.SilentRunning;
+                // Flag edges: the first read only sets the baseline, which follows the flag everywhere. The SRV flags only play while in the SRV.
+                // Shields (bit 3), SRV drive assist (15), SRV handbrake (12), SRV turret (14, set = retracted), silent running (10).
+                FlagEdge(ref _wasShields, status.ShieldsUp, !quiet, "Shields up", "Shields down", ShieldsChanged);
+                FlagEdge(ref _wasDriveAssist, status.SrvDriveAssist, !quiet && status.InSRV, "Drive assist on", "Drive assist off", DriveAssistChanged);
+                FlagEdge(ref _wasHandbrake, status.SrvHandbrake, !quiet && status.InSRV, "Handbrake on", "Handbrake off", HandbrakeChanged);
+                FlagEdge(ref _wasTurretDeployed, !status.SrvTurretRetracted, !quiet && status.InSRV, "Turret deployed", "Turret retracted", TurretChanged);
+                FlagEdge(ref _wasSilentRunning, status.SilentRunning, !quiet, "Silent running on", "Silent running off", SilentRunningChanged);
 
                 // Being interdicted (Flags bit 23): plays when it comes on, not held back by the quiet window (the drop out of supercruise that follows would start one), at most once every 5 s.
                 if (_wasInterdicted == false && status.BeingInterdicted && (DateTime.UtcNow - _lastInterdictionBanner).TotalSeconds >= 5) { Log.Write("Interdiction started"); _lastInterdictionBanner = DateTime.UtcNow; InterdictionStarted?.Invoke(); }

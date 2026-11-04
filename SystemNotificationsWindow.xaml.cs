@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using System.Linq;
 using System.Windows;
@@ -11,12 +12,44 @@ namespace EliteBioRadar
     public partial class SystemNotificationsWindow : Window, IAnimationSurface
     {
         private Action? _done;
+        private readonly Dictionary<string, AnimationVisual> _visuals;
 
         public SystemNotificationsWindow()
         {
             InitializeComponent();
             RestorePlacement();
-            foreach (var v in new AnimationVisual[] { firstDiscoveryVisual, landedVisual, liftoffVisual, firstFootfallVisual, arrivalVisual, jumpDepartureVisual, fuelScoopVisual, combatModeVisual, analysisModeVisual, landingGearVisual, hardpointsVisual, cargoScoopVisual, headlightsVisual, nightVisionVisual, shieldsVisual, lowFuelVisual, overheatVisual, interdictionVisual, silentRunningVisual, driveAssistVisual, handbrakeVisual, turretVisual, flightAssistVisual, disembarkVisual, embarkVisual, dockedVisual })
+            _visuals = new Dictionary<string, AnimationVisual>
+            {
+                ["first-discovery"] = firstDiscoveryVisual,
+                ["landed"] = landedVisual,
+                ["liftoff"] = liftoffVisual,
+                ["first-footfall"] = firstFootfallVisual,
+                ["arrival"] = arrivalVisual,
+                ["hyperspace-jump"] = jumpDepartureVisual,
+                ["fuel-scoop"] = fuelScoopVisual,
+                ["combat-mode"] = combatModeVisual,
+                ["analysis-mode"] = analysisModeVisual,
+                ["landing-gear"] = landingGearVisual,
+                ["hardpoints"] = hardpointsVisual,
+                ["cargo-scoop"] = cargoScoopVisual,
+                ["headlights"] = headlightsVisual,
+                ["night-vision"] = nightVisionVisual,
+                ["shields"] = shieldsVisual,
+                ["low-fuel"] = lowFuelVisual,
+                ["overheat"] = overheatVisual,
+                ["interdiction"] = interdictionVisual,
+                ["silent-running"] = silentRunningVisual,
+                ["drive-assist"] = driveAssistVisual,
+                ["handbrake"] = handbrakeVisual,
+                ["turret"] = turretVisual,
+                ["flight-assist"] = flightAssistVisual,
+                ["disembark"] = disembarkVisual,
+                ["embark"] = embarkVisual,
+                ["docked"] = dockedVisual,
+            };
+            foreach (var def in AnimationCatalog.All)
+                if (!def.Live && !_visuals.ContainsKey(def.Id)) Log.Write($"Animation '{def.Id}' has no visual in the System Notifications window");
+            foreach (var v in _visuals.Values)
                 v.Finished += () => { var d = _done; _done = null; d?.Invoke(); };
             AnimationRouter.Register(this);
             Closed += (_, _) => { AnimationRouter.Unregister(this); SaveWindowState(); };
@@ -29,7 +62,7 @@ namespace EliteBioRadar
         {
             _done = done;
             Log.Write($"Animation '{request.Def.Id}' playing in the System Notifications window: {request.Subject}");
-            AnimationVisual v = request.Def.Id switch { "landed" => landedVisual, "liftoff" => liftoffVisual, "first-footfall" => firstFootfallVisual, "arrival" => arrivalVisual, "hyperspace-jump" => jumpDepartureVisual, "fuel-scoop" => fuelScoopVisual, "combat-mode" => combatModeVisual, "analysis-mode" => analysisModeVisual, "landing-gear" => landingGearVisual, "hardpoints" => hardpointsVisual, "cargo-scoop" => cargoScoopVisual, "headlights" => headlightsVisual, "night-vision" => nightVisionVisual, "shields" => shieldsVisual, "low-fuel" => lowFuelVisual, "overheat" => overheatVisual, "interdiction" => interdictionVisual, "silent-running" => silentRunningVisual, "drive-assist" => driveAssistVisual, "handbrake" => handbrakeVisual, "turret" => turretVisual, "flight-assist" => flightAssistVisual, "disembark" => disembarkVisual, "embark" => embarkVisual,"docked" => dockedVisual, _ => firstDiscoveryVisual };
+            if (!_visuals.TryGetValue(request.Def.Id, out var v)) { Log.Write($"Animation '{request.Def.Id}' has no visual in the System Notifications window"); _done = null; done(); return; }
             v.BackdropOpacity = request.Def.BackdropOpacity;
             v.Start(request.Subject, request.Detail);
         }

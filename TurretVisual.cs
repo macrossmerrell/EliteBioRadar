@@ -37,19 +37,6 @@ namespace EliteBioRadar
             }
         }
 
-        private static Geometry Poly((double x, double y)[] pts)
-        {
-            var g = new StreamGeometry();
-            using (var c = g.Open())
-                for (int i = 0; i < pts.Length; i++)
-                {
-                    var p = new Point(pts[i].x, pts[i].y);
-                    if (i == 0) c.BeginFigure(p, true, true); else c.LineTo(p, true, false);
-                }
-            g.Freeze();
-            return g;
-        }
-
         private bool _on = true;
 
         protected override void OnStart(string subject, string detail) => _on = !detail.Contains("OFF", StringComparison.OrdinalIgnoreCase);
@@ -79,7 +66,7 @@ namespace EliteBioRadar
             dc.PushTransform(new ScaleTransform(k, k));
 
             dc.PushTransform(new TranslateTransform(CentreX, CentreY));
-            foreach (int s in new[] { -1, 1 })
+            for (int s = -1; s <= 1; s += 2)
             {
                 DrawTyre(dc, look, s * 40, 16);
                 DrawTyre(dc, look, s * 52, 12);
@@ -97,7 +84,7 @@ namespace EliteBioRadar
             dc.DrawLine(look.Bar, new Point(0, -16), new Point(0, -16 - rise));
             dc.PushTransform(new TranslateTransform(0, -16 - rise));
             dc.DrawRoundedRectangle(HeadBrush, look.Edge, new Rect(-4, -3, 8, 5), 1, 1);
-            foreach (int s in new[] { -1, 1 })
+            for (int s = -1; s <= 1; s += 2)
             {
                 dc.PushTransform(new RotateTransform(s * fold * 180 / Math.PI, 0, -2));
                 dc.DrawLine(look.Bar, new Point(0, -2), new Point(s * reach, -2));

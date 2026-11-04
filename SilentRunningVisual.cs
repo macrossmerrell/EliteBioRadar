@@ -17,7 +17,7 @@ namespace EliteBioRadar
         private static readonly Pen BluePlateEdge = FrozenPen(Color.FromArgb(128, Blue.R, Blue.G, Blue.B), 1), CyanPlateEdge = FrozenPen(Color.FromArgb(128, Cyan.R, Cyan.G, Cyan.B), 1);
         private static readonly Brush[] HullLevel = MakeLevels(Pale, 255, 16), Dim = MakeLevels(Color.FromRgb(2, 4, 14), 115, 9), Glow = MakeGlow();
         private static readonly Pen[] BlueEdge = MakePens(Blue), CyanEdge = MakePens(Cyan);
-        private static readonly Geometry Ship = MakeShip();
+        private static readonly Geometry Ship = ShipOutline;
 
         private static Brush[] MakeLevels(Color c, int max, int steps)
         {
@@ -45,22 +45,6 @@ namespace EliteBioRadar
                 a[i] = b;
             }
             return a;
-        }
-
-        private static Geometry MakeShip()
-        {
-            var g = new StreamGeometry();
-            using (var c = g.Open())
-            {
-                c.BeginFigure(new Point(0, -14), true, true);
-                c.LineTo(new Point(11, 12), true, false);
-                c.LineTo(new Point(4, 8), true, false);
-                c.LineTo(new Point(0, 14), true, false);
-                c.LineTo(new Point(-4, 8), true, false);
-                c.LineTo(new Point(-11, 12), true, false);
-            }
-            g.Freeze();
-            return g;
         }
 
         private bool _on = true;

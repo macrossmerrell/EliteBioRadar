@@ -73,7 +73,6 @@ namespace EliteBioRadar
             return g;
         }
 
-        private static double Hash(int i) { double s = Math.Sin(i * 127.1) * 43758.5453; return s - Math.Floor(s); }
 
         private static Cell[] MakeCells()
         {

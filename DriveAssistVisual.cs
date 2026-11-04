@@ -39,20 +39,9 @@ namespace EliteBioRadar
             }
         }
 
-        private static Geometry Poly((double x, double y)[] pts)
-        {
-            var g = new StreamGeometry();
-            using (var c = g.Open())
-                for (int i = 0; i < pts.Length; i++)
-                {
-                    var p = new Point(pts[i].x, pts[i].y);
-                    if (i == 0) c.BeginFigure(p, true, true); else c.LineTo(p, true, false);
-                }
-            g.Freeze();
-            return g;
-        }
 
-        private static double Hash(int i) { double s = Math.Sin(i * 127.1) * 43758.5453; return s - Math.Floor(s); }
+        // The two guide lines, reopened and refilled each frame rather than rebuilt (they stay unfrozen so they can be).
+        private readonly StreamGeometry[] _lanes = { new(), new() };
 
         private bool _on = true;
 
@@ -71,7 +60,7 @@ namespace EliteBioRadar
             dc.DrawGeometry(GlassBrush, l.Edge, CanopyShape);
             dc.DrawLine(GlintPen, new Point(-2.5, -16), new Point(-4, -9));
             dc.DrawRoundedRectangle(EngineBrush, l.Edge, new Rect(-6, 10, 12, 10), 2, 2);
-            foreach (double vy in new[] { 13.0, 16, 19 }) dc.DrawLine(l.Vent, new Point(-4.5, vy), new Point(4.5, vy));
+            for (double vy = 13; vy <= 19; vy += 3) dc.DrawLine(l.Vent, new Point(-4.5, vy), new Point(4.5, vy));
             dc.DrawEllipse(EngineBrush, l.Edge, new Point(0, -1), 4.2, 4.2);
             dc.DrawLine(l.Turret, new Point(-1.5, -1), new Point(-1.5, -8));
             dc.DrawLine(l.Turret, new Point(1.5, -1), new Point(1.5, -8));
@@ -96,7 +85,7 @@ namespace EliteBioRadar
             // The guide lines: wobbling at first and settling straight (on), or breaking up (off).
             for (int side = -1; side <= 1; side += 2)
             {
-                var lane = new StreamGeometry();
+                var lane = _lanes[(side + 1) / 2];
                 using (var c = lane.Open())
                     for (int y = 6; y <= 98; y += 3)
                     {
@@ -104,7 +93,6 @@ namespace EliteBioRadar
                         var pt = new Point(CentreX + side * 38 + wob, y);
                         if (y == 6) c.BeginFigure(pt, false, false); else c.LineTo(pt, true, false);
                     }
-                lane.Freeze();
                 dc.DrawGeometry(null, look.Lane, lane);
             }
 
