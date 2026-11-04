@@ -48,6 +48,8 @@ namespace EliteBioRadar
         public event Action<bool>? DriveAssistChanged;   // (on) SRV drive assist went on or off; live only
         public event Action<bool>? HandbrakeChanged;   // (on) SRV handbrake went on or off; live only
         private bool? _wasHandbrake;
+        public event Action<bool>? TurretChanged;   // (deployed) SRV turret deployed or retracted; live only
+        private bool? _wasTurretRetracted;
         private bool? _wasDriveAssist;
         public event Action<bool>? SilentRunningChanged;   // (on) silent running went on or off; live only
         private bool? _wasSilentRunning;
@@ -1067,6 +1069,10 @@ namespace EliteBioRadar
                 // SRV handbrake (Flags bit 12): same rules as drive assist.
                 if (!quiet && status.InSRV && _wasHandbrake != null && _wasHandbrake != status.SrvHandbrake) { Log.Write(status.SrvHandbrake ? "Handbrake on" : "Handbrake off"); HandbrakeChanged?.Invoke(status.SrvHandbrake); }
                 _wasHandbrake = status.SrvHandbrake;
+
+                // SRV turret (Flags bit 14 = retracted): same rules as the handbrake.
+                if (!quiet && status.InSRV && _wasTurretRetracted != null && _wasTurretRetracted != status.SrvTurretRetracted) { Log.Write(status.SrvTurretRetracted ? "Turret retracted" : "Turret deployed"); TurretChanged?.Invoke(!status.SrvTurretRetracted); }
+                _wasTurretRetracted = status.SrvTurretRetracted;
 
                 // Silent running (Flags bit 10): the first read only sets the baseline.
                 if (!quiet && _wasSilentRunning != null && _wasSilentRunning != status.SilentRunning) { Log.Write(status.SilentRunning ? "Silent running on" : "Silent running off"); SilentRunningChanged?.Invoke(status.SilentRunning); }

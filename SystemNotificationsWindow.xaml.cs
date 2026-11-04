@@ -16,7 +16,7 @@ namespace EliteBioRadar
         {
             InitializeComponent();
             RestorePlacement();
-            foreach (var v in new AnimationVisual[] { firstDiscoveryVisual, landedVisual, liftoffVisual, firstFootfallVisual, arrivalVisual, jumpDepartureVisual, fuelScoopVisual, combatModeVisual, analysisModeVisual, landingGearVisual, hardpointsVisual, cargoScoopVisual, headlightsVisual, nightVisionVisual, shieldsVisual, lowFuelVisual, overheatVisual, interdictionVisual, silentRunningVisual, driveAssistVisual, handbrakeVisual, flightAssistVisual, disembarkVisual, embarkVisual, dockedVisual })
+            foreach (var v in new AnimationVisual[] { firstDiscoveryVisual, landedVisual, liftoffVisual, firstFootfallVisual, arrivalVisual, jumpDepartureVisual, fuelScoopVisual, combatModeVisual, analysisModeVisual, landingGearVisual, hardpointsVisual, cargoScoopVisual, headlightsVisual, nightVisionVisual, shieldsVisual, lowFuelVisual, overheatVisual, interdictionVisual, silentRunningVisual, driveAssistVisual, handbrakeVisual, turretVisual, flightAssistVisual, disembarkVisual, embarkVisual, dockedVisual })
                 v.Finished += () => { var d = _done; _done = null; d?.Invoke(); };
             AnimationRouter.Register(this);
             Closed += (_, _) => { AnimationRouter.Unregister(this); SaveWindowState(); };
@@ -29,7 +29,7 @@ namespace EliteBioRadar
         {
             _done = done;
             Log.Write($"Animation '{request.Def.Id}' playing in the System Notifications window: {request.Subject}");
-            AnimationVisual v = request.Def.Id switch { "landed" => landedVisual, "liftoff" => liftoffVisual, "first-footfall" => firstFootfallVisual, "arrival" => arrivalVisual, "hyperspace-jump" => jumpDepartureVisual, "fuel-scoop" => fuelScoopVisual, "combat-mode" => combatModeVisual, "analysis-mode" => analysisModeVisual, "landing-gear" => landingGearVisual, "hardpoints" => hardpointsVisual, "cargo-scoop" => cargoScoopVisual, "headlights" => headlightsVisual, "night-vision" => nightVisionVisual, "shields" => shieldsVisual, "low-fuel" => lowFuelVisual, "overheat" => overheatVisual, "interdiction" => interdictionVisual, "silent-running" => silentRunningVisual, "drive-assist" => driveAssistVisual, "handbrake" => handbrakeVisual, "flight-assist" => flightAssistVisual, "disembark" => disembarkVisual, "embark" => embarkVisual,"docked" => dockedVisual, _ => firstDiscoveryVisual };
+            AnimationVisual v = request.Def.Id switch { "landed" => landedVisual, "liftoff" => liftoffVisual, "first-footfall" => firstFootfallVisual, "arrival" => arrivalVisual, "hyperspace-jump" => jumpDepartureVisual, "fuel-scoop" => fuelScoopVisual, "combat-mode" => combatModeVisual, "analysis-mode" => analysisModeVisual, "landing-gear" => landingGearVisual, "hardpoints" => hardpointsVisual, "cargo-scoop" => cargoScoopVisual, "headlights" => headlightsVisual, "night-vision" => nightVisionVisual, "shields" => shieldsVisual, "low-fuel" => lowFuelVisual, "overheat" => overheatVisual, "interdiction" => interdictionVisual, "silent-running" => silentRunningVisual, "drive-assist" => driveAssistVisual, "handbrake" => handbrakeVisual, "turret" => turretVisual, "flight-assist" => flightAssistVisual, "disembark" => disembarkVisual, "embark" => embarkVisual,"docked" => dockedVisual, _ => firstDiscoveryVisual };
             v.BackdropOpacity = request.Def.BackdropOpacity;
             v.Start(request.Subject, request.Detail);
         }
