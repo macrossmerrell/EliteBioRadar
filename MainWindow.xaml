@@ -317,6 +317,7 @@
         <local:InterdictionVisual x:Name="interdictionVisual"/>
         <local:SilentRunningVisual x:Name="silentRunningVisual"/>
         <local:DriveAssistVisual x:Name="driveAssistVisual"/>
+        <local:HandbrakeVisual x:Name="handbrakeVisual"/>
         <local:FlightAssistVisual x:Name="flightAssistVisual"/>
         <local:DisembarkVisual x:Name="disembarkVisual"/>
         <local:EmbarkVisual x:Name="embarkVisual"/>

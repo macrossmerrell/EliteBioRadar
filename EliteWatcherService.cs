@@ -46,6 +46,8 @@ namespace EliteBioRadar
         public event Action<string>? FuelWarning;   // ("LOW" below 25%, "CRITICAL" below 10%) fuel dropped to a worse level; live only
         private int? _fuelLevel;
         public event Action<bool>? DriveAssistChanged;   // (on) SRV drive assist went on or off; live only
+        public event Action<bool>? HandbrakeChanged;   // (on) SRV handbrake went on or off; live only
+        private bool? _wasHandbrake;
         private bool? _wasDriveAssist;
         public event Action<bool>? SilentRunningChanged;   // (on) silent running went on or off; live only
         private bool? _wasSilentRunning;
@@ -1061,6 +1063,10 @@ namespace EliteBioRadar
                 // SRV drive assist (Flags bit 15, only meaningful in the SRV): the baseline follows the flag everywhere, but it only plays while in the SRV.
                 if (!quiet && status.InSRV && _wasDriveAssist != null && _wasDriveAssist != status.SrvDriveAssist) { Log.Write(status.SrvDriveAssist ? "Drive assist on" : "Drive assist off"); DriveAssistChanged?.Invoke(status.SrvDriveAssist); }
                 _wasDriveAssist = status.SrvDriveAssist;
+
+                // SRV handbrake (Flags bit 12): same rules as drive assist.
+                if (!quiet && status.InSRV && _wasHandbrake != null && _wasHandbrake != status.SrvHandbrake) { Log.Write(status.SrvHandbrake ? "Handbrake on" : "Handbrake off"); HandbrakeChanged?.Invoke(status.SrvHandbrake); }
+                _wasHandbrake = status.SrvHandbrake;
 
                 // Silent running (Flags bit 10): the first read only sets the baseline.
                 if (!quiet && _wasSilentRunning != null && _wasSilentRunning != status.SilentRunning) { Log.Write(status.SilentRunning ? "Silent running on" : "Silent running off"); SilentRunningChanged?.Invoke(status.SilentRunning); }

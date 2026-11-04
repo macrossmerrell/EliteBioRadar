@@ -56,6 +56,8 @@ namespace EliteBioRadar
             new("silent-running", "Silent running on / off", "HUD", AnimationSurfaces.Both, 0.85, "", "ON", PreviewCycle: new[] { "ON", "OFF" });
         public static readonly AnimationDef DriveAssist =
             new("drive-assist", "SRV drive assist on / off", "HUD", AnimationSurfaces.Both, 0.85, "", "ON", PreviewCycle: new[] { "ON", "OFF" });
+        public static readonly AnimationDef Handbrake =
+            new("handbrake", "SRV handbrake on / off", "HUD", AnimationSurfaces.Both, 0.85, "", "ON", PreviewCycle: new[] { "ON", "OFF" });
         public static readonly AnimationDef FlightAssist =
             new("flight-assist", "Flight assist on / off", "HUD", AnimationSurfaces.Both, 0.85, "", "OFF", PreviewCycle: new[] { "OFF", "ON" });
         public static readonly AnimationDef Disembark =
@@ -76,7 +78,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef AtmosphericJump =
             new("atmospheric-jump", "Hyperspace jump from an atmosphere", "Atmosphere", AnimationSurfaces.Main, 1.0, "", "", Live: true);
 
-        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, Shields, LowFuel, Overheat, Interdiction, SilentRunning, DriveAssist, FlightAssist, Disembark, Embark, Arrival, Landed, Liftoff, FirstFootfall, Docked, Descent, Climb, AtmosphericJump };
+        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, Shields, LowFuel, Overheat, Interdiction, SilentRunning, DriveAssist, Handbrake, FlightAssist, Disembark, Embark, Arrival, Landed, Liftoff, FirstFootfall, Docked, Descent, Climb, AtmosphericJump };
 
         // The user's choice from the settings file, else the animation's own default.
         public static AnimationSurfaces SurfacesFor(AnimationDef def, AppSettingsData settings) =>
