@@ -50,7 +50,9 @@ float2 BandSample(float4 band, float rpx, float s, float aa, out float edge)
     float b = lerp(0.5, VN(rn * 4.6 + sd * 1.7 + 11.0), saturate(1.0 - fp * 4.6 * 1.5));
     float f = lerp(0.5, VN(rn * 15.0 + sd * 2.3 + 23.0), saturate(1.0 - fp * 15.0 * 1.5));
     float g = lerp(0.5, VN(rn * 42.0 + sd * 3.1 + 5.0), saturate(1.0 - fp * 42.0 * 1.5));
-    float d = 0.43 * a + 0.31 * b + 0.22 * f + 0.04 * g;
+    // A wide band (more than about a planet radius across, like the huge icy ring of AB 2) gets more of its weight on the fine ringlets, so it reads as many fine lines.
+    float fine = smoothstep(0.6, 1.6, width / max(PlanetR, 1.0));
+    float d = lerp(0.43, 0.34, fine) * a + lerp(0.31, 0.26, fine) * b + lerp(0.22, 0.28, fine) * f + lerp(0.04, 0.12, fine) * g;
     float cov = saturate((d - (0.50 - band.w * 0.20)) * (3.2 + band.w * 4.0) + 0.50);
     cov = lerp(1.0, cov, saturate(0.60 + band.w * 0.40));
     // A couple of clean divisions, like a real ring system's dark gaps (only in bands wide enough to hold them).

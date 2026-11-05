@@ -79,8 +79,22 @@ namespace EliteBioRadar
         }
 
         // Ring shader inputs (RingShaderEffect): planet centre/radius plus up to three bands in scene pixels.
-        internal static (double cx, double cy, double sphereR, List<RingBand> bands) GetRingShaderGeometry(BodyScanDetail detail, int width, int height)
+        // A terrain planet's drawn sphere is the full R from GetTerrainGeometry (a gas giant's is 0.85 R), so its bands are measured against that radius; before, they were measured
+        // against the gas giant's smaller one, which put the inner edge inside the planet disc (ring drawn over the planet, hardly any gap).
+        internal static (double cx, double cy, double sphereR, List<RingBand> bands) GetRingShaderGeometry(BodyScanDetail detail, int width, int height, bool terrain = false)
         {
+            if (terrain)
+            {
+                var (tcx, tcy, tR) = GetTerrainGeometry(width, height, detail);
+                double minPx = tR * 1.3, maxPx = Math.Min(width, height) * 0.46;
+                var real = detail.Rings.Where(r => r.OuterRad > 0 && r.InnerRad > 0).ToList();
+                if (detail.Radius > 0 && real.Count > 0)
+                {
+                    minPx = Math.Max(real.Min(r => r.InnerRad / detail.Radius) * tR, 1.3 * tR);
+                    maxPx = Math.Min(real.Max(r => r.OuterRad / detail.Radius) * tR, maxPx);
+                }
+                return (tcx, tcy, tR, ComputeRingBands(detail, minPx, Math.Max(maxPx, minPx + tR * 0.3)));
+            }
             var (cx, cy, R, rings) = ComputeGeometry(detail, width, height);
             return (cx, cy, rings.Count > 0 ? R * 0.85 : R, rings);
         }
@@ -2407,6 +2421,12 @@ namespace EliteBioRadar
             // 640x500 (min 500) canvas. Ringed: literally the gas giant's own fraction, not a
             // family-specific shrink of this one — see the comment above.
             double R = Math.Min(width, height) * (hasRings ? 0.23 : 0.34);
+            // A wide ring system (real: about 3 planet radii) shrinks the planet to give it room, as a ringed gas giant does, down to 0.155 of the scene; otherwise the ring was squeezed to about 2 radii.
+            if (hasRings && detail!.Radius > 0)
+            {
+                double hi = detail.Rings.Where(r => r.OuterRad > 0 && r.InnerRad > 0).Max(r => r.OuterRad / detail.Radius);
+                R = Math.Max(Math.Min(width, height) * 0.155, Math.Min(R, Math.Min(width, height) * 0.46 / hi));
+            }
             return (cx, cy, R);
         }
 

@@ -67,7 +67,7 @@ namespace EliteBioRadar
         // lightDir is the planet shader's view-space light (x right, y up, z toward viewer); it is rotated into the ring-aligned frame here.
         public static RingShaderEffect Create(BodyScanDetail detail, int sceneW, int sceneH, bool frontPass, Vector3D lightDir, double? planetRadius = null, (double r, double g, double b)? starTint = null, double dim = 1.0)
         {
-            var (cx, cy, sphereR, bands) = PlanetRenderer.GetRingShaderGeometry(detail, sceneW, sceneH);
+            var (cx, cy, sphereR, bands) = PlanetRenderer.GetRingShaderGeometry(detail, sceneW, sceneH, planetRadius.HasValue);
             var e = new RingShaderEffect();
             double tilt = PlanetRenderer.RingTilt, squash = PlanetRenderer.RingSquash;
             e.SetValue(SeedProperty, (PlanetRenderer.StableHash(detail.BodyName) % 1000) / 1000.0);
