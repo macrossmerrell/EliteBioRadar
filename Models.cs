@@ -178,7 +178,8 @@ namespace EliteBioRadar
         public bool ShieldsUp => (Flags & (1u << 3)) != 0;   // shields are up
         public bool SrvDriveAssist => (Flags & (1u << 15)) != 0;   // SRV drive assist is on
         public bool SrvHandbrake => (Flags & (1u << 12)) != 0;   // SRV handbrake is on
-        public bool SrvTurretRetracted => (Flags & (1u << 14)) != 0;   // SRV turret is retracted (clear: deployed)
+        public bool SrvTurretRetracted => (Flags & (1u << 14)) != 0;   // SRV turret is retracted because the SRV is close to the ship (not the player's own toggle)
+        public bool SrvTurretView => (Flags & (1u << 13)) != 0;   // the player is in the SRV's turret view (the turret is deployed)
         public bool SilentRunning => (Flags & (1u << 10)) != 0;   // silent running is on
         public bool Overheating => (Flags & (1u << 20)) != 0;   // heat above 100%
         public bool BeingInterdicted => (Flags & (1u << 23)) != 0;   // an interdiction is under way
@@ -191,6 +192,7 @@ namespace EliteBioRadar
         // Set specifically for an actual hyperspace charge-up — distinct from Flags bit17
         // "FsdCharging", which is ambiguous (also set for a plain supercruise charge).
         public bool FsdHyperdriveCharging => (Flags2 & (1u << 19)) != 0;
+        public bool ScoActive => (Flags2 & (1u << 20)) != 0;   // supercruise overdrive (SCO) is engaged (Flags2 bit 20, 0x00100000, per the community journal docs; bit 21 is Supercruise Assist)
         // The ambiguous one — true while charging for EITHER a hyperspace jump or a plain
         // supercruise entry. Combined with !FsdHyperdriveCharging elsewhere to isolate "just
         // charging to leave a body via supercruise" (e.g. ascending back out through an

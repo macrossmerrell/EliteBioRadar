@@ -57,6 +57,14 @@ namespace EliteBioRadar
         private bool? _wasInterdicted;
         private DateTime _lastInterdictionBanner = DateTime.MinValue;
         public event Action? OverheatStarted;   // heat went above 100%; live only
+        public event Action? SupercruiseEntered;   // the journal's SupercruiseEntry; live only
+        public event Action<bool>? SupercruiseOverdriveChanged;   // (on) supercruise overdrive engaged or disengaged; live only
+        private bool? _wasSco;
+        public event Action? SupercruiseChargeStarted;     // the FSD began charging for supercruise (not a hyperspace charge); live only
+        public event Action? SupercruiseDriveFired;        // the journal's StartJump for supercruise: the spool-up is done and the countdown to the entry begins; live only
+        public event Action? SupercruiseChargeCancelled;   // that charge ended without the drive engaging
+        private bool _scCharging;
+        private DateTime _scChargeEndedAt = DateTime.MinValue;
         private bool? _wasOverheating;
         private DateTime _lastOverheatBanner = DateTime.MinValue;
         private bool? _wasShields;
@@ -65,7 +73,7 @@ namespace EliteBioRadar
         public event Action<string>? PlayerDisembarked;   // (vehicle: "SHIP", "SRV", "NOMAD", "TAXI") the commander stepped out of a vehicle; live only
         public event Action<bool>? FlightAssistChanged;   // (assistOn) flight assist went on or off; live only
         private bool? _wasFlightAssistOff;
-        private const double HudQuietSeconds = 3;
+        private const double HudQuietSeconds = 2;
         private int? _statusContext;
         private DateTime _hudQuietUntil = DateTime.MinValue;
         private void StartHudQuiet(string why)
@@ -1066,12 +1074,13 @@ namespace EliteBioRadar
                 _wasNightVision = status.NightVisionOn;
 
                 // Flag edges: the first read only sets the baseline, which follows the flag everywhere. The SRV flags only play while in the SRV.
-                // Shields (bit 3), SRV drive assist (15), SRV handbrake (12), SRV turret (14, set = retracted), silent running (10).
+                // Shields (bit 3), SRV drive assist (15), SRV handbrake (12), SRV turret (13, set = in the turret view), silent running (10).
                 FlagEdge(ref _wasShields, status.ShieldsUp, !quiet, "Shields up", "Shields down", ShieldsChanged);
                 FlagEdge(ref _wasDriveAssist, status.SrvDriveAssist, !quiet && status.InSRV, "Drive assist on", "Drive assist off", DriveAssistChanged);
                 FlagEdge(ref _wasHandbrake, status.SrvHandbrake, !quiet && status.InSRV, "Handbrake on", "Handbrake off", HandbrakeChanged);
-                FlagEdge(ref _wasTurretDeployed, !status.SrvTurretRetracted, !quiet && status.InSRV, "Turret deployed", "Turret retracted", TurretChanged);
+                FlagEdge(ref _wasTurretDeployed, status.SrvTurretView,!quiet && status.InSRV, "Turret deployed", "Turret retracted", TurretChanged);
                 FlagEdge(ref _wasSilentRunning, status.SilentRunning, !quiet, "Silent running on", "Silent running off", SilentRunningChanged);
+                FlagEdge(ref _wasSco, status.ScoActive, !quiet && status.Supercruise, "Supercruise overdrive engaged", "Supercruise overdrive disengaged", SupercruiseOverdriveChanged);
 
                 // Being interdicted (Flags bit 23): plays when it comes on, not held back by the quiet window (the drop out of supercruise that follows would start one), at most once every 5 s.
                 if (_wasInterdicted == false && status.BeingInterdicted && (DateTime.UtcNow - _lastInterdictionBanner).TotalSeconds >= 5) { Log.Write("Interdiction started"); _lastInterdictionBanner = DateTime.UtcNow; InterdictionStarted?.Invoke(); }
@@ -1164,6 +1173,27 @@ namespace EliteBioRadar
                     _jumpChargeBeganAt = DateTime.MinValue;
                     Log.Write("Hyperspace charge cancelled");
                     JumpChargeCancelled?.Invoke();
+                }
+
+                // A supercruise charge: the FSD charging flag (Flags bit 17) without the hyperdrive flag, from normal space. It follows the flag, not the journal: StartJump (Supercruise) only
+                // comes at the end of the spool. It ends either in SupercruiseEntry (Supercruise flag set; the entry event carries the animation on) or, if the flag drops and stays
+                // down for 3 s with no supercruise, by being cancelled.
+                bool scCharge = status.FsdChargingAny && !status.FsdHyperdriveCharging && !status.Supercruise && !IsChargingJump && !status.InSRV && !status.OnFoot;
+                if (status.Supercruise) { _scCharging = false; _scChargeEndedAt = DateTime.MinValue; }
+                else if (scCharge)
+                {
+                    _scChargeEndedAt = DateTime.MinValue;
+                    if (!_scCharging) { _scCharging = true; Log.Write("Supercruise charge started"); SupercruiseChargeStarted?.Invoke(); }
+                }
+                else if (_scCharging)
+                {
+                    if (_scChargeEndedAt == DateTime.MinValue) _scChargeEndedAt = DateTime.UtcNow;
+                    else if ((DateTime.UtcNow - _scChargeEndedAt).TotalSeconds > 3)
+                    {
+                        _scCharging = false; _scChargeEndedAt = DateTime.MinValue;
+                        Log.Write("Supercruise charge cancelled");
+                        SupercruiseChargeCancelled?.Invoke();
+                    }
                 }
 
                 UpdateShipDepartureTracking(status);
@@ -3473,6 +3503,8 @@ namespace EliteBioRadar
             if (!backfill && evt is "Disembark" or "Embark" or "LaunchSRV" or "DockSRV" or "LaunchFighter" or "DockFighter" or "VehicleSwitch" or "SupercruiseEntry" or "SupercruiseExit" or "FSDJump" or "StartJump" or "LoadGame" or "Resurrect")
                 StartHudQuiet(evt);
 
+            if (!backfill && evt == "SupercruiseEntry") { Log.Write("Supercruise entered"); SupercruiseEntered?.Invoke(); }
+
             // The Embark animation, with the vehicle boarded (the full event is logged once so the Nomad's wording can be checked).
             if (!backfill && evt == "Embark")
             {
@@ -4389,6 +4421,17 @@ namespace EliteBioRadar
                                 }
                             }
 
+                            // ScanOrganic carries no position, so a replay (the app restarted mid-colony) can only guess: the last Touchdown / Disembark spot, which for a scan made
+                            // from the SRV is the ship, hundreds of metres from where the scan really was (real: Fonticulua Campestris scan 1 replayed at the ship, so its colony
+                            // ring and the 500 m rule were drawn in the wrong place). The cache holds the position recorded live at the time: keep that one.
+                            if (backfill && !string.IsNullOrEmpty(CurrentBody))
+                            {
+                                var keep = ScanCache.LoadForBody(CurrentBody).Organisms.FirstOrDefault(o =>
+                                    !o.IsComplete && o.ScanCount == scanNum && string.Equals(o.Genus, genus, StringComparison.OrdinalIgnoreCase)
+                                    && string.Equals(o.Species, species, StringComparison.OrdinalIgnoreCase) && (o.Latitude != 0 || o.Longitude != 0));
+                                if (keep != null) { useLat = keep.Latitude; useLon = keep.Longitude; Log.Write($"Backfill: kept the live position of {genus} {species} scan={scanNum} from the cache"); }
+                            }
+
                             var org = new ScannedOrganism
                             {
                                 Latitude  = useLat,
@@ -4814,6 +4857,8 @@ namespace EliteBioRadar
                         FsdTargetedAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
                         if (!backfill) DestinationUpdated?.Invoke(this, EventArgs.Empty);
                     }
+                    else if (!backfill && string.Equals(jumpType, "Supercruise", StringComparison.OrdinalIgnoreCase))
+                        SupercruiseDriveFired?.Invoke();
                     break;
                 }
 

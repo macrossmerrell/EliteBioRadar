@@ -36,6 +36,8 @@
         <local:OverheatVisual x:Name="overheatVisual"/>
         <local:InterdictionVisual x:Name="interdictionVisual"/>
         <local:SilentRunningVisual x:Name="silentRunningVisual"/>
+        <local:SupercruiseVisual x:Name="supercruiseVisual"/>
+        <local:SupercruiseOverdriveVisual x:Name="supercruiseOverdriveVisual"/>
         <local:DriveAssistVisual x:Name="driveAssistVisual"/>
         <local:HandbrakeVisual x:Name="handbrakeVisual"/>
         <local:TurretVisual x:Name="turretVisual"/>

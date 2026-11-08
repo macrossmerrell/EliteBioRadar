@@ -2137,9 +2137,22 @@ namespace EliteBioRadar
             return bottomY;
         }
 
+        private string _destPanelKey = "";
+
         private void UpdateDestinationPanel(bool force = false)
         {
             var dest = _watcher?.CurrentDestination;
+
+            // Called every refresh tick (100 ms) while the tab shows, and during a hyperspace charge the tab is forced on: rebuilding the whole route list each time
+            // starved the UI thread and made the departure animation choppy in a real jump. Skip the rebuild unless something the panel shows has changed.
+            var routeForKey = dest == null ? null : (dest.FullRouteHops.Count > 0 ? dest.FullRouteHops : dest.Hops);
+            string destKey = dest == null || string.IsNullOrEmpty(dest.NextSystem) ? "none" : string.Join("|",
+                dest.NextSystem, dest.StarClass, dest.TotalRouteJumps, dest.RemainingJumpsInRoute, dest.CurrentJumpRange, dest.MaxJumpRange, dest.FuelMain, dest.FuelCapacityMain,
+                dest.RemainingDistanceLy, dest.TotalRouteLy, dest.FullRouteHops.Count, dest.Hops.Count,
+                routeForKey!.Count > 0 ? routeForKey[0].StarSystem : "", routeForKey.Count > 0 ? routeForKey[^1].StarSystem : "");
+            if (!force && destKey == _destPanelKey) return;
+            _destPanelKey = destKey;
+
             destSummaryStack.Children.Clear();
             destHopStack.Children.Clear();
 
@@ -2730,7 +2743,10 @@ namespace EliteBioRadar
             // confident wrong one for the first second.
             string modeLabel = jumpScene ? "FSD JUMP" : undecided ? "ATMOSPHERIC TRANSIT"
                 : isDescending ? "DEORBIT" : "LAUNCH TRAJECTORY";
-            tabRadar.Content = jumpScene ? "⛛ JUMP" : undecided ? "⛛ TRANSIT" : isDescending ? "⛛ DEORBIT" : "⤒ LAUNCH";
+            // Only while this window is itself on the Deorbit screen: the scene also runs here for the System Notifications window alone (mode stays Radar), and relabelling
+            // the tab then left it reading DEORBIT after landing, since the mode never changed to put RADAR back (real: landing on Qiedea EB-H b16-1 6 c).
+            if (_lastMode == InfoPanelMode.Deorbit)
+                tabRadar.Content = jumpScene ? "⛛ JUMP" : undecided ? "⛛ TRANSIT" : isDescending ? "⛛ DEORBIT" : "⤒ LAUNCH";
 
             // Three tiers, matching the gate colouring above — "drifting" was missing entirely
             // before (only the two extremes had distinct text), so most of the wander's range

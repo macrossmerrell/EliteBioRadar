@@ -39,6 +39,8 @@ namespace EliteBioRadar
                 ["overheat"] = overheatVisual,
                 ["interdiction"] = interdictionVisual,
                 ["silent-running"] = silentRunningVisual,
+                ["supercruise"] = supercruiseVisual,
+                ["supercruise-overdrive"] = supercruiseOverdriveVisual,
                 ["drive-assist"] = driveAssistVisual,
                 ["handbrake"] = handbrakeVisual,
                 ["turret"] = turretVisual,
@@ -53,6 +55,23 @@ namespace EliteBioRadar
                 v.Finished += () => { var d = _done; _done = null; d?.Invoke(); };
             AnimationRouter.Register(this);
             Closed += (_, _) => { AnimationRouter.Unregister(this); SaveWindowState(); };
+            // On a fresh start the window is reopened while the app is at its busiest, and WPF can miss its first frame, leaving the window plain white
+            // (nothing else redraws an empty window). Force a repaint once the UI is idle, and again a little later in case the first one was swallowed too.
+            Loaded += (_, _) =>
+            {
+                Dispatcher.InvokeAsync(Repaint, System.Windows.Threading.DispatcherPriority.ContextIdle);
+                var t = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
+                t.Tick += (_, _) => { t.Stop(); Repaint(); };
+                t.Start();
+            };
+        }
+
+        private void Repaint()
+        {
+            if (!IsLoaded) return;
+            InvalidateVisual();
+            if (Content is UIElement c) c.InvalidateVisual();
+            UpdateLayout();
         }
 
         public AnimationSurfaces Kind => AnimationSurfaces.Notifications;

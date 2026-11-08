@@ -197,6 +197,32 @@ namespace EliteBioRadar
                 if (!string.IsNullOrWhiteSpace(starClass)) detail += (detail.Length > 0 ? "|" : "") + $"~CLS={starClass.Trim()}";   // the class itself, for the star's real colours
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Arrival, system, detail));
             });
+            // The supercruise animation follows the charge: it starts when the FSD starts charging, spools up for as long as the charge takes, and bursts when the drive engages.
+            svc.SupercruiseChargeStarted += () => Dispatcher.InvokeAsync(() =>
+            {
+                SupercruiseState.ChargeStart = DateTime.UtcNow;
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Supercruise, "", ""));
+            });
+            svc.SupercruiseChargeCancelled += () => Dispatcher.InvokeAsync(SupercruiseState.RequestEnd);
+            // The journal's StartJump: the spool-up is done (the ring is full) and the game's own countdown to the entry begins. Measured, so the next ring is paced to it.
+            svc.SupercruiseDriveFired += () => Dispatcher.InvokeAsync(() =>
+            {
+                var now = DateTime.UtcNow;
+                if (SupercruiseState.ChargeStart > SupercruiseState.LastEnd && SupercruiseState.ChargeStart > SupercruiseState.EnteredAt)
+                {
+                    SupercruiseState.ChargeSeconds = Math.Clamp((now - SupercruiseState.ChargeStart).TotalSeconds, 1.5, 30);
+                    SupercruiseState.DriveFiredAt = now;
+                }
+            });
+            svc.SupercruiseEntered += () => Dispatcher.InvokeAsync(() =>
+            {
+                var now = DateTime.UtcNow;
+                bool charging = SupercruiseState.ChargeStart > SupercruiseState.LastEnd && SupercruiseState.ChargeStart > SupercruiseState.EnteredAt && (now - SupercruiseState.ChargeStart).TotalSeconds < 120;
+                SupercruiseState.EnteredAt = now;
+                if (!charging) AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Supercruise, "", "ENTRY"));   // no charge was seen (the app started mid-charge): just the engage
+            });
+            svc.SupercruiseOverdriveChanged += on => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.SupercruiseOverdrive, "", on ? "ON" : "OFF")));
             svc.FuelScoopStarted += (star, detail) => Dispatcher.InvokeAsync(() =>
             {
                 FuelScoopState.LastStart = DateTime.UtcNow;
@@ -274,6 +300,8 @@ namespace EliteBioRadar
                     ["overheat"] = _w.overheatVisual,
                     ["interdiction"] = _w.interdictionVisual,
                     ["silent-running"] = _w.silentRunningVisual,
+                    ["supercruise"] = _w.supercruiseVisual,
+                    ["supercruise-overdrive"] = _w.supercruiseOverdriveVisual,
                     ["drive-assist"] = _w.driveAssistVisual,
                     ["handbrake"] = _w.handbrakeVisual,
                     ["turret"] = _w.turretVisual,
