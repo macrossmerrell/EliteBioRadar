@@ -242,6 +242,8 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.SupercruiseExit, "", "")));
             svc.Supercharged += (type, boost) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Supercharge, "", type + "|" + boost.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))));
+            svc.RouteChanged += (stage, jumps, ly, classes) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Route, "", $"{stage}|{jumps}|{ly.ToString("0", System.Globalization.CultureInfo.InvariantCulture)}|{classes}")));
             svc.SupercruiseAssistChanged += on => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.SupercruiseAssist, "", on ? "ON" : "OFF")));
             svc.FuelScoopStarted += (star, detail) => Dispatcher.InvokeAsync(() =>
@@ -326,6 +328,7 @@ namespace EliteBioRadar
                     ["supercruise-assist"] = _w.supercruiseAssistVisual,
                     ["supercruise-exit"] = _w.supercruiseExitVisual,
                     ["supercharge"] = _w.superchargeVisual,
+                    ["route"] = _w.routeVisual,
                     ["organism-scan"] = _w.organismScanVisual,
                     ["hull-damage"] = _w.hullDamageVisual,
                     ["fighter"] = _w.fighterVisual,

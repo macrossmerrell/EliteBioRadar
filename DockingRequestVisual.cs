@@ -9,7 +9,7 @@ namespace EliteBioRadar
     // Subject = the station name, Detail = "REQUESTED", "GRANTED|pad" or "DENIED|reason".
     public sealed class DockingRequestVisual : AnimationVisual
     {
-        private enum Stage { Requested, Granted, Denied }
+        private enum Stage { Requested, Granted, Denied, Undocked }
         private const double SceneW = 240, SceneH = 150, ShipX = 44, ShipY = 54, StationX = 190, StationY = 50, PadX = 120, PadY = 52, PadHalf = 28, PadFontSize = 26;
 
         private static readonly Color Cyan = Color.FromRgb(0x55, 0xf2, 0xff), Mint = Color.FromRgb(125, 255, 196), Red = Color.FromRgb(255, 100, 80);
@@ -20,6 +20,9 @@ namespace EliteBioRadar
         // Nine alpha levels each.
         private static readonly Brush[] CyanFill = AlphaBrushes(Cyan), MintFill = AlphaBrushes(Mint), RedFill = AlphaBrushes(Red);
         private static readonly Pen[] MintPad = AlphaPens(Mint, 1.4), RedPad = AlphaPens(Red, 1.4), RedCross = AlphaPens(Red, 2.6);
+        private static readonly Color Amber = Color.FromRgb(255, 200, 90);
+        private static readonly Brush[] AmberFill = AlphaBrushes(Amber);
+        private static readonly Pen[] CyanRing = AlphaPens(Cyan, 1.2);
         private static readonly Brush StationSlot = Frozen(Color.FromArgb(51, Cyan.R, Cyan.G, Cyan.B));
         private static readonly Geometry Octagon = MakeOctagon();
         private static readonly RotateTransform Nose90 = MakeNose90();
@@ -45,9 +48,13 @@ namespace EliteBioRadar
         {
             var parts = (detail ?? "").Split('|');
             string extra = parts.Length > 1 ? parts[1] : "";
-            _stage = parts[0].Contains("GRANT", StringComparison.OrdinalIgnoreCase) ? Stage.Granted : parts[0].Contains("DENIED", StringComparison.OrdinalIgnoreCase) ? Stage.Denied : Stage.Requested;
+            _stage = parts[0].Contains("GRANT", StringComparison.OrdinalIgnoreCase) ? Stage.Granted : parts[0].Contains("DENIED", StringComparison.OrdinalIgnoreCase) ? Stage.Denied
+                : parts[0].Contains("UNDOCK", StringComparison.OrdinalIgnoreCase) ? Stage.Undocked : Stage.Requested;
             switch (_stage)
             {
+                case Stage.Undocked:
+                    _line1 = "UNDOCKED"; _line2 = (subject ?? "").ToUpperInvariant();
+                    break;
                 case Stage.Granted:
                     _pad = extra;
                     var probe = new FormattedText("0", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, MonoFace, PadFontSize, MintBrush, VisualTreeHelper.GetDpi(this).PixelsPerDip);
@@ -75,13 +82,20 @@ namespace EliteBioRadar
             _shift.X = px; _shift.Y = py; dc.PushTransform(_shift);
             _fit.ScaleX = _fit.ScaleY = k; dc.PushTransform(_fit);
 
-            if (_stage == Stage.Requested) DrawRequest(dc, t); else DrawPad(dc, t);
+            if (_stage == Stage.Requested) DrawRequest(dc, t); else if (_stage == Stage.Undocked) DrawUndock(dc, t); else DrawPad(dc, t);
 
             var edge = _stage == Stage.Granted ? MintPlateEdge : _stage == Stage.Denied ? RedPlateEdge : CyanPlateEdge;
             var head = _stage == Stage.Granted ? MintBrush : _stage == Stage.Denied ? RedBrush : CyanBrush;
-            dc.DrawRoundedRectangle(PlateBrush, edge, new Rect(26, 106, 188, 40), 6, 6);
-            DrawSpaced(dc, _line1, MonoFace, 13, head, SceneW / 2, 112, 0.1, Phase(t, 0.1, 0.3));
-            DrawSpaced(dc, _line2, MonoFace, 11, MutedBrush, SceneW / 2, 128, 0.1, Phase(t, _stage == Stage.Requested ? 0.6 : 1.0, 0.4));
+            // Undocking lets the pad play out first; the other stages show the plate straight away.
+            double plateAt = _stage == Stage.Undocked ? 1.4 : 0.1, plateA = Phase(t, plateAt, 0.4);
+            if (plateA > 0)
+            {
+                if (plateA < 0.999) dc.PushOpacity(plateA);
+                dc.DrawRoundedRectangle(PlateBrush, edge, new Rect(26, 106, 188, 40), 6, 6);
+                if (plateA < 0.999) dc.Pop();
+            }
+            DrawSpaced(dc, _line1, MonoFace, 13, head, SceneW / 2, 112, 0.1, Phase(t, plateAt, 0.3));
+            DrawSpaced(dc, _line2, MonoFace, 11, MutedBrush, SceneW / 2, 128, 0.1, Phase(t, _stage == Stage.Requested ? 0.6 : _stage == Stage.Undocked ? 1.7 : 1.0, 0.4));
 
             dc.Pop(); dc.Pop();
             if (a < 0.999) dc.Pop();
@@ -106,6 +120,40 @@ namespace EliteBioRadar
                 double q = (t * 0.9 + j / 3.0) % 1;
                 int al = (int)Math.Round(0.9 * (1 - Math.Abs(q - 0.5) * 1.2) * 8);
                 dc.DrawEllipse(CyanFill[Math.Clamp(al, 0, 8)], null, new Point(from + (to - from) * q, StationY + 4), 2, 2);
+            }
+        }
+
+        // UNDOCKED: the pad lights blink amber as the pad releases, the ship lifts off and fades, and a ring spreads out from the pad.
+        private void DrawUndock(DrawingContext dc, double t)
+        {
+            double h = PadHalf, lift = EaseOut(Phase(t, 1.1, 2.0));
+            var padPen = MintPad[(int)Math.Round(0.5 * (1 - 0.7 * Phase(t, 2.4, 0.8)) * 8)];
+            dc.DrawRoundedRectangle(null, padPen, new Rect(PadX - h, PadY - h, h * 2, h * 2), 5, 5);
+            dc.DrawEllipse(null, padPen, new Point(PadX, PadY), h * 0.62, h * 0.62);
+
+            for (int i = 0; i < 4; i++)
+            {
+                double blink = Math.Sin(t * 10 + i * 1.7) > 0 ? 1 : 0.35, al = t < 1.1 ? 0.5 + 0.5 * blink : Math.Max(0.12, 1 - Phase(t, 1.1, 1.6)) * 0.7;
+                var fill = t < 0.3 ? MintFill : AmberFill;
+                double cx = PadX + (i == 0 || i == 3 ? -h : h), cy = PadY + (i < 2 ? -h : h);
+                dc.DrawEllipse(fill[Math.Clamp((int)Math.Round(al * 8), 0, 8)], null, new Point(cx, cy), 3.2, 3.2);
+            }
+
+            double sa = 1 - Phase(t, 2.6, 0.8);
+            if (sa > 0)
+            {
+                if (sa < 0.999) dc.PushOpacity(sa);
+                double sc = 1.1 + lift * 0.6;
+                _shipT.X = PadX; _shipT.Y = PadY - lift * 8; _shipS.ScaleX = _shipS.ScaleY = sc;
+                dc.PushTransform(_shipT); dc.PushTransform(_shipS);
+                dc.DrawGeometry(ShipFill, ShipEdge, ShipOutline);
+                dc.Pop(); dc.Pop();
+                if (sa < 0.999) dc.Pop();
+            }
+            if (lift > 0 && lift < 1)
+            {
+                double r = h * 0.6 + lift * 26;
+                dc.DrawEllipse(null, CyanRing[(int)Math.Round((1 - lift) * 0.5 * 8)], new Point(PadX, PadY), r, r);
             }
         }
 

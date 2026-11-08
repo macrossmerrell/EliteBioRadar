@@ -57,7 +57,7 @@ namespace EliteBioRadar
         private bool? _wasInterdicted;
         private DateTime _lastInterdictionBanner = DateTime.MinValue;
         public event Action? OverheatStarted;   // heat went above 100%; live only
-        public event Action<string, string>? DockingResponse;   // (station, "REQUESTED" / "GRANTED|pad" / "DENIED|reason") live only
+        public event Action<string, string>? DockingResponse;   // (station, "REQUESTED" / "GRANTED|pad" / "DENIED|reason" / "UNDOCKED") live only
         // The journal's DockingDenied reasons in words for the plate (an unknown one is split at its capitals).
         private static string DockingDeniedText(string reason) => reason switch
         {
@@ -77,10 +77,12 @@ namespace EliteBioRadar
         private bool? _wasMassLocked;
         private DateTime _lastMassLockAnim = DateTime.MinValue;
         // Mass lock flips often near stations and other ships, so plays are at least 4 s apart.
+        private DateTime _lastUndockedAt = DateTime.MinValue;   // the journal's Undocked; leaving a station always clears the mass lock, which the Undocked animation already covers
         private void RaiseMassLock(bool locked)
         {
             var now = DateTime.UtcNow;
             if ((now - _lastMassLockAnim).TotalSeconds < 4) return;
+            if (!locked && (now - _lastUndockedAt).TotalSeconds < 5) return;
             _lastMassLockAnim = now;
             MassLockChanged?.Invoke(locked);
         }
@@ -715,6 +717,18 @@ namespace EliteBioRadar
         private readonly string _statusFile;
         private readonly string _navRouteFile;
         private string? _lastNavRouteJson;
+
+        // Route animations (plotted / cancelled / complete). The route's final system identifies it; NavRoute.json shrinks every jump but the final system stays put.
+        private bool _navRouteSeen;                      // the first route read after launch is remembered silently, not announced
+        private long _routeAnnouncedDest;                // final system of the route last announced (0 = none)
+        private int _routeAnnouncedJumps;
+        private double _routeAnnouncedLy;
+        private string _routeAnnouncedClasses = "";
+        private bool _routeClearedSinceAnnounce;         // NavRouteClear seen since: the next route read counts as a new plot even to the same system
+        private int _routeSeq;                           // bumped by every plot / clear, so a delayed "cancelled" can tell it was overtaken
+        private DateTime _routeCompletedAt = DateTime.MinValue;
+        // stage = "PLOTTED" / "CANCELLED" / "COMPLETE", then the jump count, total light-years and eight star-class letters sampled along the route. Live only.
+        public event Action<string, int, double, string>? RouteChanged;
         private bool _routeClearedLive;
         private string? _routeJsonAtClear;
         private string _currentJournalFile = "";
@@ -1474,7 +1488,7 @@ namespace EliteBioRadar
         {
             try
             {
-                if (!File.Exists(_navRouteFile)) return;
+                if (!File.Exists(_navRouteFile)) { _navRouteSeen = true; return; }
 
                 string json;
                 using (var fs = new FileStream(_navRouteFile, FileMode.Open, FileAccess.Read,
@@ -1546,9 +1560,56 @@ namespace EliteBioRadar
                     }
                 }
                 _lastNavRouteJson = json;
+                AnnounceRoute(hops);
                 DestinationUpdated?.Invoke(this, EventArgs.Empty);
             }
             catch (Exception ex) { Log.Write($"LoadNavRoute error: {ex.Message}"); }
+        }
+
+        // A route read from NavRoute.json: a different final system (or one read again after a clear) is a newly plotted route.
+        private void AnnounceRoute(List<RouteHop> hops)
+        {
+            if (hops.Count == 0) return;
+            bool first = !_navRouteSeen;
+            _navRouteSeen = true;
+            var dest = hops[^1];
+            if (dest.SystemAddress == _routeAnnouncedDest && !_routeClearedSinceAnnounce) return;   // the same route, just further along
+
+            // The file's first entry is normally the system you are in, which is not a jump.
+            int jumps = hops.Count > 1 && string.Equals(hops[0].StarSystem, StarSystem, StringComparison.OrdinalIgnoreCase) ? hops.Count - 1 : hops.Count;
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < 8; i++)
+            {
+                string c = hops[(int)Math.Round(i * (hops.Count - 1) / 7.0)].StarClass;
+                sb.Append(c.Length > 0 ? c[0] : '?');
+            }
+            _routeAnnouncedDest = dest.SystemAddress;
+            _routeAnnouncedJumps = jumps;
+            _routeAnnouncedLy = hops.Sum(h => h.DistanceFromPrevLy);
+            _routeAnnouncedClasses = sb.ToString();
+            _routeClearedSinceAnnounce = false;
+            _routeSeq++;
+            if (first || jumps < 1) return;   // the route that was already there when the app started, or a route that has nothing left to fly
+            Log.Write($"Route plotted: {jumps} jumps, {_routeAnnouncedLy:0} ly to '{dest.StarSystem}'");
+            RouteChanged?.Invoke("PLOTTED", jumps, Math.Round(_routeAnnouncedLy), _routeAnnouncedClasses);
+        }
+
+        // NavRouteClear (live). The game also writes it when a route ends or is replotted, so "cancelled" waits a moment to see whether a new route follows,
+        // and never plays right after a completed route.
+        private void OnRouteCleared()
+        {
+            if (_routeAnnouncedDest == 0 || _routeClearedSinceAnnounce) return;
+            _routeClearedSinceAnnounce = true;
+            int seq = ++_routeSeq, jumps = _routeAnnouncedJumps;
+            double ly = _routeAnnouncedLy;
+            string classes = _routeAnnouncedClasses;
+            Task.Run(async () =>
+            {
+                await Task.Delay(1500).ConfigureAwait(false);
+                if (seq != _routeSeq || (DateTime.UtcNow - _routeCompletedAt).TotalSeconds < 10) return;
+                Log.Write("Route cancelled");
+                RouteChanged?.Invoke("CANCELLED", jumps, Math.Round(ly), classes);
+            });
         }
 
         private static double Distance3D(double[] a, double[] b) =>
@@ -3565,13 +3626,15 @@ namespace EliteBioRadar
             if (!backfill && evt == "DockFighter") { Log.Write("Fighter recovered"); FighterRecovered?.Invoke(); }
 
             // Docking requests: the station's answer (the journal's DockingRequested / DockingGranted / DockingDenied) as (station, "REQUESTED" / "GRANTED|pad" / "DENIED|reason").
-            if (!backfill && evt is "DockingRequested" or "DockingGranted" or "DockingDenied")
+            if (!backfill && evt == "Undocked") _lastUndockedAt = DateTime.UtcNow;
+            if (!backfill && evt is "DockingRequested" or "DockingGranted" or "DockingDenied" or "Undocked")
             {
                 string station = obj.Value<string>("StationName_Localised") ?? obj.Value<string>("StationName") ?? "";
                 string stage = evt switch
                 {
                     "DockingGranted" => "GRANTED|" + (obj.Value<int?>("LandingPad")?.ToString() ?? "?"),
                     "DockingDenied"  => "DENIED|" + DockingDeniedText(obj.Value<string>("Reason") ?? ""),
+                    "Undocked"       => "UNDOCKED",
                     _                => "REQUESTED"
                 };
                 Log.Write($"Docking: {stage} at {station}");
@@ -4800,6 +4863,15 @@ namespace EliteBioRadar
                     if (!backfill)
                     {
                         IsChargingJump = false;
+                        // Arriving in the last system of the plotted route completes it.
+                        if (_routeAnnouncedDest != 0 && (obj.Value<long?>("SystemAddress") ?? 0) == _routeAnnouncedDest)
+                        {
+                            _routeCompletedAt = DateTime.UtcNow;
+                            _routeAnnouncedDest = 0;
+                            _routeSeq++;
+                            Log.Write("Route complete");
+                            RouteChanged?.Invoke("COMPLETE", _routeAnnouncedJumps, Math.Round(_routeAnnouncedLy), _routeAnnouncedClasses);
+                        }
                         _chargeStaleSetAtUtc = DateTime.UtcNow;
                         _loggedStaleChargeSuppress = false;
                         _chargeFlagStaleSinceArrival = true;
@@ -4959,6 +5031,7 @@ namespace EliteBioRadar
                 // panel can fall back (e.g. to the radar while on a planet). A later NavRoute/FSDTarget rebuilds it.
                 case "NavRouteClear":
                 {
+                    if (!backfill) OnRouteCleared();
                     _routeJsonAtClear = _lastNavRouteJson;   // the file may still hold the cleared route for a moment: ignored until it changes
                     CurrentDestination = null;
                     _lastNavRouteJson = null;
