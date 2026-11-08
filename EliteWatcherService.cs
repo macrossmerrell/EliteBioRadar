@@ -60,6 +60,8 @@ namespace EliteBioRadar
         public event Action? SupercruiseEntered;   // the journal's SupercruiseEntry; live only
         public event Action<bool>? SupercruiseOverdriveChanged;   // (on) supercruise overdrive engaged or disengaged; live only
         private bool? _wasSco;
+        public event Action<bool>? SupercruiseAssistChanged;   // (on) supercruise assist engaged or disengaged; live only
+        private bool? _wasAssist;
         public event Action? SupercruiseChargeStarted;     // the FSD began charging for supercruise (not a hyperspace charge); live only
         public event Action? SupercruiseDriveFired;        // the journal's StartJump for supercruise: the spool-up is done and the countdown to the entry begins; live only
         public event Action? SupercruiseChargeCancelled;   // that charge ended without the drive engaging
@@ -1081,6 +1083,7 @@ namespace EliteBioRadar
                 FlagEdge(ref _wasTurretDeployed, status.SrvTurretView,!quiet && status.InSRV, "Turret deployed", "Turret retracted", TurretChanged);
                 FlagEdge(ref _wasSilentRunning, status.SilentRunning, !quiet, "Silent running on", "Silent running off", SilentRunningChanged);
                 FlagEdge(ref _wasSco, status.ScoActive, !quiet && status.Supercruise, "Supercruise overdrive engaged", "Supercruise overdrive disengaged", SupercruiseOverdriveChanged);
+                FlagEdge(ref _wasAssist, status.SupercruiseAssist, !quiet && status.Supercruise, "Supercruise assist engaged", "Supercruise assist disengaged", SupercruiseAssistChanged);
 
                 // Being interdicted (Flags bit 23): plays when it comes on, not held back by the quiet window (the drop out of supercruise that follows would start one), at most once every 5 s.
                 if (_wasInterdicted == false && status.BeingInterdicted && (DateTime.UtcNow - _lastInterdictionBanner).TotalSeconds >= 5) { Log.Write("Interdiction started"); _lastInterdictionBanner = DateTime.UtcNow; InterdictionStarted?.Invoke(); }

@@ -193,6 +193,7 @@ namespace EliteBioRadar
         // "FsdCharging", which is ambiguous (also set for a plain supercruise charge).
         public bool FsdHyperdriveCharging => (Flags2 & (1u << 19)) != 0;
         public bool ScoActive => (Flags2 & (1u << 20)) != 0;   // supercruise overdrive (SCO) is engaged (Flags2 bit 20, 0x00100000, per the community journal docs; bit 21 is Supercruise Assist)
+        public bool SupercruiseAssist => (Flags2 & (1u << 21)) != 0;   // supercruise assist is engaged (Flags2 bit 21, per the community journal docs; not yet confirmed in play)
         // The ambiguous one — true while charging for EITHER a hyperspace jump or a plain
         // supercruise entry. Combined with !FsdHyperdriveCharging elsewhere to isolate "just
         // charging to leave a body via supercruise" (e.g. ascending back out through an
