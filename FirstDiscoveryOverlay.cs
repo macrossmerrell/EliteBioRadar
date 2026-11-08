@@ -223,6 +223,11 @@ namespace EliteBioRadar
             });
             svc.SupercruiseOverdriveChanged += on => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.SupercruiseOverdrive, "", on ? "ON" : "OFF")));
+            svc.OrganismSampleTaken += (stage, name) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.OrganismScan, name, Math.Clamp(stage, 1, 4).ToString())));
+            svc.HullThresholdCrossed += (level, was, now) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.HullDamage, "",
+                    string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{(level == 2 ? "CRITICAL" : "DAMAGED")}|{was:0.###}|{now:0.###}"))));
             svc.SupercruiseExited += () => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.SupercruiseExit, "", "")));
             svc.SupercruiseAssistChanged += on => Dispatcher.InvokeAsync(() =>
@@ -308,6 +313,8 @@ namespace EliteBioRadar
                     ["supercruise-overdrive"] = _w.supercruiseOverdriveVisual,
                     ["supercruise-assist"] = _w.supercruiseAssistVisual,
                     ["supercruise-exit"] = _w.supercruiseExitVisual,
+                    ["organism-scan"] = _w.organismScanVisual,
+                    ["hull-damage"] = _w.hullDamageVisual,
                     ["drive-assist"] = _w.driveAssistVisual,
                     ["handbrake"] = _w.handbrakeVisual,
                     ["turret"] = _w.turretVisual,

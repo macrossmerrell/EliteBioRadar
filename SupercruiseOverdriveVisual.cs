@@ -18,33 +18,15 @@ namespace EliteBioRadar
         private static readonly Brush PlateBrush = Frozen(Color.FromArgb(204, 5, 10, 20)), HullBrush = Frozen(Color.FromRgb(0x2a, 0x3a, 0x46)), CoreBrush = Frozen(Color.FromRgb(255, 248, 235));
         private static readonly Pen CyanPlateEdge = FrozenPen(Color.FromArgb(140, Cyan.R, Cyan.G, Cyan.B), 1), VioletPlateEdge = FrozenPen(Color.FromArgb(140, Violet.R, Violet.G, Violet.B), 1);
         // Everything that changes colour with the overdrive comes in nine levels, from cyan (0) to violet (8).
-        private static readonly Pen[] HullEdge = MakeEdges(0.87), WhiteStreak = MakeAlphaPens(Lavender, 1.6), RingOut = MakeAlphaPens(Violet, 1.8), RingIn = MakeAlphaPens(Cyan, 1.8);
+        private static readonly Pen[] HullEdge = MakeEdges(0.87), WhiteStreak = AlphaPens(Lavender, 1.6), RingOut = AlphaPens(Violet, 1.8), RingIn = AlphaPens(Cyan, 1.8);
         private static readonly Brush[] HullGlow = MakeGlows(i => Mix(Cyan, Violet, i / 8.0), 77, 140), NozzleGlow = MakeGlows(i => Mix(Amber, Lavender, i / 8.0), 110, 190);
         // The ship seen from behind (the same drawing as the supercruise screen's).
-        private static readonly Geometry Hull = Poly(new[] { (-6.0, -9.0), (6, -9), (9, 6), (-9, 6) }), WingL = Poly(new[] { (-9.0, -1.0), (-24, 8), (-24, 11), (-9, 7) }), WingR = Poly(new[] { (9.0, -1.0), (24, 8), (24, 11), (9, 7) }), Fin = Poly(new[] { (0.0, -9.0), (0, -16), (3, -9) });
-        private static readonly double[] Angle = MakeValues(0, 2 * Math.PI), Start = MakeValues(1, 1), Length = MakeValues(2, 1), Offset = MakeValues(3, 1);
-
-        private static Color Mix(Color a, Color b, double t) => Color.FromRgb((byte)Math.Round(a.R + (b.R - a.R) * t), (byte)Math.Round(a.G + (b.G - a.G) * t), (byte)Math.Round(a.B + (b.B - a.B) * t));
-
-        private static double[] MakeValues(int k, double scale)
-        {
-            var a = new double[Streaks];
-            for (int i = 0; i < Streaks; i++) a[i] = Hash(i * 4 + k) * scale;
-            return a;
-        }
+        private static readonly double[] Angle = StarValues(Streaks, 0, 2 * Math.PI), Start = StarValues(Streaks, 1, 1), Length = StarValues(Streaks, 2, 1), Offset = StarValues(Streaks, 3, 1);
 
         private static Pen[] MakeEdges(double width)
         {
             var a = new Pen[9];
             for (int i = 0; i <= 8; i++) a[i] = FrozenPen(Mix(Cyan, Violet, i / 8.0), width);
-            return a;
-        }
-
-        // Nine pens of one colour at rising alpha.
-        private static Pen[] MakeAlphaPens(Color c, double width)
-        {
-            var a = new Pen[9];
-            for (int i = 0; i <= 8; i++) a[i] = FrozenPen(Color.FromArgb((byte)Math.Round(235.0 * i / 8), c.R, c.G, c.B), width);
             return a;
         }
 
@@ -130,10 +112,10 @@ namespace EliteBioRadar
             dc.PushTransform(new TranslateTransform(CentreX, CentreY));
             dc.PushTransform(new ScaleTransform(1.15, 1.15));
             dc.DrawEllipse(HullGlow[lv], null, new Point(0, 2), 22 + accel * 10 + L * 8, 22 + accel * 10 + L * 8);
-            dc.DrawGeometry(HullBrush, HullEdge[lv], Hull);
-            dc.DrawGeometry(HullBrush, HullEdge[lv], WingL);
-            dc.DrawGeometry(HullBrush, HullEdge[lv], WingR);
-            dc.DrawGeometry(HullBrush, HullEdge[lv], Fin);
+            dc.DrawGeometry(HullBrush, HullEdge[lv], RearHull);
+            dc.DrawGeometry(HullBrush, HullEdge[lv], RearWingL);
+            dc.DrawGeometry(HullBrush, HullEdge[lv], RearWingR);
+            dc.DrawGeometry(HullBrush, HullEdge[lv], RearFin);
             // Three identical engines. All the glows are drawn first and the cores and rings after, so no engine's glow washes over another.
             double gr = 5 + accel * 7 + L * 2, core = 1.8 + accel * 0.9 + L * 0.3;
             for (int e = -1; e <= 1; e++) dc.DrawEllipse(NozzleGlow[lv], null, new Point(e * 5.5, 3), gr, gr);

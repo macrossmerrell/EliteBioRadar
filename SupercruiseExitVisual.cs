@@ -17,33 +17,9 @@ namespace EliteBioRadar
         private static readonly Brush PlateBrush = Frozen(Color.FromArgb(204, 5, 10, 20)), HullBrush = Frozen(Color.FromRgb(0x2a, 0x3a, 0x46)), CoreBrush = Frozen(Color.FromRgb(255, 248, 235));
         private static readonly Pen PlateEdge = FrozenPen(Color.FromArgb(140, Cyan.R, Cyan.G, Cyan.B), 1), HullEdge = FrozenPen(Cyan, 0.87);
         // Nine alpha levels each.
-        private static readonly Pen[] CyanStreak = MakeAlphaPens(Cyan, 1.2), WhiteStreak = MakeAlphaPens(Lavender, 1.6), RingPen = MakeAlphaPens(Cyan, 1.6);
-        private static readonly Brush HullGlow = MakeGlow(Cyan, 77), NozzleGlow = MakeGlow(Amber, 180);
-        private static readonly Geometry Hull = Poly(new[] { (-6.0, -9.0), (6, -9), (9, 6), (-9, 6) }), WingL = Poly(new[] { (-9.0, -1.0), (-24, 8), (-24, 11), (-9, 7) }), WingR = Poly(new[] { (9.0, -1.0), (24, 8), (24, 11), (9, 7) }), Fin = Poly(new[] { (0.0, -9.0), (0, -16), (3, -9) });
-        private static readonly double[] Angle = MakeValues(0, 2 * Math.PI), Start = MakeValues(1, 1), Length = MakeValues(2, 1), Offset = MakeValues(3, 1);
-
-        private static double[] MakeValues(int k, double scale)
-        {
-            var a = new double[Streaks];
-            for (int i = 0; i < Streaks; i++) a[i] = Hash(i * 4 + k) * scale;
-            return a;
-        }
-
-        private static Pen[] MakeAlphaPens(Color c, double width)
-        {
-            var a = new Pen[9];
-            for (int i = 0; i <= 8; i++) a[i] = FrozenPen(Color.FromArgb((byte)Math.Round(235.0 * i / 8), c.R, c.G, c.B), width);
-            return a;
-        }
-
-        private static Brush MakeGlow(Color c, byte alpha)
-        {
-            var b = new RadialGradientBrush();
-            b.GradientStops.Add(new GradientStop(Color.FromArgb(alpha, c.R, c.G, c.B), 0.1));
-            b.GradientStops.Add(new GradientStop(Color.FromArgb(0, c.R, c.G, c.B), 1));
-            b.Freeze();
-            return b;
-        }
+        private static readonly Pen[] CyanStreak = AlphaPens(Cyan, 1.2), WhiteStreak = AlphaPens(Lavender, 1.6), RingPen = AlphaPens(Cyan, 1.6);
+        private static readonly Brush HullGlow = RadialGlow(Cyan, 77), NozzleGlow = RadialGlow(Amber, 180);
+        private static readonly double[] Angle = StarValues(Streaks, 0, 2 * Math.PI), Start = StarValues(Streaks, 1, 1), Length = StarValues(Streaks, 2, 1), Offset = StarValues(Streaks, 3, 1);
 
         private double _flow, _lastT;
 
@@ -83,10 +59,10 @@ namespace EliteBioRadar
             dc.PushTransform(new TranslateTransform(CentreX, CentreY));
             dc.PushTransform(new ScaleTransform(1.15, 1.15));
             dc.DrawEllipse(HullGlow, null, new Point(0, 2), 30, 30);
-            dc.DrawGeometry(HullBrush, HullEdge, Hull);
-            dc.DrawGeometry(HullBrush, HullEdge, WingL);
-            dc.DrawGeometry(HullBrush, HullEdge, WingR);
-            dc.DrawGeometry(HullBrush, HullEdge, Fin);
+            dc.DrawGeometry(HullBrush, HullEdge, RearHull);
+            dc.DrawGeometry(HullBrush, HullEdge, RearWingL);
+            dc.DrawGeometry(HullBrush, HullEdge, RearWingR);
+            dc.DrawGeometry(HullBrush, HullEdge, RearFin);
             double eng = Math.Max(0.05, accel * 0.55), gr = 5 + eng * 7, core = 1.8 + eng * 0.9;
             for (int e = -1; e <= 1; e++) dc.DrawEllipse(NozzleGlow, null, new Point(e * 5.5, 3), gr, gr);
             for (int e = -1; e <= 1; e++)

@@ -29,41 +29,11 @@ namespace EliteBioRadar
         private static readonly Brush CyanBrush = Frozen(Cyan), MutedBrush = Frozen(Color.FromRgb(0x88, 0x99, 0xaa));
         private static readonly Brush PlateBrush = Frozen(Color.FromArgb(204, 5, 10, 20)), HullBrush = Frozen(Color.FromRgb(0x2a, 0x3a, 0x46)), CoreBrush = Frozen(Color.FromRgb(255, 236, 200));
         private static readonly Pen PlateEdge = FrozenPen(Color.FromArgb(128, Cyan.R, Cyan.G, Cyan.B), 1), HullEdge = FrozenPen(Cyan, 0.87), NozzleRing = FrozenPen(Cyan, 0.87), ArcPen = FrozenPen(Cyan, 3);
-        private static readonly Pen[] CyanStreak = MakePens(Cyan, 1.2), WhiteStreak = MakePens(Color.FromRgb(235, 250, 255), 1.6), Ring = MakePens(Cyan, 1.6);
-        // The ship seen from behind: hull, two swept wings, a fin and three engine nozzles. Glows come in nine levels (the hull glow swells with the drive, the nozzles flare).
-        private static readonly Geometry Hull = Poly(new[] { (-6.0, -9.0), (6, -9), (9, 6), (-9, 6) }), WingL = Poly(new[] { (-9.0, -1.0), (-24, 8), (-24, 11), (-9, 7) }), WingR = Poly(new[] { (9.0, -1.0), (24, 8), (24, 11), (9, 7) }), Fin = Poly(new[] { (0.0, -9.0), (0, -16), (3, -9) });
-        private static readonly Brush[] HullGlow = MakeGlows(Cyan, 77, 166), NozzleGlow = MakeGlows(Color.FromRgb(255, 217, 160), 128, 242);
+        private static readonly Pen[] CyanStreak = AlphaPens(Cyan, 1.2), WhiteStreak = AlphaPens(Color.FromRgb(235, 250, 255), 1.6), Ring = AlphaPens(Cyan, 1.6);
+        // The ship seen from behind: RearHull, two swept wings, a RearFin and three engine nozzles. Glows come in nine levels (the RearHull glow swells with the drive, the nozzles flare).
+        private static readonly Brush[] HullGlow = GlowLevels(Cyan, 77, 166), NozzleGlow = GlowLevels(Color.FromRgb(255, 217, 160), 128, 242);
         // Where each streak sits: its angle, its distance from the centre when it starts, its length factor and its starting phase (all fixed, so it is the same every time).
-        private static readonly double[] Angle = MakeValues(0, 2 * Math.PI), Start = MakeValues(1, 1), Length = MakeValues(2, 1), Offset = MakeValues(3, 1);
-
-        private static double[] MakeValues(int k, double scale)
-        {
-            var a = new double[Streaks];
-            for (int i = 0; i < Streaks; i++) a[i] = Hash(i * 4 + k) * scale;
-            return a;
-        }
-
-        private static Pen[] MakePens(Color c, double width)
-        {
-            var a = new Pen[9];
-            for (int i = 0; i <= 8; i++) a[i] = FrozenPen(Color.FromArgb((byte)Math.Round(235.0 * i / 8), c.R, c.G, c.B), width);
-            return a;
-        }
-
-        // Nine radial glows of one colour, from alpha `from` (level 0) to `to` (level 8).
-        private static Brush[] MakeGlows(Color c, int from, int to)
-        {
-            var a = new Brush[9];
-            for (int i = 0; i <= 8; i++)
-            {
-                var b = new RadialGradientBrush();
-                b.GradientStops.Add(new GradientStop(Color.FromArgb((byte)Math.Round(from + (to - from) * i / 8.0), c.R, c.G, c.B), 0.1));
-                b.GradientStops.Add(new GradientStop(Color.FromArgb(0, c.R, c.G, c.B), 1));
-                b.Freeze();
-                a[i] = b;
-            }
-            return a;
-        }
+        private static readonly double[] Angle = StarValues(Streaks, 0, 2 * Math.PI), Start = StarValues(Streaks, 1, 1), Length = StarValues(Streaks, 2, 1), Offset = StarValues(Streaks, 3, 1);
 
         private readonly Dictionary<int, Geometry> _arcs = new();
         private bool _preview, _entryOnly;
@@ -163,15 +133,15 @@ namespace EliteBioRadar
             if (rp > 0 && rp < 1) dc.DrawEllipse(null, Ring[(int)Math.Round((1 - rp) * 8)], new Point(0, 0), 14 + rp * 80, 14 + rp * 80);
             dc.Pop();
 
-            // The ship from behind: a glow that swells with the drive, the hull, wings and fin, and three engine nozzles that flare as it speeds up.
+            // The ship from behind: a glow that swells with the drive, the RearHull, wings and RearFin, and three engine nozzles that flare as it speeds up.
             int lv = (int)Math.Round(accel * 8);
             dc.PushTransform(new TranslateTransform(CentreX, CentreY));
             dc.PushTransform(new ScaleTransform(1.15, 1.15));
             dc.DrawEllipse(HullGlow[lv], null, new Point(0, 2), 22 + accel * 10, 22 + accel * 10);
-            dc.DrawGeometry(HullBrush, HullEdge, Hull);
-            dc.DrawGeometry(HullBrush, HullEdge, WingL);
-            dc.DrawGeometry(HullBrush, HullEdge, WingR);
-            dc.DrawGeometry(HullBrush, HullEdge, Fin);
+            dc.DrawGeometry(HullBrush, HullEdge, RearHull);
+            dc.DrawGeometry(HullBrush, HullEdge, RearWingL);
+            dc.DrawGeometry(HullBrush, HullEdge, RearWingR);
+            dc.DrawGeometry(HullBrush, HullEdge, RearFin);
             // All the glows first, then the cores and rings, so no engine's glow washes over another.
             double gr = 5 + accel * 7, core = 1.8 + accel * 0.9;
             for (int e = -1; e <= 1; e++) dc.DrawEllipse(NozzleGlow[lv], null, new Point(e * 5.5, 3), gr, gr);

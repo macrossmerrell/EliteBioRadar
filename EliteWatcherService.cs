@@ -57,7 +57,12 @@ namespace EliteBioRadar
         private bool? _wasInterdicted;
         private DateTime _lastInterdictionBanner = DateTime.MinValue;
         public event Action? OverheatStarted;   // heat went above 100%; live only
-        public event Action? SupercruiseExited;    // the journal's SupercruiseExit (dropped back to normal space); live only
+        private const double HullDamagedAt = 0.75, HullCriticalAt = 0.25;
+        private double _hullHealth = 1;   // the ship's hull, 0..1, from Loadout and HullDamage
+        public event Action<int, double, double>? HullThresholdCrossed;   // (1 damaged / 2 critical, hull before, hull after) the hull fell through a threshold; live only
+        private readonly Dictionary<string, int> _liveSampleSeq = new(StringComparer.OrdinalIgnoreCase);   // genus -> samples taken so far this sequence, for the sample animation
+        public event Action<int, string>? OrganismSampleTaken;  // (stage 1-3 sample taken, 4 = analysed / genus complete; species name) a live ScanOrganic
+        public event Action? SupercruiseExited;   // the journal's SupercruiseExit (dropped back to normal space); live only
         public event Action? SupercruiseEntered;  // the journal's SupercruiseEntry; live only
         public event Action<bool>? SupercruiseOverdriveChanged;   // (on) supercruise overdrive engaged or disengaged; live only
         private bool? _wasSco;
@@ -4248,6 +4253,26 @@ namespace EliteBioRadar
                         break;
                     }
 
+                    // Live only, and only for scans the app records: the sample animation. The stage counts this genus's Log and Sample events as they arrive (not the dots, which a
+                    // dropped scan would leave short); 1 = Log, 2 and 3 = the Samples, 4 = Analyse, the genus complete payoff a few seconds after the third. With no Log seen
+                    // (the sequence began before the app ran) the dot-based number above is the fallback.
+                    if (!backfill)
+                    {
+                        int stage;
+                        lock (_liveSampleSeq)
+                        {
+                            stage = scanTypeStr switch
+                            {
+                                "Log"     => 1,
+                                "Sample"  => Math.Min(3, (_liveSampleSeq.TryGetValue(genus, out var seen) ? seen : scanNum - 1) + 1),
+                                "Analyse" => 4,
+                                _         => 1
+                            };
+                            if (stage == 4) _liveSampleSeq.Remove(genus); else _liveSampleSeq[genus] = stage;
+                        }
+                        OrganismSampleTaken?.Invoke(stage, speciesFull);
+                    }
+
                     double radius = CurrentStatus.PlanetRadius > 0 ? CurrentStatus.PlanetRadius : 6_371_000;
 
                     lock (ScannedOrganisms)
@@ -4953,7 +4978,39 @@ namespace EliteBioRadar
                         CurrentDestination.FuelCapacityMain = fuelCap.Value<double?>("Main") ?? 0;
                     ParseFsdStats(obj, CurrentDestination);
                     CurrentDestination.CurrentJumpRange = ComputeJumpRange(CurrentDestination, CurrentStatus.FuelMain);
+                    _hullHealth = obj.Value<double?>("HullHealth") ?? _hullHealth;   // the ship's hull at the moment, so the first hit is measured from the real level
                     if (!backfill) DestinationUpdated?.Invoke(this, EventArgs.Empty);
+                    break;
+                }
+
+                // Hull health (0..1) tracked from the journal (Status.json has none). HullDamage fires on every hit; the animation plays once as the hull falls through
+                // HullDamagedAt and again through HullCriticalAt (a single big hit past both plays only the critical one). Repairs and a new ship put it back to full.
+                case "HullDamage":
+                {
+                    if (obj.Value<bool?>("Fighter") == true || obj.Value<bool?>("PlayerPilot") == false) break;
+                    if (!backfill && CurrentStatus.InSRV) break;   // the SRV has its own hull, not the ship's
+                    double now = obj.Value<double?>("Health") ?? -1;
+                    if (now < 0) break;
+                    double was = _hullHealth;
+                    _hullHealth = now;
+                    int level = now <= HullCriticalAt && was > HullCriticalAt ? 2 : now <= HullDamagedAt && was > HullDamagedAt ? 1 : 0;
+                    if (level > 0 && !backfill)
+                    {
+                        Log.Write($"Hull {(level == 2 ? "critical" : "damaged")}: {was:P0} -> {now:P0}");
+                        HullThresholdCrossed?.Invoke(level, was, now);
+                    }
+                    break;
+                }
+
+                case "RepairAll":
+                case "Resurrect":
+                    _hullHealth = 1;
+                    break;
+
+                case "Repair":
+                {
+                    var item = obj.Value<string>("Item") ?? "";
+                    if (item.Equals("All", StringComparison.OrdinalIgnoreCase) || item.Equals("Hull", StringComparison.OrdinalIgnoreCase)) _hullHealth = 1;
                     break;
                 }
             }

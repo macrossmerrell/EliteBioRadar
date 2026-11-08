@@ -119,7 +119,44 @@ namespace EliteBioRadar
             g.Freeze();
             return g;
         }
-        protected static readonly Geometry ShipOutline = Poly(new[] { (0.0, -14.0), (11, 12), (4, 8), (0, 14), (-4, 8), (-11, 12) });
+        // The ship seen from behind (the supercruise-look scenes): hull, two swept wings and a fin, centred on the origin.
+        protected static readonly Geometry RearHull = Poly(new[] { (-6.0, -9.0), (6, -9), (9, 6), (-9, 6) }), RearWingL = Poly(new[] { (-9.0, -1.0), (-24, 8), (-24, 11), (-9, 7) }), RearWingR = Poly(new[] { (9.0, -1.0), (24, 8), (24, 11), (9, 7) }), RearFin = Poly(new[] { (0.0, -9.0), (0, -16), (3, -9) });
+        // `count` fixed pseudo-random values in 0..scale (one per streak; `k` picks which property), the same every time.
+        protected static double[] StarValues(int count, int k, double scale)
+        {
+            var a = new double[count];
+            for (int i = 0; i < count; i++) a[i] = Hash(i * 4 + k) * scale;
+            return a;
+        }
+        // Nine pens / brushes of one colour at rising alpha (level 0 clear), so a fade never builds a pen per frame.
+        protected static Pen[] AlphaPens(Color c, double width)
+        {
+            var a = new Pen[9];
+            for (int i = 0; i <= 8; i++) a[i] = FrozenPen(Color.FromArgb((byte)Math.Round(235.0 * i / 8), c.R, c.G, c.B), width);
+            return a;
+        }
+        protected static Brush[] AlphaBrushes(Color c)
+        {
+            var a = new Brush[9];
+            for (int i = 0; i <= 8; i++) a[i] = Frozen(Color.FromArgb((byte)Math.Round(255.0 * i / 8), c.R, c.G, c.B));
+            return a;
+        }
+        // A radial glow of one colour fading to clear at the edge; GlowLevels makes nine of them from alpha `from` (level 0) to `to` (level 8).
+        protected static Brush RadialGlow(Color c, int alpha)
+        {
+            var b = new RadialGradientBrush();
+            b.GradientStops.Add(new GradientStop(Color.FromArgb((byte)alpha, c.R, c.G, c.B), 0.1));
+            b.GradientStops.Add(new GradientStop(Color.FromArgb(0, c.R, c.G, c.B), 1));
+            b.Freeze();
+            return b;
+        }
+        protected static Brush[] GlowLevels(Color c, int from, int to)
+        {
+            var a = new Brush[9];
+            for (int i = 0; i <= 8; i++) a[i] = RadialGlow(c, (int)Math.Round(from + (to - from) * i / 8.0));
+            return a;
+        }
+        protected static readonly Geometry ShipOutline =Poly(new[] { (0.0, -14.0), (11, 12), (4, 8), (0, 14), (-4, 8), (-11, 12) });
         // Consolas is narrower than the face these letter spacings were tuned for, so they are eased back a little.
         private const double TrackScale = 0.8;
 
