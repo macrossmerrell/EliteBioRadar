@@ -167,6 +167,8 @@ namespace EliteBioRadar
         public bool ScoopingFuel => (Flags & (1u << 11)) != 0;
         public bool Landed      => (Flags & (1u << 1))  != 0;
         public bool Supercruise => (Flags & (1u << 4))  != 0;
+        public bool FsdCooldown => (Flags & (1u << 18)) != 0;   // the FSD is cooling down after a jump (cannot charge yet)
+        public bool MassLocked  => (Flags & (1u << 16)) != 0;   // the FSD is mass locked (a station, a large ship or a planet is too near)
         public bool AnalysisMode => (Flags & (1u << 27)) != 0;   // the HUD is in Analysis mode (clear: Combat mode)
         public bool LandingGearDown => (Flags & (1u << 2)) != 0;   // the landing gear is down (clear: retracted)
         public bool HardpointsDeployed => (Flags & (1u << 6)) != 0;   // the hardpoints are out (clear: retracted)

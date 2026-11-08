@@ -57,12 +57,42 @@ namespace EliteBioRadar
         private bool? _wasInterdicted;
         private DateTime _lastInterdictionBanner = DateTime.MinValue;
         public event Action? OverheatStarted;   // heat went above 100%; live only
+        public event Action<string, string>? DockingResponse;   // (station, "REQUESTED" / "GRANTED|pad" / "DENIED|reason") live only
+        // The journal's DockingDenied reasons in words for the plate (an unknown one is split at its capitals).
+        private static string DockingDeniedText(string reason) => reason switch
+        {
+            "NoSpace" => "NO SPACE",
+            "TooLarge" => "TOO LARGE",
+            "Hostile" => "HOSTILE",
+            "Offences" => "OFFENCES",
+            "Distance" => "TOO FAR",
+            "ActiveFighter" => "FIGHTER DEPLOYED",
+            "RestrictedAccess" => "RESTRICTED ACCESS",
+            "" or "NoReason" => "NO REASON GIVEN",
+            _ => System.Text.RegularExpressions.Regex.Replace(reason, "(?<=[a-z])(?=[A-Z])", " ").ToUpperInvariant()
+        };
+        public event Action<bool>? FsdCooldownChanged;  // (cooling) the FSD began cooling after a jump, or finished and is ready; live only
+        private bool? _wasCooldown;
+        public event Action<bool>? MassLockChanged;  // (locked) the FSD became mass locked or the lock cleared; live only
+        private bool? _wasMassLocked;
+        private DateTime _lastMassLockAnim = DateTime.MinValue;
+        // Mass lock flips often near stations and other ships, so plays are at least 4 s apart.
+        private void RaiseMassLock(bool locked)
+        {
+            var now = DateTime.UtcNow;
+            if ((now - _lastMassLockAnim).TotalSeconds < 4) return;
+            _lastMassLockAnim = now;
+            MassLockChanged?.Invoke(locked);
+        }
+        public event Action<bool>? FighterLaunched;  // (player controlled) the journal's LaunchFighter; live only
+        public event Action? FighterRecovered;        // the journal's DockFighter; live only
         private const double HullDamagedAt = 0.75, HullCriticalAt = 0.25;
         private double _hullHealth = 1;   // the ship's hull, 0..1, from Loadout and HullDamage
         public event Action<int, double, double>? HullThresholdCrossed;   // (1 damaged / 2 critical, hull before, hull after) the hull fell through a threshold; live only
         private readonly Dictionary<string, int> _liveSampleSeq = new(StringComparer.OrdinalIgnoreCase);   // genus -> samples taken so far this sequence, for the sample animation
         public event Action<int, string>? OrganismSampleTaken;  // (stage 1-3 sample taken, 4 = analysed / genus complete; species name) a live ScanOrganic
-        public event Action? SupercruiseExited;   // the journal's SupercruiseExit (dropped back to normal space); live only
+        public event Action<string, double>? Supercharged;   // the journal's JetConeBoost: star type ("NEUTRON" / "WHITE DWARF") and the BoostValue; live only
+        public event Action? SupercruiseExited;  // the journal's SupercruiseExit (dropped back to normal space); live only
         public event Action? SupercruiseEntered;  // the journal's SupercruiseEntry; live only
         public event Action<bool>? SupercruiseOverdriveChanged;   // (on) supercruise overdrive engaged or disengaged; live only
         private bool? _wasSco;
@@ -1089,7 +1119,10 @@ namespace EliteBioRadar
                 FlagEdge(ref _wasTurretDeployed, status.SrvTurretView,!quiet && status.InSRV, "Turret deployed", "Turret retracted", TurretChanged);
                 FlagEdge(ref _wasSilentRunning, status.SilentRunning, !quiet, "Silent running on", "Silent running off", SilentRunningChanged);
                 FlagEdge(ref _wasSco, status.ScoActive, !quiet && status.Supercruise, "Supercruise overdrive engaged", "Supercruise overdrive disengaged", SupercruiseOverdriveChanged);
-                FlagEdge(ref _wasAssist, status.SupercruiseAssist, !quiet && status.Supercruise, "Supercruise assist engaged", "Supercruise assist disengaged", SupercruiseAssistChanged);
+                // The cooldown starts the moment a jump ends, inside the quiet window that jump opens, so the start is not held back by it; only the "ready" end respects it.
+                FlagEdge(ref _wasCooldown, status.FsdCooldown, !status.InSRV && !status.InFighter && !status.OnFoot && (status.FsdCooldown || !quiet), "FSD cooling down", "FSD ready", FsdCooldownChanged);
+                FlagEdge(ref _wasMassLocked,status.MassLocked, !quiet && !status.InSRV && !status.InFighter && !status.OnFoot && !status.Docked && !status.Landed, "Mass locked", "Mass lock cleared", RaiseMassLock);
+                FlagEdge(ref _wasAssist,status.SupercruiseAssist, !quiet && status.Supercruise, "Supercruise assist engaged", "Supercruise assist disengaged", SupercruiseAssistChanged);
 
                 // Being interdicted (Flags bit 23): plays when it comes on, not held back by the quiet window (the drop out of supercruise that follows would start one), at most once every 5 s.
                 if (_wasInterdicted == false && status.BeingInterdicted && (DateTime.UtcNow - _lastInterdictionBanner).TotalSeconds >= 5) { Log.Write("Interdiction started"); _lastInterdictionBanner = DateTime.UtcNow; InterdictionStarted?.Invoke(); }
@@ -3514,6 +3547,36 @@ namespace EliteBioRadar
 
             if (!backfill && evt == "SupercruiseEntry") { Log.Write("Supercruise entered"); SupercruiseEntered?.Invoke(); }
             if (!backfill && evt == "SupercruiseExit") { Log.Write("Supercruise exited"); SupercruiseExited?.Invoke(); }
+            if (!backfill && evt == "JetConeBoost")
+            {
+                double boost = obj.Value<double?>("BoostValue") ?? 0;
+                if (boost > 1)
+                {
+                    Log.Write($"Supercharged x{boost:0.#}");
+                    Supercharged?.Invoke(boost >= 2 ? "NEUTRON" : "WHITE DWARF", boost);   // neutron stars give x4, white dwarfs x1.5
+                }
+            }
+            if (!backfill && evt == "LaunchFighter")
+            {
+                bool you = obj.Value<bool?>("PlayerControlled") ?? false;   // false = a crew member flies it
+                Log.Write($"Fighter launched ({(you ? "player" : "crew")} controlled)");
+                FighterLaunched?.Invoke(you);
+            }
+            if (!backfill && evt == "DockFighter") { Log.Write("Fighter recovered"); FighterRecovered?.Invoke(); }
+
+            // Docking requests: the station's answer (the journal's DockingRequested / DockingGranted / DockingDenied) as (station, "REQUESTED" / "GRANTED|pad" / "DENIED|reason").
+            if (!backfill && evt is "DockingRequested" or "DockingGranted" or "DockingDenied")
+            {
+                string station = obj.Value<string>("StationName_Localised") ?? obj.Value<string>("StationName") ?? "";
+                string stage = evt switch
+                {
+                    "DockingGranted" => "GRANTED|" + (obj.Value<int?>("LandingPad")?.ToString() ?? "?"),
+                    "DockingDenied"  => "DENIED|" + DockingDeniedText(obj.Value<string>("Reason") ?? ""),
+                    _                => "REQUESTED"
+                };
+                Log.Write($"Docking: {stage} at {station}");
+                DockingResponse?.Invoke(station, stage);
+            }
 
             // The Embark animation, with the vehicle boarded (the full event is logged once so the Nomad's wording can be checked).
             if (!backfill && evt == "Embark")

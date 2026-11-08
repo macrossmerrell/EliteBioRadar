@@ -228,8 +228,20 @@ namespace EliteBioRadar
             svc.HullThresholdCrossed += (level, was, now) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.HullDamage, "",
                     string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{(level == 2 ? "CRITICAL" : "DAMAGED")}|{was:0.###}|{now:0.###}"))));
+            svc.DockingResponse += (station, stage) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.DockingRequest, station, stage)));
+            svc.FsdCooldownChanged += cooling => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.FsdCooldown, "", cooling ? "COOLING" : "READY")));
+            svc.MassLockChanged += locked => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.MassLock, "", locked ? "LOCKED" : "CLEARED")));
+            svc.FighterLaunched += you => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Fighter, "", you ? "LAUNCH|YOU" : "LAUNCH|CREW")));
+            svc.FighterRecovered += () => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Fighter, "", "RECOVER")));
             svc.SupercruiseExited += () => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.SupercruiseExit, "", "")));
+            svc.Supercharged += (type, boost) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Supercharge, "", type + "|" + boost.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))));
             svc.SupercruiseAssistChanged += on => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.SupercruiseAssist, "", on ? "ON" : "OFF")));
             svc.FuelScoopStarted += (star, detail) => Dispatcher.InvokeAsync(() =>
@@ -313,8 +325,13 @@ namespace EliteBioRadar
                     ["supercruise-overdrive"] = _w.supercruiseOverdriveVisual,
                     ["supercruise-assist"] = _w.supercruiseAssistVisual,
                     ["supercruise-exit"] = _w.supercruiseExitVisual,
+                    ["supercharge"] = _w.superchargeVisual,
                     ["organism-scan"] = _w.organismScanVisual,
                     ["hull-damage"] = _w.hullDamageVisual,
+                    ["fighter"] = _w.fighterVisual,
+                    ["mass-lock"] = _w.massLockVisual,
+                    ["fsd-cooldown"] = _w.fsdCooldownVisual,
+                    ["docking-request"] = _w.dockingRequestVisual,
                     ["drive-assist"] = _w.driveAssistVisual,
                     ["handbrake"] = _w.handbrakeVisual,
                     ["turret"] = _w.turretVisual,

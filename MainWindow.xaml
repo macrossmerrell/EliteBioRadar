@@ -320,8 +320,13 @@
         <local:SupercruiseOverdriveVisual x:Name="supercruiseOverdriveVisual"/>
         <local:SupercruiseAssistVisual x:Name="supercruiseAssistVisual"/>
         <local:SupercruiseExitVisual x:Name="supercruiseExitVisual"/>
+        <local:SuperchargeVisual x:Name="superchargeVisual"/>
         <local:OrganismScanVisual x:Name="organismScanVisual"/>
         <local:HullDamageVisual x:Name="hullDamageVisual"/>
+        <local:FighterVisual x:Name="fighterVisual"/>
+        <local:MassLockVisual x:Name="massLockVisual"/>
+        <local:FsdCooldownVisual x:Name="fsdCooldownVisual"/>
+        <local:DockingRequestVisual x:Name="dockingRequestVisual"/>
         <local:DriveAssistVisual x:Name="driveAssistVisual"/>
         <local:HandbrakeVisual x:Name="handbrakeVisual"/>
         <local:TurretVisual x:Name="turretVisual"/>

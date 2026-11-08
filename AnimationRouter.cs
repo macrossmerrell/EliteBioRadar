@@ -38,6 +38,8 @@ namespace EliteBioRadar
             new("supercruise-assist", "Supercruise assist engaged / disengaged", "Jump", AnimationSurfaces.Both, 0.85, "", "ON", PreviewCycle: new[] { "ON", "OFF" });
         public static readonly AnimationDef SupercruiseExit =
             new("supercruise-exit", "Exiting supercruise", "Jump", AnimationSurfaces.Both, 0.85, "", "PREVIEW");
+        public static readonly AnimationDef Supercharge =
+            new("supercharge", "FSD supercharge (neutron star / white dwarf)", "Jump", AnimationSurfaces.Both, 0.85, "", "NEUTRON|4", PreviewCycle: new[] { "NEUTRON|4", "WHITE DWARF|1.5" });
         public static readonly AnimationDef OrganismScan =
             new("organism-scan", "Organism sample 1 / 2 / 3 / genus complete", "Biology", AnimationSurfaces.Both, 0.85, "Bacterium Aurasus", "1", PreviewCycle: new[] { "1", "2", "3", "4" });
         public static readonly AnimationDef FuelScoop =
@@ -62,6 +64,12 @@ namespace EliteBioRadar
             new("overheat", "Overheating", "HUD", AnimationSurfaces.Both, 0.85, "", "");
         public static readonly AnimationDef HullDamage =
             new("hull-damage", "Hull damaged / critical", "HUD", AnimationSurfaces.Both, 0.85, "", "DAMAGED", PreviewCycle: new[] { "DAMAGED", "CRITICAL" });
+        public static readonly AnimationDef Fighter =
+            new("fighter", "Fighter launched / recovered", "HUD", AnimationSurfaces.Both, 0.85, "", "LAUNCH|YOU", PreviewCycle: new[] { "LAUNCH|YOU", "RECOVER" });
+        public static readonly AnimationDef MassLock =
+            new("mass-lock", "Mass locked / mass lock cleared", "HUD", AnimationSurfaces.Both, 0.85, "", "LOCKED", PreviewCycle: new[] { "LOCKED", "CLEARED" });
+        public static readonly AnimationDef FsdCooldown =
+            new("fsd-cooldown", "FSD cooling down / ready", "HUD", AnimationSurfaces.Both, 0.85, "", "COOLING", PreviewCycle: new[] { "COOLING", "READY" });
         public static readonly AnimationDef Interdiction =
             new("interdiction", "Being interdicted", "HUD", AnimationSurfaces.Both, 0.85, "", "");
         public static readonly AnimationDef SilentRunning =
@@ -82,6 +90,8 @@ namespace EliteBioRadar
             new("analysis-mode", "Analysis mode", "HUD", AnimationSurfaces.Main, 0.85, "", "");
         public static readonly AnimationDef Arrival =
             new("arrival", "Arrival in a system", "Jump", AnimationSurfaces.Main, 1.0, "Sample System", "TYPE=K-Star|~STAR=4500");
+        public static readonly AnimationDef DockingRequest =
+            new("docking-request", "Docking requested / granted / denied", "Docking", AnimationSurfaces.Both, 0.85, "Jameson Memorial", "REQUESTED", PreviewCycle: new[] { "REQUESTED", "GRANTED|17", "DENIED|NO SPACE" });
         public static readonly AnimationDef Docked =
             new("docked", "Docked at a station or carrier", "Docking", AnimationSurfaces.Main, 1.0, "Sample Station", "TYPE=Coriolis|ECONOMY=Refinery|DISTANCE=432 ls");
 
@@ -92,7 +102,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef AtmosphericJump =
             new("atmospheric-jump", "Hyperspace jump from an atmosphere", "Atmosphere", AnimationSurfaces.Main, 1.0, "", "", Live: true);
 
-        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, Arrival, Supercruise, SupercruiseOverdrive, SupercruiseAssist, SupercruiseExit, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, Shields, LowFuel, Overheat, HullDamage, Interdiction, SilentRunning, DriveAssist, Handbrake, Turret, FlightAssist, Disembark, Embark, Landed, Liftoff, FirstFootfall, Docked, OrganismScan, Descent, Climb, AtmosphericJump };
+        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, Arrival, Supercruise, SupercruiseOverdrive, SupercruiseAssist, SupercruiseExit, Supercharge, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, Shields, LowFuel, Overheat, HullDamage, Fighter, MassLock, FsdCooldown, Interdiction, SilentRunning, DriveAssist, Handbrake, Turret, FlightAssist, Disembark, Embark, Landed, Liftoff, FirstFootfall, DockingRequest, Docked, OrganismScan, Descent, Climb, AtmosphericJump };
 
         // The user's choice from the settings file, else the animation's own default.
         public static AnimationSurfaces SurfacesFor(AnimationDef def, AppSettingsData settings) =>
