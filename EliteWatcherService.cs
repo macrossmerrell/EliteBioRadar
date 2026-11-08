@@ -1163,7 +1163,7 @@ namespace EliteBioRadar
                 _wasFlightAssistOff = status.FlightAssistOff;
 
                 // Fuel scooping (Flags bit 11): the scoop screen runs while it works, and reads the tank level from FuelScoopState.
-                FuelScoopState.Total = status.FuelMain + status.FuelReservoir;
+                FuelScoopState.Total = status.FuelMain;   // the main tank only: its size is the capacity shown, and the small reservoir (about 0.6 t) is a separate tank that pushed the readout past full (32.3 / 32.0)
                 FuelScoopState.Capacity = CurrentDestination?.FuelCapacityMain ?? 0;
                 if (status.ScoopingFuel && !_wasScooping)
                 {
