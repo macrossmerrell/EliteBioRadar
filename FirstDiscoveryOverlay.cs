@@ -223,6 +223,8 @@ namespace EliteBioRadar
             });
             svc.SupercruiseOverdriveChanged += on => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.SupercruiseOverdrive, "", on ? "ON" : "OFF")));
+            svc.SupercruiseExited += () => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.SupercruiseExit, "", "")));
             svc.SupercruiseAssistChanged += on => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.SupercruiseAssist, "", on ? "ON" : "OFF")));
             svc.FuelScoopStarted += (star, detail) => Dispatcher.InvokeAsync(() =>
@@ -305,6 +307,7 @@ namespace EliteBioRadar
                     ["supercruise"] = _w.supercruiseVisual,
                     ["supercruise-overdrive"] = _w.supercruiseOverdriveVisual,
                     ["supercruise-assist"] = _w.supercruiseAssistVisual,
+                    ["supercruise-exit"] = _w.supercruiseExitVisual,
                     ["drive-assist"] = _w.driveAssistVisual,
                     ["handbrake"] = _w.handbrakeVisual,
                     ["turret"] = _w.turretVisual,

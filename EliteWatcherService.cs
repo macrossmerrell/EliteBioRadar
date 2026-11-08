@@ -57,7 +57,8 @@ namespace EliteBioRadar
         private bool? _wasInterdicted;
         private DateTime _lastInterdictionBanner = DateTime.MinValue;
         public event Action? OverheatStarted;   // heat went above 100%; live only
-        public event Action? SupercruiseEntered;   // the journal's SupercruiseEntry; live only
+        public event Action? SupercruiseExited;    // the journal's SupercruiseExit (dropped back to normal space); live only
+        public event Action? SupercruiseEntered;  // the journal's SupercruiseEntry; live only
         public event Action<bool>? SupercruiseOverdriveChanged;   // (on) supercruise overdrive engaged or disengaged; live only
         private bool? _wasSco;
         public event Action<bool>? SupercruiseAssistChanged;   // (on) supercruise assist engaged or disengaged; live only
@@ -3507,6 +3508,7 @@ namespace EliteBioRadar
                 StartHudQuiet(evt);
 
             if (!backfill && evt == "SupercruiseEntry") { Log.Write("Supercruise entered"); SupercruiseEntered?.Invoke(); }
+            if (!backfill && evt == "SupercruiseExit") { Log.Write("Supercruise exited"); SupercruiseExited?.Invoke(); }
 
             // The Embark animation, with the vehicle boarded (the full event is logged once so the Nomad's wording can be checked).
             if (!backfill && evt == "Embark")

@@ -319,6 +319,7 @@
         <local:SupercruiseVisual x:Name="supercruiseVisual"/>
         <local:SupercruiseOverdriveVisual x:Name="supercruiseOverdriveVisual"/>
         <local:SupercruiseAssistVisual x:Name="supercruiseAssistVisual"/>
+        <local:SupercruiseExitVisual x:Name="supercruiseExitVisual"/>
         <local:DriveAssistVisual x:Name="driveAssistVisual"/>
         <local:HandbrakeVisual x:Name="handbrakeVisual"/>
         <local:TurretVisual x:Name="turretVisual"/>

@@ -42,6 +42,7 @@ namespace EliteBioRadar
                 ["supercruise"] = supercruiseVisual,
                 ["supercruise-overdrive"] = supercruiseOverdriveVisual,
                 ["supercruise-assist"] = supercruiseAssistVisual,
+                ["supercruise-exit"] = supercruiseExitVisual,
                 ["drive-assist"] = driveAssistVisual,
                 ["handbrake"] = handbrakeVisual,
                 ["turret"] = turretVisual,
