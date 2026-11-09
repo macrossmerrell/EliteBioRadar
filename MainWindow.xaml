@@ -326,6 +326,7 @@
         <local:CodexEntryVisual x:Name="codexEntryVisual"/>
         <local:MaterialVisual x:Name="materialVisual"/>
         <local:MissionVisual x:Name="missionVisual"/>
+        <local:PayoutVisual x:Name="payoutVisual"/>
         <local:SrvVisual x:Name="srvVisual"/>
         <local:OrganismScanVisual x:Name="organismScanVisual"/>
         <local:ColonyRangeVisual x:Name="colonyRangeVisual"/>

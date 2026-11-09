@@ -49,6 +49,7 @@ namespace EliteBioRadar
                 ["codex-entry"] = codexEntryVisual,
                 ["material"] = materialVisual,
                 ["mission"] = missionVisual,
+                ["payout"] = payoutVisual,
                 ["srv"] = srvVisual,
                 ["organism-scan"] = organismScanVisual,
                 ["colony-range"] = colonyRangeVisual,
