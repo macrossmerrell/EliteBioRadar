@@ -47,6 +47,7 @@ namespace EliteBioRadar
                 ["route"] = routeVisual,
                 ["fss-complete"] = fssCompleteVisual,
                 ["codex-entry"] = codexEntryVisual,
+                ["material"] = materialVisual,
                 ["srv"] = srvVisual,
                 ["organism-scan"] = organismScanVisual,
                 ["colony-range"] = colonyRangeVisual,

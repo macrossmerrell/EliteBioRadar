@@ -104,6 +104,7 @@ namespace EliteBioRadar
         public event Action<string, bool>? SrvChanged;   // (SRV name, true = deployed / false = recovered) the journal's LaunchSRV / DockSRV; live only
         public event Action<string, int>? FssCompleted;   // (system, body count) the journal's FSSAllBodiesFound; live only
         public event Action<string, string, string>? CodexEntryFound;   // (entry name, category, sub-category) the journal's CodexEntry with IsNewEntry; live only
+        public event Action<string, string, string, int, int, int>? MaterialPicked;   // (name, category, internal name, count, stock or -1, cap or -1) a material pickup that starts a new animation (pickups of the same material within 2 s only update the one playing); live only
         public event Action<string, string, string>? ShipLostChanged;   // ("DESTROYED" or "RESTORED", ship name, killer / rebuy text) the journal's Died and Resurrect; live only
         private string _shipLabel = "";
         public event Action<string, double>? Supercharged;   // the journal's JetConeBoost: star type ("NEUTRON" / "WHITE DWARF") and the BoostValue; live only
@@ -3734,6 +3735,21 @@ namespace EliteBioRadar
                 string codexCat = obj.Value<string>("Category_Localised") ?? "", codexSub = obj.Value<string>("SubCategory_Localised") ?? "";
                 Log.Write($"New codex entry: '{codexName}' ({codexCat} / {codexSub})");
                 CodexEntryFound?.Invoke(codexName, codexCat, codexSub);
+            }
+            // A material picked up (MaterialCollected: surface deposits and canisters). The stock already includes it (MaterialInventory.Apply ran above). Pickups of the same material
+            // within 2 s only count up the animation already playing. Live only.
+            if (!backfill && evt == "MaterialCollected")
+            {
+                string matCat = obj.Value<string>("Category") ?? "", matKey = obj.Value<string>("Name") ?? "", matLoc = obj.Value<string>("Name_Localised") ?? "";
+                int matCount = Math.Max(1, obj.Value<int?>("Count") ?? 1);
+                string matName = matLoc.Length > 0 ? matLoc : System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(matKey.Replace('_', ' '));
+                bool raw = matCat.Equals("Raw", StringComparison.OrdinalIgnoreCase);
+                int stock = raw ? (MaterialInventory.Count(matKey) ?? -1) : -1, cap = raw ? (MaterialInventory.Cap(matKey) ?? -1) : -1;
+                if (!MaterialPickupState.Add(matKey, matCount, stock, cap))
+                {
+                    Log.Write($"Material collected: {matName} x{matCount} ({matCat}, stock {stock}/{cap})");
+                    MaterialPicked?.Invoke(matName, matCat, matKey, matCount, stock, cap);
+                }
             }
             // The ship deploys or recovers its SRV (LaunchSRV / DockSRV), with the SRV's name.
             if (!backfill && evt is "LaunchSRV" or "DockSRV")

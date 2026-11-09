@@ -324,6 +324,7 @@
         <local:RouteVisual x:Name="routeVisual"/>
         <local:FssCompleteVisual x:Name="fssCompleteVisual"/>
         <local:CodexEntryVisual x:Name="codexEntryVisual"/>
+        <local:MaterialVisual x:Name="materialVisual"/>
         <local:SrvVisual x:Name="srvVisual"/>
         <local:OrganismScanVisual x:Name="organismScanVisual"/>
         <local:ColonyRangeVisual x:Name="colonyRangeVisual"/>

@@ -258,6 +258,8 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Thermal, "", $"{(hot ? "HOT" : "COLD")}|{tier}|{kelvin.ToString("0", System.Globalization.CultureInfo.InvariantCulture)}")));
             svc.ColonyRangeChanged += (entered, name, range, next) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.ColonyRange, "", $"{(entered ? "ENTERED" : "LEFT")}|{name}|{range}|{next}")));
+            svc.MaterialPicked += (display, category, key, count, stock, cap) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Material, "", $"{display}|{category}|{key}|{count}|{stock}|{cap}")));
             svc.SrvChanged += (name, deployed) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Srv, name, deployed ? "DEPLOYED" : "RECOVERED")));
             svc.SupercruiseAssistChanged += on => Dispatcher.InvokeAsync(() =>
@@ -347,6 +349,7 @@ namespace EliteBioRadar
                     ["route"] = _w.routeVisual,
                     ["fss-complete"] = _w.fssCompleteVisual,
                     ["codex-entry"] = _w.codexEntryVisual,
+                    ["material"] = _w.materialVisual,
                     ["srv"] = _w.srvVisual,
                     ["organism-scan"] = _w.organismScanVisual,
                     ["colony-range"] = _w.colonyRangeVisual,
