@@ -262,6 +262,8 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Material, "", $"{display}|{category}|{key}|{count}|{stock}|{cap}")));
             svc.RankedUp += (category, rank) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.RankUp, "", $"{category}|{rank}")));
+            svc.MissionsChanged += (kind, count, name, faction, reward) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Mission, "", $"{kind}|{count}|{name.Replace('|', '/')}|{faction.Replace('|', '/')}|{reward}")));
             svc.SrvChanged += (name, deployed) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Srv, name, deployed ? "DEPLOYED" : "RECOVERED")));
             svc.SupercruiseAssistChanged += on => Dispatcher.InvokeAsync(() =>
@@ -352,6 +354,7 @@ namespace EliteBioRadar
                     ["fss-complete"] = _w.fssCompleteVisual,
                     ["codex-entry"] = _w.codexEntryVisual,
                     ["material"] = _w.materialVisual,
+                    ["mission"] = _w.missionVisual,
                     ["srv"] = _w.srvVisual,
                     ["organism-scan"] = _w.organismScanVisual,
                     ["colony-range"] = _w.colonyRangeVisual,

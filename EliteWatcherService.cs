@@ -105,6 +105,8 @@ namespace EliteBioRadar
         public event Action<string, int>? FssCompleted;   // (system, body count) the journal's FSSAllBodiesFound; live only
         public event Action<string, string, string>? CodexEntryFound;   // (entry name, category, sub-category) the journal's CodexEntry with IsNewEntry; live only
         public event Action<string, int>? RankedUp;   // (category, new rank number) the journal's Promotion; live only
+        public event Action<string, int, string, string, long>? MissionsChanged;   // ("ACCEPTED" or "COMPLETED", how many in the batch, first mission, its faction, total reward) missions accepted or completed within 1.2 s of each other are one event; live only
+        private readonly object _missionLock = new(); private string _missionKind = "", _missionName = "", _missionFaction = ""; private int _missionCount; private long _missionReward; private System.Threading.Timer? _missionTimer;
         public event Action<string, string, string, int, int, int>? MaterialPicked;   // (name, category, internal name, count, stock or -1, cap or -1) a material pickup that starts a new animation (pickups of the same material within 2 s only update the one playing); live only
         public event Action<string, string, string>? ShipLostChanged;   // ("DESTROYED" or "RESTORED", ship name, killer / rebuy text) the journal's Died and Resurrect; live only
         private string _shipLabel = "";
@@ -3737,6 +3739,10 @@ namespace EliteBioRadar
                 Log.Write($"New codex entry: '{codexName}' ({codexCat} / {codexSub})");
                 CodexEntryFound?.Invoke(codexName, codexCat, codexSub);
             }
+            // Missions accepted or completed (a mission board can add five at once): folded into one animation when they arrive within 1.2 s of each other. Live only.
+            if (!backfill && evt is "MissionAccepted" or "MissionCompleted")
+                QueueMission(evt == "MissionCompleted" ? "COMPLETED" : "ACCEPTED", obj.Value<string>("LocalisedName") ?? obj.Value<string>("Name") ?? "", obj.Value<string>("Faction") ?? "", obj.Value<long?>("Reward") ?? 0);
+
             // A promotion: the journal's Promotion carries the category that went up with its new rank number (the ranks listed at start-up come as Rank, never as Promotion). Live only.
             if (!backfill && evt == "Promotion")
             {
@@ -5294,6 +5300,33 @@ namespace EliteBioRadar
                     break;
                 }
             }
+        }
+
+        private void QueueMission(string kind, string name, string faction, long reward)
+        {
+            (string kind, int count, string name, string faction, long reward)? flushNow = null;
+            lock (_missionLock)
+            {
+                if (_missionCount > 0 && kind != _missionKind) flushNow = (_missionKind, _missionCount, _missionName, _missionFaction, _missionReward);
+                if (_missionCount == 0 || flushNow != null) { _missionKind = kind; _missionName = name; _missionFaction = faction; _missionCount = 0; _missionReward = 0; }
+                _missionCount++; _missionReward += reward;
+                _missionTimer?.Dispose();
+                _missionTimer = new System.Threading.Timer(_ => FlushMissions(), null, 1200, System.Threading.Timeout.Infinite);
+            }
+            if (flushNow is { } f) { Log.Write($"Missions {f.kind.ToLowerInvariant()}: {f.count} ('{f.name}', reward {f.reward})"); MissionsChanged?.Invoke(f.kind, f.count, f.name, f.faction, f.reward); }
+        }
+
+        private void FlushMissions()
+        {
+            string kind, name, faction; int count; long reward;
+            lock (_missionLock)
+            {
+                if (_missionCount == 0) return;
+                kind = _missionKind; count = _missionCount; name = _missionName; faction = _missionFaction; reward = _missionReward;
+                _missionCount = 0; _missionReward = 0;
+            }
+            Log.Write($"Missions {kind.ToLowerInvariant()}: {count} ('{name}', reward {reward})");
+            MissionsChanged?.Invoke(kind, count, name, faction, reward);
         }
 
         private static string CleanInternalName(string raw)
