@@ -327,6 +327,7 @@
         <local:MaterialVisual x:Name="materialVisual"/>
         <local:MissionVisual x:Name="missionVisual"/>
         <local:PayoutVisual x:Name="payoutVisual"/>
+        <local:BountyVisual x:Name="bountyVisual"/>
         <local:SrvVisual x:Name="srvVisual"/>
         <local:OrganismScanVisual x:Name="organismScanVisual"/>
         <local:ColonyRangeVisual x:Name="colonyRangeVisual"/>

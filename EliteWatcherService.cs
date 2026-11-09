@@ -105,6 +105,8 @@ namespace EliteBioRadar
         public event Action<string, int>? FssCompleted;   // (system, body count) the journal's FSSAllBodiesFound; live only
         public event Action<string, string, string>? CodexEntryFound;   // (entry name, category, sub-category) the journal's CodexEntry with IsNewEntry; live only
         public event Action<int, long, long, long>? ExplorationSold;   // (systems sold, base value, bonus, total) the journal's SellExplorationData / MultiSellExplorationData; live only
+        public event Action<string, int, string, string, long, string>? BountyPaid;   // ("BOUNTY" or "BOND", how many in the batch, first target / bond label, victim faction, total reward, awarding faction) the journal's Bounty / FactionKillBond; kills within 1.5 s of each other are one event; live only
+        private readonly object _bountyLock = new(); private string _bountyKind = "", _bountyName = "", _bountyVictim = "", _bountyAwarder = ""; private int _bountyCount; private long _bountyReward; private System.Threading.Timer? _bountyTimer;
         public event Action<string, int>? RankedUp;   // (category, new rank number) the journal's Promotion; live only
         public event Action<string, int, string, string, long>? MissionsChanged;   // ("ACCEPTED" or "COMPLETED", how many in the batch, first mission, its faction, total reward) missions accepted or completed within 1.2 s of each other are one event; live only
         private readonly object _missionLock = new(); private string _missionKind = "", _missionName = "", _missionFaction = ""; private int _missionCount; private long _missionReward; private System.Threading.Timer? _missionTimer;
@@ -3744,6 +3746,16 @@ namespace EliteBioRadar
             if (!backfill && evt is "MissionAccepted" or "MissionCompleted")
                 QueueMission(evt == "MissionCompleted" ? "COMPLETED" : "ACCEPTED", obj.Value<string>("LocalisedName") ?? obj.Value<string>("Name") ?? "", obj.Value<string>("Faction") ?? "", obj.Value<long?>("Reward") ?? 0);
 
+            // A bounty or combat bond paid: Bounty carries the target ship, its faction and the reward (TotalReward, or Reward in older journals); FactionKillBond the victim and awarding factions. Live only.
+            if (!backfill && evt is "Bounty" or "FactionKillBond")
+            {
+                bool isBond = evt == "FactionKillBond";
+                long payout = isBond ? obj.Value<long?>("Reward") ?? 0 : obj.Value<long?>("TotalReward") ?? obj.Value<long?>("Reward") ?? 0;
+                string victimFaction = obj.Value<string>("VictimFaction_Localised") ?? obj.Value<string>("VictimFaction") ?? "";
+                string target = isBond ? "" : obj.Value<string>("Target_Localised") ?? System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase((obj.Value<string>("Target") ?? "").Replace('_', ' '));
+                if (payout > 0) QueueBounty(isBond ? "BOND" : "BOUNTY", target, victimFaction, obj.Value<string>("AwardingFaction") ?? "", payout);
+            }
+
             // Exploration data cashed in: SellExplorationData lists the systems sold, MultiSellExplorationData the discovered ones with their body counts. Live only.
             if (!backfill && evt is "SellExplorationData" or "MultiSellExplorationData")
             {
@@ -5313,6 +5325,30 @@ namespace EliteBioRadar
                     break;
                 }
             }
+        }
+
+        private void QueueBounty(string kind, string name, string victim, string awarder, long reward)
+        {
+            lock (_bountyLock)
+            {
+                if (_bountyCount == 0) { _bountyKind = kind; _bountyName = name; _bountyVictim = victim; _bountyAwarder = awarder; _bountyReward = 0; }
+                _bountyCount++; _bountyReward += reward;
+                _bountyTimer?.Dispose();
+                _bountyTimer = new System.Threading.Timer(_ => FlushBounties(), null, 1500, System.Threading.Timeout.Infinite);
+            }
+        }
+
+        private void FlushBounties()
+        {
+            string kind, name, victim, awarder; int count; long reward;
+            lock (_bountyLock)
+            {
+                if (_bountyCount == 0) return;
+                kind = _bountyKind; count = _bountyCount; name = _bountyName; victim = _bountyVictim; awarder = _bountyAwarder; reward = _bountyReward;
+                _bountyCount = 0; _bountyReward = 0;
+            }
+            Log.Write($"{kind.ToLowerInvariant()} paid: {count} ('{name}', {victim}, reward {reward})");
+            BountyPaid?.Invoke(kind, count, name, victim, reward, awarder);
         }
 
         private void QueueMission(string kind, string name, string faction, long reward)
