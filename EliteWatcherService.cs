@@ -95,6 +95,7 @@ namespace EliteBioRadar
         public event Action<int, string>? OrganismSampleTaken;  // (stage 1-3 sample taken, 4 = analysed / genus complete; species name) a live ScanOrganic
         public event Action<string, bool>? SrvChanged;   // (SRV name, true = deployed / false = recovered) the journal's LaunchSRV / DockSRV; live only
         public event Action<string, int>? FssCompleted;   // (system, body count) the journal's FSSAllBodiesFound; live only
+        public event Action<string, string, string>? CodexEntryFound;   // (entry name, category, sub-category) the journal's CodexEntry with IsNewEntry; live only
         public event Action<string, double>? Supercharged;   // the journal's JetConeBoost: star type ("NEUTRON" / "WHITE DWARF") and the BoostValue; live only
         public event Action? SupercruiseExited;  // the journal's SupercruiseExit (dropped back to normal space); live only
         public event Action? SupercruiseEntered;  // the journal's SupercruiseEntry; live only
@@ -1169,7 +1170,10 @@ namespace EliteBioRadar
                 FuelScoopState.Capacity = CurrentDestination?.FuelCapacityMain ?? 0;
                 if (status.ScoopingFuel && !_wasScooping)
                 {
-                    var star = CurrentStarDetail;
+                    // The star being scooped is the body Status.json names (it sets BodyName inside a body's orbital-cruise zone), not the primary / last-selected star.
+                    // If it names no known star, show no star type at all rather than a guess (a multi-star system scooped from the B star showed the A star's type).
+                    var star = GetBodyDetail(status.BodyName ?? "") is { IsStar: true } scooped ? scooped : null;
+                    Log.Write($"Fuel scoop star: Status BodyName='{status.BodyName}' -> {(star != null ? star.BodyName + " " + star.StarType : "unknown, no star type shown")}");
                     string cls = star?.StarType ?? "";
                     double k = star?.SurfaceTemperature > 0 ? star.SurfaceTemperature : SystemArrivalVisual.ClassKelvin(cls);
                     string type = SystemArrivalVisual.StarTypeLabel(cls);
@@ -3635,6 +3639,14 @@ namespace EliteBioRadar
                 int fssCount = obj.Value<int?>("Count") ?? 0;
                 Log.Write($"FSS complete: {fssCount} bodies in {fssSystem}");
                 FssCompleted?.Invoke(fssSystem, fssCount);
+            }
+            // A first-ever codex discovery: the journal's CodexEntry with IsNewEntry (an entry already in the codex is logged too, without the flag). Live only.
+            if (!backfill && evt == "CodexEntry" && (obj.Value<bool?>("IsNewEntry") ?? false))
+            {
+                string codexName = obj.Value<string>("Name_Localised") ?? obj.Value<string>("Name") ?? "";
+                string codexCat = obj.Value<string>("Category_Localised") ?? "", codexSub = obj.Value<string>("SubCategory_Localised") ?? "";
+                Log.Write($"New codex entry: '{codexName}' ({codexCat} / {codexSub})");
+                CodexEntryFound?.Invoke(codexName, codexCat, codexSub);
             }
             // The ship deploys or recovers its SRV (LaunchSRV / DockSRV), with the SRV's name.
             if (!backfill && evt is "LaunchSRV" or "DockSRV")

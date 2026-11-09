@@ -62,8 +62,10 @@ namespace EliteBioRadar
 
         public void Start(string subject, string detail)
         {
+            HookDispatcher();
             OnStart(subject, detail);
             _clock.Restart();
+            _lastFrameAt = -1;
             if (!_running) { _running = true; CompositionTarget.Rendering += OnFrame; }
             InvalidateVisual();
         }
@@ -75,9 +77,43 @@ namespace EliteBioRadar
             InvalidateVisual();
         }
 
+        private static bool _hooked;
+        private static long _opStart;
+        // Diagnostics: name any dispatcher operation that holds the UI thread for more than 60 ms.
+        private static void HookDispatcher()
+        {
+            if (_hooked) return;
+            _hooked = true;
+            var d = System.Windows.Application.Current.Dispatcher;
+            d.Hooks.OperationStarted += (_, _) => _opStart = System.Diagnostics.Stopwatch.GetTimestamp();
+            d.Hooks.OperationCompleted += (_, e) =>
+            {
+                double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - _opStart) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                if (ms < 60) return;
+                string what = "?";
+                try
+                {
+                    var op = e.Operation;
+                    var f = op.GetType().GetField("_method", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    var del = f?.GetValue(op) as Delegate;
+                    what = del != null ? $"{del.Method.DeclaringType?.FullName}.{del.Method.Name} target={del.Target?.GetType().FullName}" : "?";
+                }
+                catch { }
+                Log.Write($"UI op took {ms:0} ms at priority {e.Operation.Priority}: {what}");
+            };
+        }
+
+        private double _lastPause; private int _lastG0, _lastG2;
+        private double _lastFrameAt = -1;   // diagnostics: frames that arrive late show up in the log (a stalled UI thread freezes every animation)
+
         private void OnFrame(object? sender, EventArgs e)
         {
-            if (Elapsed >= Duration) { Stop(); Finished?.Invoke(); return; }
+            double now = Elapsed;
+            var pause = GC.GetTotalPauseDuration().TotalMilliseconds; int g2 = GC.CollectionCount(2), g0 = GC.CollectionCount(0);
+            if (_lastFrameAt >= 0 && now - _lastFrameAt > 0.07) Log.Write($"{GetType().Name}: frame gap {(now - _lastFrameAt) * 1000:0} ms at t={now:0.00} (GC pause since last frame {pause - _lastPause:0} ms, gen0 +{g0 - _lastG0}, gen2 +{g2 - _lastG2})");
+            _lastPause = pause; _lastG0 = g0; _lastG2 = g2;
+            _lastFrameAt = now;
+            if (now >= Duration) { Stop(); Finished?.Invoke(); return; }
             InvalidateVisual();
         }
 
@@ -86,7 +122,10 @@ namespace EliteBioRadar
             if (!_running) return;
             double w = ActualWidth, h = ActualHeight;
             if (w < 10 || h < 10) return;
+            long t0 = Stopwatch.GetTimestamp();
             Render(dc, w, h, Elapsed);
+            double ms = (Stopwatch.GetTimestamp() - t0) * 1000.0 / Stopwatch.Frequency;
+            if (ms > 12) Log.Write($"{GetType().Name}: slow render {ms:0.0} ms at t={Elapsed:0.00}");
         }
 
         // Draw one frame; `real` is the seconds since Start.

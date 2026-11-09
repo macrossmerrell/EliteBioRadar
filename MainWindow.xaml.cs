@@ -258,7 +258,7 @@ namespace EliteBioRadar
             _settingsInitializing = false;  // Allow settings saves from here on
 
             _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
-            _refreshTimer.Tick += (_, __) => RefreshAll();
+            _refreshTimer.Tick += (_, __) => Timed("refresh tick", RefreshAll);
             _refreshTimer.Start();
 
 
@@ -267,6 +267,14 @@ namespace EliteBioRadar
 
             System.Threading.Tasks.Task.Run(StartWatcher);
             Log.Write("Loaded event done");
+        }
+
+        // Diagnostics: names any UI-thread handler that takes longer than 30 ms.
+        private static void Timed(string name, Action a)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            a();
+            if (sw.ElapsedMilliseconds >= 30) Log.Write($"Slow UI handler '{name}': {sw.ElapsedMilliseconds} ms");
         }
 
         private void StartWatcher()
@@ -281,15 +289,15 @@ namespace EliteBioRadar
                 svc.ShipDepartureThresholdMetres = _shipDepartureRangeMetres;
                 InitShipEventChip(svc);
                 InitAnimations(svc);
-                svc.StatusUpdated    += (_, args) => Dispatcher.InvokeAsync(() => UpdateStatusBar(args.Status));
-                svc.BodyChanged       += (_, args) => Dispatcher.InvokeAsync(() => UpdateBodyInfo(args));
-                svc.PlanetListChanged += (_, __)   => UpdatePlanetPanel();
-                svc.StarScanUpdated     += (_, __) => Dispatcher.InvokeAsync(() => { _manualMode = null; RefreshAll(); });
+                svc.StatusUpdated    += (_, args) => Dispatcher.InvokeAsync(() => Timed("UpdateStatusBar", () => UpdateStatusBar(args.Status)));
+                svc.BodyChanged       += (_, args) => Dispatcher.InvokeAsync(() => Timed("UpdateBodyInfo", () => UpdateBodyInfo(args)));
+                svc.PlanetListChanged += (_, __)   => Timed("PlanetListChanged", UpdatePlanetPanel);
+                svc.StarScanUpdated     += (_, __) => Dispatcher.InvokeAsync(() => Timed("StarScanUpdated", () => { _manualMode = null; RefreshAll(); }));
                 // force:true bypasses UpdateInfoPlanetPanel's own debounce (it skips redrawing
                 // when the TargetedPlanetDetail *object* hasn't changed) — needed because ring
                 // hotspot data can arrive and mutate that same object well after it was first
                 // rendered, with nothing else about the reference itself changing.
-                svc.PlanetTargetUpdated += (_, __) => Dispatcher.InvokeAsync(() => { _manualMode = null; RefreshAll(); UpdateInfoPlanetPanel(force: true); });
+                svc.PlanetTargetUpdated += (_, __) => Dispatcher.InvokeAsync(() => Timed("PlanetTargetUpdated", () => { _manualMode = null; RefreshAll(); UpdateInfoPlanetPanel(force: true); }));
                 // DestinationUpdated also fires for things that are not the player choosing a target (a Loadout line when stepping out of
                 // or back into the ship, a NavRoute.json rewrite, fuel/jump-range updates). Only a fresh jump target clears a tab the
                 // player picked by hand; otherwise a manual Radar choice snapped back to Destination whenever one of those arrived.
@@ -303,10 +311,13 @@ namespace EliteBioRadar
                 svc.OrganismScanned   += (_, args) => Dispatcher.InvokeAsync(() =>
                 {
                     _activeGenus = args.Organism.Genus;
-                    UpdateSidebar();
-                    UpdateBioCounter();
-                    UpdatePlanetPanel();
-                    RefreshAll();
+                    // Timed: this runs on the UI thread right as the organism animation starts, and a long step here shows as the animation freezing on each sample.
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    UpdateSidebar(); long t1 = sw.ElapsedMilliseconds;
+                    UpdateBioCounter(); long t2 = sw.ElapsedMilliseconds;
+                    UpdatePlanetPanel(); long t3 = sw.ElapsedMilliseconds;
+                    RefreshAll(); long t4 = sw.ElapsedMilliseconds;
+                    Log.Write($"OrganismScanned UI refresh {t4} ms (sidebar {t1}, counter {t2 - t1}, planet panel {t3 - t2}, refresh all {t4 - t3})");
                 });
 
                 svc.Start();

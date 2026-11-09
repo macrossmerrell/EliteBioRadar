@@ -323,6 +323,7 @@
         <local:SuperchargeVisual x:Name="superchargeVisual"/>
         <local:RouteVisual x:Name="routeVisual"/>
         <local:FssCompleteVisual x:Name="fssCompleteVisual"/>
+        <local:CodexEntryVisual x:Name="codexEntryVisual"/>
         <local:SrvVisual x:Name="srvVisual"/>
         <local:OrganismScanVisual x:Name="organismScanVisual"/>
         <local:HullDamageVisual x:Name="hullDamageVisual"/>

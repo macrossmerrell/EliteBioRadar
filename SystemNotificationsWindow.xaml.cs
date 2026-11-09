@@ -46,6 +46,7 @@ namespace EliteBioRadar
                 ["supercharge"] = superchargeVisual,
                 ["route"] = routeVisual,
                 ["fss-complete"] = fssCompleteVisual,
+                ["codex-entry"] = codexEntryVisual,
                 ["srv"] = srvVisual,
                 ["organism-scan"] = organismScanVisual,
                 ["hull-damage"] = hullDamageVisual,
