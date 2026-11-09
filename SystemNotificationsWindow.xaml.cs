@@ -50,6 +50,7 @@ namespace EliteBioRadar
                 ["srv"] = srvVisual,
                 ["organism-scan"] = organismScanVisual,
                 ["hull-damage"] = hullDamageVisual,
+                ["ship-lost"] = shipLostVisual,
                 ["fighter"] = fighterVisual,
                 ["mass-lock"] = massLockVisual,
                 ["fsd-cooldown"] = fsdCooldownVisual,

@@ -248,6 +248,8 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.FssComplete, system, count.ToString(System.Globalization.CultureInfo.InvariantCulture))));
             svc.CodexEntryFound += (name, category, sub) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.CodexEntry, name, category + "|" + sub)));
+            svc.ShipLostChanged += (stage, ship, info) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.ShipLost, "", stage + "|" + ship + "|" + info)));
             svc.SrvChanged += (name, deployed) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Srv, name, deployed ? "DEPLOYED" : "RECOVERED")));
             svc.SupercruiseAssistChanged += on => Dispatcher.InvokeAsync(() =>
@@ -340,6 +342,7 @@ namespace EliteBioRadar
                     ["srv"] = _w.srvVisual,
                     ["organism-scan"] = _w.organismScanVisual,
                     ["hull-damage"] = _w.hullDamageVisual,
+                    ["ship-lost"] = _w.shipLostVisual,
                     ["fighter"] = _w.fighterVisual,
                     ["mass-lock"] = _w.massLockVisual,
                     ["fsd-cooldown"] = _w.fsdCooldownVisual,

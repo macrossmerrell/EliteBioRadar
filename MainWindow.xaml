@@ -327,6 +327,7 @@
         <local:SrvVisual x:Name="srvVisual"/>
         <local:OrganismScanVisual x:Name="organismScanVisual"/>
         <local:HullDamageVisual x:Name="hullDamageVisual"/>
+        <local:ShipLostVisual x:Name="shipLostVisual"/>
         <local:FighterVisual x:Name="fighterVisual"/>
         <local:MassLockVisual x:Name="massLockVisual"/>
         <local:FsdCooldownVisual x:Name="fsdCooldownVisual"/>

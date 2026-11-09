@@ -96,6 +96,8 @@ namespace EliteBioRadar
         public event Action<string, bool>? SrvChanged;   // (SRV name, true = deployed / false = recovered) the journal's LaunchSRV / DockSRV; live only
         public event Action<string, int>? FssCompleted;   // (system, body count) the journal's FSSAllBodiesFound; live only
         public event Action<string, string, string>? CodexEntryFound;   // (entry name, category, sub-category) the journal's CodexEntry with IsNewEntry; live only
+        public event Action<string, string, string>? ShipLostChanged;   // ("DESTROYED" or "RESTORED", ship name, killer / rebuy text) the journal's Died and Resurrect; live only
+        private string _shipLabel = "";
         public event Action<string, double>? Supercharged;   // the journal's JetConeBoost: star type ("NEUTRON" / "WHITE DWARF") and the BoostValue; live only
         public event Action? SupercruiseExited;  // the journal's SupercruiseExit (dropped back to normal space); live only
         public event Action? SupercruiseEntered;  // the journal's SupercruiseEntry; live only
@@ -3595,6 +3597,28 @@ namespace EliteBioRadar
             {
                 var sid = obj.Value<long?>("ShipID");
                 if (sid.HasValue) CurrentShipId = sid;
+                // The ship's name for the destroyed / restored plate: the game's own name for it (LoadGame), else the commander's name for it, else the internal id.
+                string label = evt == "LoadGame" ? (obj.Value<string>("Ship_Localised") ?? obj.Value<string>("Ship") ?? "")
+                                                 : (obj.Value<string>("ShipName") is { Length: > 0 } custom ? custom : obj.Value<string>("Ship") ?? "");
+                if (label.Length > 0) _shipLabel = label;
+            }
+
+            // The ship is destroyed (Died), then comes back (Resurrect). Live only.
+            if (!backfill && evt == "Died")
+            {
+                string killer = obj.Value<string>("KillerName_Localised") ?? obj.Value<string>("KillerName") ?? obj["Killers"]?.First?.Value<string>("Name_Localised") ?? obj["Killers"]?.First?.Value<string>("Name") ?? "";
+                if (killer.StartsWith("$")) killer = "";   // an unresolved internal name
+                Log.Write($"Ship destroyed: '{_shipLabel}' killed by '{killer}'");
+                ShipLostChanged?.Invoke("DESTROYED", _shipLabel, killer.Length > 0 ? "KILLED BY  " + killer : "");
+            }
+            if (!backfill && evt == "Resurrect")
+            {
+                string option = obj.Value<string>("Option") ?? "";
+                long cost = obj.Value<long?>("Cost") ?? 0;
+                bool bankrupt = obj.Value<bool?>("Bankrupt") ?? false;
+                string info = bankrupt ? "BANKRUPT  -  REBUY WAIVED" : cost > 0 ? (option.Equals("rebuy", StringComparison.OrdinalIgnoreCase) ? "REBUY PAID  " : option.ToUpperInvariant() + "  ") + cost.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " CR" : option.Length > 0 ? option.ToUpperInvariant() : "";
+                Log.Write($"Ship restored: '{_shipLabel}' option '{option}' cost {cost}");
+                ShipLostChanged?.Invoke("RESTORED", _shipLabel, info);
             }
 
             // EDSM upload — live events only. Backfill/replay lines are excluded: EDSM already
