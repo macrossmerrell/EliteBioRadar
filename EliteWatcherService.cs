@@ -104,6 +104,7 @@ namespace EliteBioRadar
         public event Action<string, bool>? SrvChanged;   // (SRV name, true = deployed / false = recovered) the journal's LaunchSRV / DockSRV; live only
         public event Action<string, int>? FssCompleted;   // (system, body count) the journal's FSSAllBodiesFound; live only
         public event Action<string, string, string>? CodexEntryFound;   // (entry name, category, sub-category) the journal's CodexEntry with IsNewEntry; live only
+        public event Action<string, int>? RankedUp;   // (category, new rank number) the journal's Promotion; live only
         public event Action<string, string, string, int, int, int>? MaterialPicked;   // (name, category, internal name, count, stock or -1, cap or -1) a material pickup that starts a new animation (pickups of the same material within 2 s only update the one playing); live only
         public event Action<string, string, string>? ShipLostChanged;   // ("DESTROYED" or "RESTORED", ship name, killer / rebuy text) the journal's Died and Resurrect; live only
         private string _shipLabel = "";
@@ -3735,6 +3736,16 @@ namespace EliteBioRadar
                 string codexCat = obj.Value<string>("Category_Localised") ?? "", codexSub = obj.Value<string>("SubCategory_Localised") ?? "";
                 Log.Write($"New codex entry: '{codexName}' ({codexCat} / {codexSub})");
                 CodexEntryFound?.Invoke(codexName, codexCat, codexSub);
+            }
+            // A promotion: the journal's Promotion carries the category that went up with its new rank number (the ranks listed at start-up come as Rank, never as Promotion). Live only.
+            if (!backfill && evt == "Promotion")
+            {
+                foreach (var cat in new[] { "Combat", "Trade", "Explore", "Soldier", "Exobiologist", "CQC", "Federation", "Empire" })
+                    if (obj.Value<int?>(cat) is int rankNo)
+                    {
+                        Log.Write($"Promotion: {cat} rank {rankNo}");
+                        RankedUp?.Invoke(cat, rankNo);
+                    }
             }
             // A material picked up (MaterialCollected: surface deposits and canisters). The stock already includes it (MaterialInventory.Apply ran above). Pickups of the same material
             // within 2 s only count up the animation already playing. Live only.

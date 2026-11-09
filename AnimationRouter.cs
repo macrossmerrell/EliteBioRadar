@@ -76,6 +76,8 @@ namespace EliteBioRadar
             new("vitals", "Low oxygen / low health", "HUD", AnimationSurfaces.Both, 0.85, "", "OXYGEN|0.18", PreviewCycle: new[] { "OXYGEN|0.18", "HEALTH|0.24" });
         public static readonly AnimationDef Thermal =
             new("thermal", "Extreme heat / cold", "HUD", AnimationSurfaces.Both, 0.85, "", "HOT|2|341", PreviewCycle: new[] { "HOT|2|341", "COLD|2|118", "HOT|1|318", "COLD|1|240" });
+        public static readonly AnimationDef RankUp =
+            new("rank-up", "Rank up", "HUD", AnimationSurfaces.Both, 0.85, "", "Exobiologist|5", PreviewCycle: new[] { "Exobiologist|5", "Combat|8", "Trade|3", "Explore|9" });
         public static readonly AnimationDef HullDamage =
             new("hull-damage", "Hull damaged / critical", "HUD", AnimationSurfaces.Both, 0.85, "", "DAMAGED", PreviewCycle: new[] { "DAMAGED", "CRITICAL" });
         public static readonly AnimationDef ShipLost =
@@ -120,7 +122,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef AtmosphericJump =
             new("atmospheric-jump", "Hyperspace jump from an atmosphere", "Atmosphere", AnimationSurfaces.Main, 1.0, "", "", Live: true);
 
-        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, Arrival, Supercruise, SupercruiseOverdrive, SupercruiseAssist, SupercruiseExit, Supercharge, Route, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, Shields, LowFuel, Overheat, Vitals, Thermal, HullDamage, ShipLost, Fighter, MassLock, FsdCooldown, Interdiction, SilentRunning, DriveAssist, Handbrake, Turret, FlightAssist, Disembark, Embark, Srv, Landed, Liftoff, FirstFootfall, DockingRequest, Docked, OrganismScan, ColonyRange, FssComplete, CodexEntry, Material, Descent, Climb, AtmosphericJump };
+        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, Arrival, Supercruise, SupercruiseOverdrive, SupercruiseAssist, SupercruiseExit, Supercharge, Route, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, Shields, LowFuel, Overheat, Vitals, Thermal, RankUp, HullDamage, ShipLost, Fighter, MassLock, FsdCooldown, Interdiction, SilentRunning, DriveAssist, Handbrake, Turret, FlightAssist, Disembark, Embark, Srv, Landed, Liftoff, FirstFootfall, DockingRequest, Docked, OrganismScan, ColonyRange, FssComplete, CodexEntry, Material, Descent, Climb, AtmosphericJump };
 
         // The user's choice from the settings file, else the animation's own default.
         public static AnimationSurfaces SurfacesFor(AnimationDef def, AppSettingsData settings) =>

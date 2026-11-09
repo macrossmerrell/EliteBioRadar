@@ -53,6 +53,7 @@ namespace EliteBioRadar
                 ["colony-range"] = colonyRangeVisual,
                 ["hull-damage"] = hullDamageVisual,
                 ["vitals"] = vitalsVisual,
+                ["rank-up"] = rankUpVisual,
                 ["thermal"] = thermalVisual,
                 ["ship-lost"] = shipLostVisual,
                 ["fighter"] = fighterVisual,

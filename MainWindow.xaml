@@ -330,6 +330,7 @@
         <local:ColonyRangeVisual x:Name="colonyRangeVisual"/>
         <local:HullDamageVisual x:Name="hullDamageVisual"/>
         <local:VitalsVisual x:Name="vitalsVisual"/>
+        <local:RankUpVisual x:Name="rankUpVisual"/>
         <local:ThermalVisual x:Name="thermalVisual"/>
         <local:ShipLostVisual x:Name="shipLostVisual"/>
         <local:FighterVisual x:Name="fighterVisual"/>

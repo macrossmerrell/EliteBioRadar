@@ -260,6 +260,8 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.ColonyRange, "", $"{(entered ? "ENTERED" : "LEFT")}|{name}|{range}|{next}")));
             svc.MaterialPicked += (display, category, key, count, stock, cap) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Material, "", $"{display}|{category}|{key}|{count}|{stock}|{cap}")));
+            svc.RankedUp += (category, rank) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.RankUp, "", $"{category}|{rank}")));
             svc.SrvChanged += (name, deployed) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Srv, name, deployed ? "DEPLOYED" : "RECOVERED")));
             svc.SupercruiseAssistChanged += on => Dispatcher.InvokeAsync(() =>
@@ -355,6 +357,7 @@ namespace EliteBioRadar
                     ["colony-range"] = _w.colonyRangeVisual,
                     ["hull-damage"] = _w.hullDamageVisual,
                     ["vitals"] = _w.vitalsVisual,
+                    ["rank-up"] = _w.rankUpVisual,
                     ["thermal"] = _w.thermalVisual,
                     ["ship-lost"] = _w.shipLostVisual,
                     ["fighter"] = _w.fighterVisual,
