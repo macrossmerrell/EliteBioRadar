@@ -191,6 +191,10 @@ namespace EliteBioRadar
         // Bit 21 per the Status.json docs (bit 19 is Low Fuel); confirmed on a live landed ship.
         public bool HasLatLong  => (Flags & (1u << 21)) != 0;
         public bool OnFoot      => (Flags2 & (1u << 0)) != 0;
+        public bool LowOxygen   => (Flags2 & (1u << 6)) != 0;   // Flags2 bit 6 per the Status.json docs (not yet confirmed in play)
+        public bool LowHealth   => (Flags2 & (1u << 7)) != 0;   // Flags2 bit 7 per the Status.json docs (not yet confirmed in play)
+        public int  HeatTier    => (Flags2 & (1u << 11)) != 0 ? 2 : (Flags2 & (1u << 9)) != 0 ? 1 : 0;    // Flags2 bits 9 hot, 11 very hot per the Status.json docs (not yet confirmed in play)
+        public int  ColdTier    => (Flags2 & (1u << 10)) != 0 ? 2 : (Flags2 & (1u << 8)) != 0 ? 1 : 0;    // Flags2 bits 8 cold, 10 very cold
         // Set specifically for an actual hyperspace charge-up — distinct from Flags bit17
         // "FsdCharging", which is ambiguous (also set for a plain supercruise charge).
         public bool FsdHyperdriveCharging => (Flags2 & (1u << 19)) != 0;

@@ -88,6 +88,14 @@ namespace EliteBioRadar
         }
         public event Action<bool>? FighterLaunched;  // (player controlled) the journal's LaunchFighter; live only
         public event Action? FighterRecovered;        // the journal's DockFighter; live only
+        public event Action<bool>? FighterLost;       // (true = rebuilt) the journal's FighterDestroyed / FighterRebuilt; live only
+        public event Action<string, double>? VitalsLow;   // ("OXYGEN" or "HEALTH", level 0..1) the suit's oxygen or the commander's health fell low on foot; live only
+        public event Action<bool, int, double>? ThermalWarning;   // (hot?, level 1 or 2, suit kelvin) the suit is too hot or too cold on foot; live only
+        public event Action<bool, string, int, int>? ColonyRangeChanged;   // (entered?, organism, range metres, next sample number) the commander left / re-entered an unfinished sample's colony range on foot or in the SRV; live only
+        private bool? _colonyInside; private ScannedOrganism? _colonyOrg; private string _colonyBody = ""; private int _colonyDotTotal = -1; private DateTime _colonyLastSample, _lastColonyBanner;
+        private int? _heatTierPrev, _coldTierPrev; private int _heatTierFired, _coldTierFired; private DateTime _lastHeatBanner, _lastColdBanner;
+        private bool? _wasLowO2, _wasLowHealth;
+        private DateTime _lastLowO2, _lastLowHealth;
         private const double HullDamagedAt = 0.75, HullCriticalAt = 0.25;
         private double _hullHealth = 1;   // the ship's hull, 0..1, from Loadout and HullDamage
         public event Action<int, double, double>? HullThresholdCrossed;   // (1 damaged / 2 critical, hull before, hull after) the hull fell through a threshold; live only
@@ -1166,6 +1174,60 @@ namespace EliteBioRadar
                 // Flight assist (Flags bit 5 is set when it is OFF): the first read only sets the baseline.
                 if (!quiet && _wasFlightAssistOff != null && _wasFlightAssistOff != status.FlightAssistOff) { Log.Write(status.FlightAssistOff ? "Flight assist off" : "Flight assist on"); FlightAssistChanged?.Invoke(!status.FlightAssistOff); }
                 _wasFlightAssistOff = status.FlightAssistOff;
+
+                // Low oxygen / low health on foot (Flags2 bits 6 and 7; Status.json also carries the levels, and a level under 25% counts too in case a bit is not what the docs say).
+                // Plays when it comes on, at most once every 20 s per kind since the level can flicker around the line. The first read only sets the baseline.
+                if (status.OnFoot)
+                {
+                    bool lowO2 = status.LowOxygen || (status.Oxygen > 0 && status.Oxygen < 0.25), lowHp = status.LowHealth || (status.Health > 0 && status.Health < 0.25);
+                    if (!quiet && _wasLowO2 == false && lowO2 && (DateTime.UtcNow - _lastLowO2).TotalSeconds >= 20)
+                    { _lastLowO2 = DateTime.UtcNow; Log.Write($"Low oxygen (flag {status.LowOxygen}, level {status.Oxygen:P0})"); VitalsLow?.Invoke("OXYGEN", status.Oxygen > 0 ? status.Oxygen : 0.2); }
+                    if (!quiet && _wasLowHealth == false && lowHp && (DateTime.UtcNow - _lastLowHealth).TotalSeconds >= 20)
+                    { _lastLowHealth = DateTime.UtcNow; Log.Write($"Low health (flag {status.LowHealth}, level {status.Health:P0})"); VitalsLow?.Invoke("HEALTH", status.Health > 0 ? status.Health : 0.2); }
+                    _wasLowO2 = lowO2; _wasLowHealth = lowHp;
+
+                    // Too hot / too cold (Flags2 bits 9 and 11 / 8 and 10): plays when the level rises (1 = hot / cold, 2 = very hot / very cold), at most once every 15 s unless it escalates.
+                    // The first read on foot only sets the baseline.
+                    int heat = status.HeatTier, cold = status.ColdTier;
+                    if (!quiet && _heatTierPrev != null && heat > _heatTierPrev && ((DateTime.UtcNow - _lastHeatBanner).TotalSeconds >= 15 || heat > _heatTierFired))
+                    { _lastHeatBanner = DateTime.UtcNow; _heatTierFired = heat; Log.Write($"Suit too hot: level {heat}, {status.SuitTemperatureK:0} K"); ThermalWarning?.Invoke(true, heat, status.SuitTemperatureK); }
+                    if (!quiet && _coldTierPrev != null && cold > _coldTierPrev && ((DateTime.UtcNow - _lastColdBanner).TotalSeconds >= 15 || cold > _coldTierFired))
+                    { _lastColdBanner = DateTime.UtcNow; _coldTierFired = cold; Log.Write($"Suit too cold: level {cold}, {status.SuitTemperatureK:0} K"); ThermalWarning?.Invoke(false, cold, status.SuitTemperatureK); }
+                    if (heat == 0 && (DateTime.UtcNow - _lastHeatBanner).TotalSeconds >= 15) _heatTierFired = 0;
+                    if (cold == 0 && (DateTime.UtcNow - _lastColdBanner).TotalSeconds >= 15) _coldTierFired = 0;
+                    _heatTierPrev = heat; _coldTierPrev = cold;
+                }
+                else { _wasLowO2 = null; _wasLowHealth = null; _heatTierPrev = null; _coldTierPrev = null; }
+
+                // Colony range: the ring around every unfinished sample (the species' range, drawn on the radar). Walking out of all of them means the next sample can be taken ("cleared"); walking back
+                // in means too close. Taking a sample puts the commander at the new dot's centre, which is not announced (the sample animation covers it): a new dot in the list, or a body change,
+                // silences entering for 8 s. 3 m of hysteresis keeps GPS jitter at the edge from flickering. The first read only sets the baseline.
+                if ((status.OnFoot || status.InSRV) && status.HasPosition && status.PlanetRadius > 0)
+                {
+                    ScannedOrganism[] open; int dots;
+                    lock (ScannedOrganisms) { dots = ScannedOrganisms.Count; open = ScannedOrganisms.Where(o => !o.IsComplete && o.ScanCount < 3 && o.HasPosition).ToArray(); }
+                    if (dots != _colonyDotTotal || !string.Equals(CurrentBody, _colonyBody, StringComparison.OrdinalIgnoreCase)) _colonyLastSample = DateTime.UtcNow;
+                    if (!string.Equals(CurrentBody, _colonyBody, StringComparison.OrdinalIgnoreCase)) _colonyInside = null;
+                    _colonyDotTotal = dots; _colonyBody = CurrentBody ?? "";
+
+                    ScannedOrganism? hit = null; double hitGap = double.MaxValue;
+                    foreach (var o in open)
+                    {
+                        double d = DistanceMeters(status.Latitude, status.Longitude, o.Latitude, o.Longitude, status.PlanetRadius), gap = d - o.ColonyRange;
+                        if (gap < (_colonyInside == true ? 3 : -3) && gap < hitGap) { hit = o; hitGap = gap; }
+                    }
+                    bool nowInside = hit != null;
+                    if (_colonyInside != null && _colonyInside != nowInside && !quiet && (DateTime.UtcNow - _lastColonyBanner).TotalSeconds >= 10)
+                    {
+                        if (nowInside && (DateTime.UtcNow - _colonyLastSample).TotalSeconds > 8)
+                        { _lastColonyBanner = DateTime.UtcNow; Log.Write($"Entered colony range of {hit!.DisplayName} ({hit.ColonyRange} m)"); ColonyRangeChanged?.Invoke(true, hit.DisplayName, hit.ColonyRange, Math.Min(3, hit.ScanCount + 1)); }
+                        else if (!nowInside && _colonyOrg != null)
+                        { _lastColonyBanner = DateTime.UtcNow; Log.Write($"Left colony range of {_colonyOrg.DisplayName} ({_colonyOrg.ColonyRange} m)"); ColonyRangeChanged?.Invoke(false, _colonyOrg.DisplayName, _colonyOrg.ColonyRange, Math.Min(3, _colonyOrg.ScanCount + 1)); }
+                    }
+                    if (nowInside) _colonyOrg = hit;
+                    _colonyInside = nowInside;
+                }
+                else { _colonyInside = null; _colonyOrg = null; }
 
                 // Fuel scooping (Flags bit 11): the scoop screen runs while it works, and reads the tank level from FuelScoopState.
                 FuelScoopState.Total = status.FuelMain;   // the main tank only: its size is the capacity shown, and the small reservoir (about 0.6 t) is a separate tank that pushed the readout past full (32.3 / 32.0)
@@ -3654,6 +3716,7 @@ namespace EliteBioRadar
                 FighterLaunched?.Invoke(you);
             }
             if (!backfill && evt == "DockFighter") { Log.Write("Fighter recovered"); FighterRecovered?.Invoke(); }
+            if (!backfill && evt is "FighterDestroyed" or "FighterRebuilt") { Log.Write(evt == "FighterRebuilt" ? "Fighter rebuilt" : "Fighter destroyed"); FighterLost?.Invoke(evt == "FighterRebuilt"); }
 
             // Docking requests: the station's answer (the journal's DockingRequested / DockingGranted / DockingDenied) as (station, "REQUESTED" / "GRANTED|pad" / "DENIED|reason").
             // The full system scan is done: the journal's FSSAllBodiesFound (system name and body count). Live only.

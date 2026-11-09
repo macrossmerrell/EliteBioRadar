@@ -238,6 +238,8 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Fighter, "", you ? "LAUNCH|YOU" : "LAUNCH|CREW")));
             svc.FighterRecovered += () => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Fighter, "", "RECOVER")));
+            svc.FighterLost += rebuilt => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Fighter, "", rebuilt ? "REBUILT" : "DESTROYED")));
             svc.SupercruiseExited += () => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.SupercruiseExit, "", "")));
             svc.Supercharged += (type, boost) => Dispatcher.InvokeAsync(() =>
@@ -250,6 +252,12 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.CodexEntry, name, category + "|" + sub)));
             svc.ShipLostChanged += (stage, ship, info) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.ShipLost, "", stage + "|" + ship + "|" + info)));
+            svc.VitalsLow += (kind, level) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Vitals, "", kind + "|" + level.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture))));
+            svc.ThermalWarning += (hot, tier, kelvin) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Thermal, "", $"{(hot ? "HOT" : "COLD")}|{tier}|{kelvin.ToString("0", System.Globalization.CultureInfo.InvariantCulture)}")));
+            svc.ColonyRangeChanged += (entered, name, range, next) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.ColonyRange, "", $"{(entered ? "ENTERED" : "LEFT")}|{name}|{range}|{next}")));
             svc.SrvChanged += (name, deployed) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Srv, name, deployed ? "DEPLOYED" : "RECOVERED")));
             svc.SupercruiseAssistChanged += on => Dispatcher.InvokeAsync(() =>
@@ -341,7 +349,10 @@ namespace EliteBioRadar
                     ["codex-entry"] = _w.codexEntryVisual,
                     ["srv"] = _w.srvVisual,
                     ["organism-scan"] = _w.organismScanVisual,
+                    ["colony-range"] = _w.colonyRangeVisual,
                     ["hull-damage"] = _w.hullDamageVisual,
+                    ["vitals"] = _w.vitalsVisual,
+                    ["thermal"] = _w.thermalVisual,
                     ["ship-lost"] = _w.shipLostVisual,
                     ["fighter"] = _w.fighterVisual,
                     ["mass-lock"] = _w.massLockVisual,

@@ -48,6 +48,8 @@ namespace EliteBioRadar
             new("codex-entry", "New codex entry", "Exploration", AnimationSurfaces.Both, 0.85, "Fonticulua Digitos", "BIOLOGICAL AND GEOLOGICAL|FLORA");
         public static readonly AnimationDef OrganismScan =
             new("organism-scan", "Organism sample 1 / 2 / 3 / genus complete", "Biology", AnimationSurfaces.Both, 0.85, "Bacterium Aurasus", "1", PreviewCycle: new[] { "1", "2", "3", "4" });
+        public static readonly AnimationDef ColonyRange =
+            new("colony-range", "Colony range left / entered", "Biology", AnimationSurfaces.Both, 0.85, "", "LEFT|Bacterium Aurasus|150|2", PreviewCycle: new[] { "LEFT|Bacterium Aurasus|150|2", "ENTERED|Bacterium Aurasus|150|2" });
         public static readonly AnimationDef FuelScoop =
             new("fuel-scoop", "Fuel scooping", "Jump", AnimationSurfaces.Main, 0.92, "Sample Star", "PREVIEW|TYPE=K-Star|~STAR=4500");
         public static readonly AnimationDef CombatMode =
@@ -68,12 +70,16 @@ namespace EliteBioRadar
             new("low-fuel", "Low fuel / fuel critical", "HUD", AnimationSurfaces.Both, 0.85, "", "LOW", PreviewCycle: new[] { "LOW", "CRITICAL" });
         public static readonly AnimationDef Overheat =
             new("overheat", "Overheating", "HUD", AnimationSurfaces.Both, 0.85, "", "");
+        public static readonly AnimationDef Vitals =
+            new("vitals", "Low oxygen / low health", "HUD", AnimationSurfaces.Both, 0.85, "", "OXYGEN|0.18", PreviewCycle: new[] { "OXYGEN|0.18", "HEALTH|0.24" });
+        public static readonly AnimationDef Thermal =
+            new("thermal", "Extreme heat / cold", "HUD", AnimationSurfaces.Both, 0.85, "", "HOT|2|341", PreviewCycle: new[] { "HOT|2|341", "COLD|2|118", "HOT|1|318", "COLD|1|240" });
         public static readonly AnimationDef HullDamage =
             new("hull-damage", "Hull damaged / critical", "HUD", AnimationSurfaces.Both, 0.85, "", "DAMAGED", PreviewCycle: new[] { "DAMAGED", "CRITICAL" });
         public static readonly AnimationDef ShipLost =
             new("ship-lost", "Ship destroyed / respawn", "HUD", AnimationSurfaces.Both, 0.9, "", "DESTROYED|Cobra Mk III|KILLED BY  Thargoid Interceptor", PreviewCycle: new[] { "DESTROYED|Cobra Mk III|KILLED BY  Thargoid Interceptor", "RESTORED|Cobra Mk III|REBUY PAID  3,420,000 CR" });
         public static readonly AnimationDef Fighter =
-            new("fighter", "Fighter launched / recovered", "HUD", AnimationSurfaces.Both, 0.85, "", "LAUNCH|YOU", PreviewCycle: new[] { "LAUNCH|YOU", "RECOVER" });
+            new("fighter", "Fighter launched / recovered / destroyed / rebuilt", "HUD", AnimationSurfaces.Both, 0.85, "", "LAUNCH|YOU", PreviewCycle: new[] { "LAUNCH|YOU", "RECOVER", "DESTROYED", "REBUILT" });
         public static readonly AnimationDef MassLock =
             new("mass-lock", "Mass locked / mass lock cleared", "HUD", AnimationSurfaces.Both, 0.85, "", "LOCKED", PreviewCycle: new[] { "LOCKED", "CLEARED" });
         public static readonly AnimationDef FsdCooldown =
@@ -112,7 +118,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef AtmosphericJump =
             new("atmospheric-jump", "Hyperspace jump from an atmosphere", "Atmosphere", AnimationSurfaces.Main, 1.0, "", "", Live: true);
 
-        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, Arrival, Supercruise, SupercruiseOverdrive, SupercruiseAssist, SupercruiseExit, Supercharge, Route, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, Shields, LowFuel, Overheat, HullDamage, ShipLost, Fighter, MassLock, FsdCooldown, Interdiction, SilentRunning, DriveAssist, Handbrake, Turret, FlightAssist, Disembark, Embark, Srv, Landed, Liftoff, FirstFootfall, DockingRequest, Docked, OrganismScan, FssComplete, CodexEntry, Descent, Climb, AtmosphericJump };
+        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, Arrival, Supercruise, SupercruiseOverdrive, SupercruiseAssist, SupercruiseExit, Supercharge, Route, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, Shields, LowFuel, Overheat, Vitals, Thermal, HullDamage, ShipLost, Fighter, MassLock, FsdCooldown, Interdiction, SilentRunning, DriveAssist, Handbrake, Turret, FlightAssist, Disembark, Embark, Srv, Landed, Liftoff, FirstFootfall, DockingRequest, Docked, OrganismScan, ColonyRange, FssComplete, CodexEntry, Descent, Climb, AtmosphericJump };
 
         // The user's choice from the settings file, else the animation's own default.
         public static AnimationSurfaces SurfacesFor(AnimationDef def, AppSettingsData settings) =>

@@ -46,7 +46,10 @@
         <local:CodexEntryVisual x:Name="codexEntryVisual"/>
         <local:SrvVisual x:Name="srvVisual"/>
         <local:OrganismScanVisual x:Name="organismScanVisual"/>
+        <local:ColonyRangeVisual x:Name="colonyRangeVisual"/>
         <local:HullDamageVisual x:Name="hullDamageVisual"/>
+        <local:VitalsVisual x:Name="vitalsVisual"/>
+        <local:ThermalVisual x:Name="thermalVisual"/>
         <local:ShipLostVisual x:Name="shipLostVisual"/>
         <local:FighterVisual x:Name="fighterVisual"/>
         <local:MassLockVisual x:Name="massLockVisual"/>
