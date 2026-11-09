@@ -3670,6 +3670,19 @@ namespace EliteBioRadar
                 string label = evt == "LoadGame" ? (obj.Value<string>("Ship_Localised") ?? obj.Value<string>("Ship") ?? "")
                                                  : (obj.Value<string>("ShipName") is { Length: > 0 } custom ? custom : obj.Value<string>("Ship") ?? "");
                 if (label.Length > 0) _shipLabel = label;
+                if (evt == "Loadout" && obj.Value<int?>("CargoCapacity") is int capTons) _cargoCap = capTons;
+            }
+            // The hold's fill, kept from history too: the Cargo event gives the ship's total, each pickup / ejection moves it.
+            if (evt == "Cargo" && (obj.Value<string>("Vessel") ?? "Ship") == "Ship" && obj.Value<int?>("Count") is int heldNow) _cargoUsed = heldNow;
+            else if (evt == "CollectCargo" && _cargoUsed >= 0) _cargoUsed++;
+            else if (evt == "EjectCargo" && _cargoUsed >= 0) _cargoUsed = Math.Max(0, _cargoUsed - Math.Max(1, obj.Value<int?>("Count") ?? 1));
+
+            // Cargo picked up or thrown out: runs of the same commodity within 1.5 s are one animation. Live only.
+            if (!backfill && evt is "CollectCargo" or "EjectCargo")
+            {
+                bool dump = evt == "EjectCargo";
+                string cargoName = obj.Value<string>("Type_Localised") ?? System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase((obj.Value<string>("Type") ?? "").Replace('_', ' '));
+                QueueCargo(dump ? "DUMP" : "COLLECT", cargoName, dump ? Math.Max(1, obj.Value<int?>("Count") ?? 1) : 1);
             }
 
             // The ship is destroyed (Died), then comes back (Resurrect). Live only.
@@ -5325,6 +5338,37 @@ namespace EliteBioRadar
                     break;
                 }
             }
+        }
+
+        private int _cargoUsed = -1, _cargoCap = -1;
+        private readonly object _cargoLock = new(); private string _cargoKind = "", _cargoName = ""; private int _cargoTonnes; private System.Threading.Timer? _cargoTimer;
+        public event Action<string, string, int, int, int>? CargoMoved;   // ("COLLECT" or "DUMP", commodity, tonnes, hold used or -1, hold capacity or -1) the journal's CollectCargo / EjectCargo; a run of one commodity within 1.5 s is one event; live only
+
+        private void QueueCargo(string kind, string name, int tonnes)
+        {
+            (string kind, string name, int tonnes)? flushNow = null;
+            lock (_cargoLock)
+            {
+                if (_cargoTonnes > 0 && (kind != _cargoKind || name != _cargoName)) flushNow = (_cargoKind, _cargoName, _cargoTonnes);
+                if (_cargoTonnes == 0 || flushNow != null) { _cargoKind = kind; _cargoName = name; _cargoTonnes = 0; }
+                _cargoTonnes += tonnes;
+                _cargoTimer?.Dispose();
+                _cargoTimer = new System.Threading.Timer(_ => FlushCargo(), null, 1500, System.Threading.Timeout.Infinite);
+            }
+            // A different commodity arrived: the earlier run is sent now (the hold figure then already includes the new one, which is close enough for a one-line plate).
+            if (flushNow is { } f) { Log.Write($"Cargo {f.kind.ToLowerInvariant()}: {f.tonnes} t {f.name}"); CargoMoved?.Invoke(f.kind, f.name, f.tonnes, _cargoUsed, _cargoCap); }
+        }
+
+        private void FlushCargo()
+        {
+            string kind, name; int tonnes;
+            lock (_cargoLock)
+            {
+                if (_cargoTonnes == 0) return;
+                kind = _cargoKind; name = _cargoName; tonnes = _cargoTonnes; _cargoTonnes = 0;
+            }
+            Log.Write($"Cargo {kind.ToLowerInvariant()}: {tonnes} t {name} (hold {_cargoUsed}/{_cargoCap})");
+            CargoMoved?.Invoke(kind, name, tonnes, _cargoUsed, _cargoCap);
         }
 
         private void QueueBounty(string kind, string name, string victim, string awarder, long reward)

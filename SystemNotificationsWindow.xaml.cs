@@ -51,6 +51,7 @@ namespace EliteBioRadar
                 ["mission"] = missionVisual,
                 ["payout"] = payoutVisual,
                 ["bounty"] = bountyVisual,
+                ["cargo"] = cargoVisual,
                 ["srv"] = srvVisual,
                 ["organism-scan"] = organismScanVisual,
                 ["colony-range"] = colonyRangeVisual,
