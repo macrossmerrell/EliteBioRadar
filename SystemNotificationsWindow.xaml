@@ -49,6 +49,7 @@
         <local:PayoutVisual x:Name="payoutVisual"/>
         <local:BountyVisual x:Name="bountyVisual"/>
         <local:CargoVisual x:Name="cargoVisual"/>
+        <local:MappedVisual x:Name="mappedVisual"/>
         <local:SrvVisual x:Name="srvVisual"/>
         <local:OrganismScanVisual x:Name="organismScanVisual"/>
         <local:ColonyRangeVisual x:Name="colonyRangeVisual"/>

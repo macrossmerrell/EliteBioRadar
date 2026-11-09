@@ -266,6 +266,8 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Bounty, "", $"{kind}|{count}|{name.Replace('|', '/')}|{victim.Replace('|', '/')}|{reward}|{awarder.Replace('|', '/')}")));
             svc.CargoMoved += (kind, name, tonnes, used, cap) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Cargo, "", $"{kind}|{name.Replace('|', '/')}|{tonnes}|{used}|{cap}")));
+            svc.PlanetMapped += (body, probes, target) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Mapped, body, $"{probes}|{target}")));
             svc.RankedUp += (category, rank) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.RankUp, "", $"{category}|{rank}")));
             svc.MissionsChanged += (kind, count, name, faction, reward) => Dispatcher.InvokeAsync(() =>
@@ -364,6 +366,7 @@ namespace EliteBioRadar
                     ["payout"] = _w.payoutVisual,
                     ["bounty"] = _w.bountyVisual,
                     ["cargo"] = _w.cargoVisual,
+                    ["planet-mapped"] = _w.mappedVisual,
                     ["srv"] = _w.srvVisual,
                     ["organism-scan"] = _w.organismScanVisual,
                     ["colony-range"] = _w.colonyRangeVisual,

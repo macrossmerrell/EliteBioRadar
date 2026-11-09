@@ -107,6 +107,7 @@ namespace EliteBioRadar
         public event Action<int, long, long, long>? ExplorationSold;   // (systems sold, base value, bonus, total) the journal's SellExplorationData / MultiSellExplorationData; live only
         public event Action<string, int, string, string, long, string>? BountyPaid;   // ("BOUNTY" or "BOND", how many in the batch, first target / bond label, victim faction, total reward, awarding faction) the journal's Bounty / FactionKillBond; kills within 1.5 s of each other are one event; live only
         private readonly object _bountyLock = new(); private string _bountyKind = "", _bountyName = "", _bountyVictim = "", _bountyAwarder = ""; private int _bountyCount; private long _bountyReward; private System.Threading.Timer? _bountyTimer;
+        public event Action<string, int, int>? PlanetMapped;   // (body short name, probes used, efficiency target) the journal's SAAScanComplete; live only
         public event Action<string, int>? RankedUp;   // (category, new rank number) the journal's Promotion; live only
         public event Action<string, int, string, string, long>? MissionsChanged;   // ("ACCEPTED" or "COMPLETED", how many in the batch, first mission, its faction, total reward) missions accepted or completed within 1.2 s of each other are one event; live only
         private readonly object _missionLock = new(); private string _missionKind = "", _missionName = "", _missionFaction = ""; private int _missionCount; private long _missionReward; private System.Threading.Timer? _missionTimer;
@@ -3758,6 +3759,16 @@ namespace EliteBioRadar
             // Missions accepted or completed (a mission board can add five at once): folded into one animation when they arrive within 1.2 s of each other. Live only.
             if (!backfill && evt is "MissionAccepted" or "MissionCompleted")
                 QueueMission(evt == "MissionCompleted" ? "COMPLETED" : "ACCEPTED", obj.Value<string>("LocalisedName") ?? obj.Value<string>("Name") ?? "", obj.Value<string>("Faction") ?? "", obj.Value<long?>("Reward") ?? 0);
+
+            // A planet's detailed surface scan finished: the journal's SAAScanComplete with the probes used and the efficiency target. Live only.
+            if (!backfill && evt == "SAAScanComplete")
+            {
+                string mappedBody = obj.Value<string>("BodyName") ?? "";
+                string mappedShort = GetShortBodyName(mappedBody, StarSystem ?? "");
+                int probesUsed = obj.Value<int?>("ProbesUsed") ?? 0, effTarget = obj.Value<int?>("EfficiencyTarget") ?? 0;
+                Log.Write($"Planet mapped: '{mappedShort}' ({probesUsed} probes, target {effTarget})");
+                PlanetMapped?.Invoke(mappedShort.Length > 0 ? mappedShort : mappedBody, probesUsed, effTarget);
+            }
 
             // A bounty or combat bond paid: Bounty carries the target ship, its faction and the reward (TotalReward, or Reward in older journals); FactionKillBond the victim and awarding factions. Live only.
             if (!backfill && evt is "Bounty" or "FactionKillBond")

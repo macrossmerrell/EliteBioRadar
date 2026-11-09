@@ -46,6 +46,8 @@ namespace EliteBioRadar
             new("fss-complete", "FSS complete (all bodies found)", "Exploration", AnimationSurfaces.Both, 0.85, "Sample System", "14");
         public static readonly AnimationDef CodexEntry =
             new("codex-entry", "New codex entry", "Exploration", AnimationSurfaces.Both, 0.85, "Fonticulua Digitos", "BIOLOGICAL AND GEOLOGICAL|FLORA");
+        public static readonly AnimationDef Mapped =
+            new("planet-mapped", "Planet mapped", "Exploration", AnimationSurfaces.Both, 0.85, "A 6 a", "4|5", PreviewCycle: new[] { "4|5", "7|5", "2|3" });
         public static readonly AnimationDef Material =
             new("material", "Material collected", "Exploration", AnimationSurfaces.Both, 0.85, "", "Iron|Raw|iron|3|190|300", PreviewCycle: new[] { "Iron|Raw|iron|3|190|300", "Carbon|Raw|carbon|3|300|300", "Basic Conductors|Manufactured|basicconductors|2|-1|-1" });
         public static readonly AnimationDef Bounty =
@@ -130,7 +132,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef AtmosphericJump =
             new("atmospheric-jump", "Hyperspace jump from an atmosphere", "Atmosphere", AnimationSurfaces.Main, 1.0, "", "", Live: true);
 
-        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, Arrival, Supercruise, SupercruiseOverdrive, SupercruiseAssist, SupercruiseExit, Supercharge, Route, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, Shields, LowFuel, Overheat, Vitals, Thermal, RankUp, HullDamage, ShipLost, Fighter, MassLock, FsdCooldown, Interdiction, SilentRunning, DriveAssist, Handbrake, Turret, FlightAssist, Disembark, Embark, Srv, Landed, Liftoff, FirstFootfall, DockingRequest, Docked, OrganismScan, ColonyRange, FssComplete, CodexEntry, Material, Payout, Mission, Bounty, Cargo, Descent, Climb, AtmosphericJump };
+        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, Arrival, Supercruise, SupercruiseOverdrive, SupercruiseAssist, SupercruiseExit, Supercharge, Route, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, Shields, LowFuel, Overheat, Vitals, Thermal, RankUp, HullDamage, ShipLost, Fighter, MassLock, FsdCooldown, Interdiction, SilentRunning, DriveAssist, Handbrake, Turret, FlightAssist, Disembark, Embark, Srv, Landed, Liftoff, FirstFootfall, DockingRequest, Docked, OrganismScan, ColonyRange, FssComplete, CodexEntry, Mapped, Material, Payout, Mission, Bounty, Cargo, Descent, Climb, AtmosphericJump };
 
         // The user's choice from the settings file, else the animation's own default.
         public static AnimationSurfaces SurfacesFor(AnimationDef def, AppSettingsData settings) =>
