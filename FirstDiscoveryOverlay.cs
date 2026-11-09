@@ -244,6 +244,10 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Supercharge, "", type + "|" + boost.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))));
             svc.RouteChanged += (stage, jumps, ly, classes) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Route, "", $"{stage}|{jumps}|{ly.ToString("0", System.Globalization.CultureInfo.InvariantCulture)}|{classes}")));
+            svc.FssCompleted += (system, count) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.FssComplete, system, count.ToString(System.Globalization.CultureInfo.InvariantCulture))));
+            svc.SrvChanged += (name, deployed) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Srv, name, deployed ? "DEPLOYED" : "RECOVERED")));
             svc.SupercruiseAssistChanged += on => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.SupercruiseAssist, "", on ? "ON" : "OFF")));
             svc.FuelScoopStarted += (star, detail) => Dispatcher.InvokeAsync(() =>
@@ -329,6 +333,8 @@ namespace EliteBioRadar
                     ["supercruise-exit"] = _w.supercruiseExitVisual,
                     ["supercharge"] = _w.superchargeVisual,
                     ["route"] = _w.routeVisual,
+                    ["fss-complete"] = _w.fssCompleteVisual,
+                    ["srv"] = _w.srvVisual,
                     ["organism-scan"] = _w.organismScanVisual,
                     ["hull-damage"] = _w.hullDamageVisual,
                     ["fighter"] = _w.fighterVisual,

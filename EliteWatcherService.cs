@@ -93,6 +93,8 @@ namespace EliteBioRadar
         public event Action<int, double, double>? HullThresholdCrossed;   // (1 damaged / 2 critical, hull before, hull after) the hull fell through a threshold; live only
         private readonly Dictionary<string, int> _liveSampleSeq = new(StringComparer.OrdinalIgnoreCase);   // genus -> samples taken so far this sequence, for the sample animation
         public event Action<int, string>? OrganismSampleTaken;  // (stage 1-3 sample taken, 4 = analysed / genus complete; species name) a live ScanOrganic
+        public event Action<string, bool>? SrvChanged;   // (SRV name, true = deployed / false = recovered) the journal's LaunchSRV / DockSRV; live only
+        public event Action<string, int>? FssCompleted;   // (system, body count) the journal's FSSAllBodiesFound; live only
         public event Action<string, double>? Supercharged;   // the journal's JetConeBoost: star type ("NEUTRON" / "WHITE DWARF") and the BoostValue; live only
         public event Action? SupercruiseExited;  // the journal's SupercruiseExit (dropped back to normal space); live only
         public event Action? SupercruiseEntered;  // the journal's SupercruiseEntry; live only
@@ -3626,6 +3628,22 @@ namespace EliteBioRadar
             if (!backfill && evt == "DockFighter") { Log.Write("Fighter recovered"); FighterRecovered?.Invoke(); }
 
             // Docking requests: the station's answer (the journal's DockingRequested / DockingGranted / DockingDenied) as (station, "REQUESTED" / "GRANTED|pad" / "DENIED|reason").
+            // The full system scan is done: the journal's FSSAllBodiesFound (system name and body count). Live only.
+            if (!backfill && evt == "FSSAllBodiesFound")
+            {
+                string fssSystem = obj.Value<string>("SystemName") ?? StarSystem ?? "";
+                int fssCount = obj.Value<int?>("Count") ?? 0;
+                Log.Write($"FSS complete: {fssCount} bodies in {fssSystem}");
+                FssCompleted?.Invoke(fssSystem, fssCount);
+            }
+            // The ship deploys or recovers its SRV (LaunchSRV / DockSRV), with the SRV's name.
+            if (!backfill && evt is "LaunchSRV" or "DockSRV")
+            {
+                bool launched = evt == "LaunchSRV";
+                string srvName = obj.Value<string>("SRVType_Localised") ?? "SRV";
+                Log.Write(launched ? $"SRV deployed: {srvName}" : $"SRV recovered: {srvName}");
+                SrvChanged?.Invoke(srvName, launched);
+            }
             if (!backfill && evt == "Undocked") _lastUndockedAt = DateTime.UtcNow;
             if (!backfill && evt is "DockingRequested" or "DockingGranted" or "DockingDenied" or "Undocked")
             {

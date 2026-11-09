@@ -42,6 +42,8 @@
         <local:SupercruiseExitVisual x:Name="supercruiseExitVisual"/>
         <local:SuperchargeVisual x:Name="superchargeVisual"/>
         <local:RouteVisual x:Name="routeVisual"/>
+        <local:FssCompleteVisual x:Name="fssCompleteVisual"/>
+        <local:SrvVisual x:Name="srvVisual"/>
         <local:OrganismScanVisual x:Name="organismScanVisual"/>
         <local:HullDamageVisual x:Name="hullDamageVisual"/>
         <local:FighterVisual x:Name="fighterVisual"/>

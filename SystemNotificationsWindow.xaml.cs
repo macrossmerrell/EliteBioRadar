@@ -45,6 +45,8 @@ namespace EliteBioRadar
                 ["supercruise-exit"] = supercruiseExitVisual,
                 ["supercharge"] = superchargeVisual,
                 ["route"] = routeVisual,
+                ["fss-complete"] = fssCompleteVisual,
+                ["srv"] = srvVisual,
                 ["organism-scan"] = organismScanVisual,
                 ["hull-damage"] = hullDamageVisual,
                 ["fighter"] = fighterVisual,
