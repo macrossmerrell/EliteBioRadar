@@ -656,7 +656,37 @@ namespace EliteBioRadar
         }
 
         // ---------------------------------------------------------------
+        // The cache lives in memory: reading it used to parse the whole file and every save used to rewrite it, all on whichever thread asked - and the journal thread asks while it holds the organism
+        // list's lock, which the radar's refresh tick also needs, so each scan stalled the UI (and the animations) for the length of a disk round trip. Now the file is only read once, and written
+        // from a timer shortly after the last change (and when the app closes). Everything here still runs under _lock.
+        private static Dictionary<string, CachedBodyData>? _mem;
+        private static bool _savePending;
+        private static System.Threading.Timer? _saveTimer;
+        private static readonly object _fileLock = new();
+
+        static ScanCache() { AppDomain.CurrentDomain.ProcessExit += (_, _) => Flush(); }
+
         private static Dictionary<string, CachedBodyData> ReadAll()
+        {
+            _mem ??= ReadFromDisk();
+            // A copy of the table, so a caller that changes it and then fails never leaves half an edit behind; the bodies in it are shared, as every caller writes the table back after changing one.
+            return new Dictionary<string, CachedBodyData>(_mem, StringComparer.OrdinalIgnoreCase);
+        }
+
+        // Writes the file now if a change is waiting for the timer (app exit, window close).
+        public static void Flush()
+        {
+            string? json = null;
+            lock (_lock)
+            {
+                if (!_savePending || _mem == null) return;
+                _savePending = false;
+                json = JsonConvert.SerializeObject(_mem, Formatting.Indented);
+            }
+            lock (_fileLock) { try { AtomicFile.WriteAllText(_path, json); } catch (Exception ex) { Log.Write($"ScanCache.Flush error: {ex.Message}"); } }
+        }
+
+        private static Dictionary<string, CachedBodyData> ReadFromDisk()
         {
             if (!File.Exists(_path))
                 return new Dictionary<string, CachedBodyData>(StringComparer.OrdinalIgnoreCase);
@@ -704,8 +734,11 @@ namespace EliteBioRadar
 
         private static void WriteAll(Dictionary<string, CachedBodyData> data)
         {
-            var json = JsonConvert.SerializeObject(data, Formatting.Indented);
-            AtomicFile.WriteAllText(_path, json);
+            _mem = data;
+            if (_savePending) return;   // the timer already armed will write this change too
+            _savePending = true;
+            _saveTimer ??= new System.Threading.Timer(_ => Flush(), null, System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+            _saveTimer.Change(500, System.Threading.Timeout.Infinite);
         }
     }
 }

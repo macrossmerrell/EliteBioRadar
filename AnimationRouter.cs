@@ -29,7 +29,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef FirstFootfall =
             new("first-footfall", "First footfall on a world", "Surface", AnimationSurfaces.Main, 1.0, "Qiedea EI-O c8-1 A 1", "~STAR=3800|~FLUX=0.8|~GROUND=8A7A6A");
         public static readonly AnimationDef HyperspaceJump =
-            new("hyperspace-jump", "Hyperspace jump (departure)", "Jump", AnimationSurfaces.Main, 0.92, "Sample System", "PREVIEW");
+            new("hyperspace-jump", "Hyperspace jump (departure)", "Jump", AnimationSurfaces.Main, 0.92, "HIP 66074", "PREVIEW|K|18.4|3|12|1");
         public static readonly AnimationDef Supercruise =
             new("supercruise", "Entering supercruise", "Jump", AnimationSurfaces.Both, 0.85, "", "PREVIEW");
         public static readonly AnimationDef SupercruiseOverdrive =

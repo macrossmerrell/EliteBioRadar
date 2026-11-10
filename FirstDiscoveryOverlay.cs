@@ -171,6 +171,23 @@ namespace EliteBioRadar
 
     public partial class MainWindow
     {
+        // What the departure screen shows about the next system: "LIVE|class|distance ly|jump number|jumps in route|scoopable". The distance and jump numbers come from the plotted route (blank when
+        // the next system is not on it, or is the first stop with nothing before it to measure from).
+        private static string JumpDepartureDetail(DestinationInfo? d)
+        {
+            if (d == null) return "LIVE";
+            try
+            {
+                string cls = d.StarClass ?? "";
+                var hops = d.FullRouteHops;
+                int idx = string.IsNullOrEmpty(d.NextSystem) ? -1 : hops.FindIndex(h => string.Equals(h.StarSystem, d.NextSystem, StringComparison.OrdinalIgnoreCase));
+                string dist = idx > 0 && hops[idx].DistanceFromPrevLy > 0 ? hops[idx].DistanceFromPrevLy.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) : "";
+                string no = idx > 0 ? idx.ToString(System.Globalization.CultureInfo.InvariantCulture) : "", total = idx > 0 ? (hops.Count - 1).ToString(System.Globalization.CultureInfo.InvariantCulture) : "";
+                return $"LIVE|{cls}|{dist}|{no}|{total}|{(IsScoopableStar(cls) ? 1 : 0)}";
+            }
+            catch { return "LIVE"; }   // the route was being rebuilt while this read it: show the screen without the extras
+        }
+
         private void InitAnimations(EliteWatcherService svc)
         {
             AnimationRouter.Register(new MainWindowAnimationSurface(this));            // Raised on the journal thread. The router decides which window(s) show it.
@@ -184,7 +201,7 @@ namespace EliteBioRadar
             svc.JumpChargeStarted += next => Dispatcher.InvokeAsync(() =>
             {
                 JumpDepartureState.ChargeStart = DateTime.UtcNow;
-                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.HyperspaceJump, next, ""));
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.HyperspaceJump, next, JumpDepartureDetail(svc.CurrentDestination)));
             });
             svc.HyperspaceJumpStarted += () => Dispatcher.InvokeAsync(() => JumpDepartureState.DriveFiredAt = DateTime.UtcNow);
             svc.JumpChargeCancelled += () => Dispatcher.InvokeAsync(JumpDepartureState.RequestEnd);

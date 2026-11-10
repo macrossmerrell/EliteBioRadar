@@ -403,6 +403,7 @@ namespace EliteBioRadar
         {
             _refreshTimer?.Stop();
             _watcher?.Dispose();
+            ScanCache.Flush();
         }
 
         private void BtnRefresh_Click(object sender, RoutedEventArgs e)
