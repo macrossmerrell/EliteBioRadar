@@ -108,6 +108,7 @@ namespace EliteBioRadar
         public event Action<string>? EngineerEvent;   // the detail for the engineer animation: a module engineered (EngineerCraft), an engineer unlocked or ranked up (EngineerProgress); live only
         public event Action<string>? CombatAlertEvent;   // the detail for the combat alert animation: ATTACK (UnderAttack), LOCK (ShipTargetted, first lock) or SCAN (Scanned); each limited so a fight is not a stream of animations; live only
         public event Action<string>? WingCrewEvent;   // the detail for the wing / crew animation: INVITE, ADD, JOIN, LEAVE (WingInvite / WingAdd / WingJoin / WingLeave) or CREW (CrewMemberJoins); live only
+        public event Action<string>? OrganicSoldEvent;   // the detail for the exobiology sold animation (SellOrganicData): count|first species|base value|bonus; live only
         public event Action? CockpitBreachedEvent;   // the journal's CockpitBreached; live only
         private readonly List<string> _wingMembers = new();   // the pilots in your wing, kept so a leave can say who went
         private DateTime _lastAttackAlert = DateTime.MinValue, _lastLockAlert = DateTime.MinValue, _lastScanAlert = DateTime.MinValue;
@@ -3804,6 +3805,13 @@ namespace EliteBioRadar
             else if (!backfill && evt == "WingInvite") WingCrewEvent?.Invoke($"INVITE|{Clean(obj.Value<string>("Name") ?? "")}");
             else if (!backfill && evt == "CrewMemberJoins") WingCrewEvent?.Invoke($"CREW|{Clean(obj.Value<string>("Crew") ?? "")}");
 
+            if (!backfill && evt == "SellOrganicData" && obj["BioData"] is Newtonsoft.Json.Linq.JArray soldBio && soldBio.Count > 0)
+            {
+                long bv = 0, bb = 0;
+                foreach (var e in soldBio) { bv += e.Value<long?>("Value") ?? 0; bb += e.Value<long?>("Bonus") ?? 0; }
+                var first = soldBio[0];
+                OrganicSoldEvent?.Invoke($"{soldBio.Count}|{Clean(first.Value<string>("Species_Localised") ?? first.Value<string>("Genus_Localised") ?? "")}|{bv}|{bb}");
+            }
             if (!backfill && evt == "CockpitBreached") CockpitBreachedEvent?.Invoke();
 
             // Combat alerts. UnderAttack is written for every volley, so it plays at most once in 25 s; ShipTargetted plays on a fresh lock (scan stage 0); Scanned when another ship scans you. Live only.
