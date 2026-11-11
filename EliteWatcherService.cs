@@ -106,6 +106,7 @@ namespace EliteBioRadar
         public event Action<string, string, string>? CodexEntryFound;   // (entry name, category, sub-category) the journal's CodexEntry with IsNewEntry; live only
         public event Action<int, long, long, long>? ExplorationSold;   // (systems sold, base value, bonus, total) the journal's SellExplorationData / MultiSellExplorationData; live only
         public event Action<string>? EngineerEvent;   // the detail for the engineer animation: a module engineered (EngineerCraft), an engineer unlocked or ranked up (EngineerProgress); live only
+        public event Action<string>? TechBrokerEvent;   // the detail for the tech broker animation ("HUMAN|GUARDIAN", materials spent, item names); the journal's TechnologyBroker; live only
         private readonly Dictionary<string, (string progress, int rank)> _engineerState = new();
         private static string PrettyJournalName(string s) =>
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
@@ -3757,6 +3758,23 @@ namespace EliteBioRadar
                 rows.Sort((x, y) => y.pct.CompareTo(x.pct));
                 string effect = obj.Value<string>("ExperimentalEffect_Localised") ?? "";
                 EngineerEvent?.Invoke($"CRAFT|{Clean(PrettyJournalName(obj.Value<string>("BlueprintName") ?? ""))}|{Clean(obj.Value<string>("Engineer") ?? "")}|{obj.Value<int?>("Level") ?? 0}|{Clean(effect)}|{string.Join(";", rows.Take(3).Select(r => r.text))}");
+            }
+
+            // A technology broker unlocked modules: ItemsUnlocked names them, Materials / Commodities are what was paid. Live only.
+            if (!backfill && evt == "TechnologyBroker")
+            {
+                var names = new List<string>();
+                if (obj["ItemsUnlocked"] is Newtonsoft.Json.Linq.JArray unlocked)
+                    foreach (var it in unlocked)
+                    {
+                        string nm = Clean(it.Value<string>("Name_Localised") ?? PrettyJournalName(it.Value<string>("Name") ?? ""));
+                        if (nm.Length > 0) names.Add(nm);
+                    }
+                int spent = 0;
+                foreach (var key in new[] { "Materials", "Commodities" })
+                    if (obj[key] is Newtonsoft.Json.Linq.JArray paid) foreach (var m in paid) spent += m.Value<int?>("Count") ?? 0;
+                if (names.Count > 0)
+                    TechBrokerEvent?.Invoke($"{((obj.Value<string>("BrokerType") ?? "").StartsWith("G", StringComparison.OrdinalIgnoreCase) ? "GUARDIAN" : "HUMAN")}|{spent}|{string.Join(";", names)}");
             }
 
             // An interdiction ended: EscapeInterdiction (the player got away) or Interdicted (Submitted says whether the player gave in or was pulled out). Live only.

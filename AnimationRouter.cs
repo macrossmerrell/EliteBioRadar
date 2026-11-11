@@ -52,6 +52,8 @@ namespace EliteBioRadar
             new("material", "Material collected", "Exploration", AnimationSurfaces.Both, 0.85, "", "Iron|Raw|iron|3|190|300", PreviewCycle: new[] { "Iron|Raw|iron|3|190|300", "Carbon|Raw|carbon|3|300|300", "Basic Conductors|Manufactured|basicconductors|2|-1|-1" });
         public static readonly AnimationDef Engineer =
             new("engineer", "Module engineered / engineer unlocked", "HUD", AnimationSurfaces.Both, 0.85, "", "CRAFT|FSD Long Range|Felicity Farseer|4|Increased Range|Range:+18.2:0.36;Mass:-6.0:0.12;Power:+3.1:0.06", PreviewCycle: new[] { "CRAFT|FSD Long Range|Felicity Farseer|4|Increased Range|Range:+18.2:0.36;Mass:-6.0:0.12;Power:+3.1:0.06", "UNLOCK|Felicity Farseer|1|0", "RANKUP|Felicity Farseer|2|25" });
+        public static readonly AnimationDef TechBroker =
+            new("tech-broker", "Tech broker unlock", "HUD", AnimationSurfaces.Both, 0.85, "", "GUARDIAN|14|Guardian Gauss Cannon;Guardian Shard Cannon", PreviewCycle: new[] { "HUMAN|9|Remote Release Flak Launcher", "GUARDIAN|14|Guardian Gauss Cannon;Guardian Shard Cannon" });
         public static readonly AnimationDef Bounty =
             new("bounty", "Bounty claimed / combat bond", "Combat", AnimationSurfaces.Both, 0.85, "", "BOUNTY|1|Federal Dropship|Marquis Hauler Syndicate|184000|", PreviewCycle: new[] { "BOUNTY|1|Federal Dropship|Marquis Hauler Syndicate|184000|", "BOND|1||Pirate Lord Syndicate|95000|Lugh Mining Cartel", "BOUNTY|5|Federal Dropship|Marquis Hauler Syndicate|690000|" });
         public static readonly AnimationDef Cargo =
@@ -136,7 +138,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef AtmosphericJump =
             new("atmospheric-jump", "Hyperspace jump from an atmosphere", "Atmosphere", AnimationSurfaces.Main, 1.0, "", "", Live: true);
 
-        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, Arrival, Supercruise, SupercruiseOverdrive, SupercruiseAssist, SupercruiseExit, Supercharge, Route, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, Shields, LowFuel, Overheat, Vitals, Thermal, RankUp, HullDamage, ShipLost, Fighter, MassLock, FsdCooldown, Interdiction, InterdictionOutcome, Engineer, SilentRunning, DriveAssist, Handbrake, Turret, FlightAssist, Disembark, Embark, Srv, Landed, Liftoff, FirstFootfall, DockingRequest, Docked, OrganismScan, ColonyRange, FssComplete, CodexEntry, Mapped, Material, Payout, Mission, Bounty, Cargo, Descent, Climb, AtmosphericJump };
+        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, Arrival, Supercruise, SupercruiseOverdrive, SupercruiseAssist, SupercruiseExit, Supercharge, Route, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, Shields, LowFuel, Overheat, Vitals, Thermal, RankUp, HullDamage, ShipLost, Fighter, MassLock, FsdCooldown, Interdiction, InterdictionOutcome, Engineer, TechBroker, SilentRunning, DriveAssist, Handbrake, Turret, FlightAssist, Disembark, Embark, Srv, Landed, Liftoff, FirstFootfall, DockingRequest, Docked, OrganismScan, ColonyRange, FssComplete, CodexEntry, Mapped, Material, Payout, Mission, Bounty, Cargo, Descent, Climb, AtmosphericJump };
 
         // The user's choice from the settings file, else the animation's own default.
         public static AnimationSurfaces SurfacesFor(AnimationDef def, AppSettingsData settings) =>
