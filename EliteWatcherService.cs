@@ -108,6 +108,7 @@ namespace EliteBioRadar
         public event Action<string>? EngineerEvent;   // the detail for the engineer animation: a module engineered (EngineerCraft), an engineer unlocked or ranked up (EngineerProgress); live only
         public event Action<string>? CombatAlertEvent;   // the detail for the combat alert animation: ATTACK (UnderAttack), LOCK (ShipTargetted, first lock) or SCAN (Scanned); each limited so a fight is not a stream of animations; live only
         public event Action<string>? WingCrewEvent;   // the detail for the wing / crew animation: INVITE, ADD, JOIN, LEAVE (WingInvite / WingAdd / WingJoin / WingLeave) or CREW (CrewMemberJoins); live only
+        public event Action? CockpitBreachedEvent;   // the journal's CockpitBreached; live only
         private readonly List<string> _wingMembers = new();   // the pilots in your wing, kept so a leave can say who went
         private DateTime _lastAttackAlert = DateTime.MinValue, _lastLockAlert = DateTime.MinValue, _lastScanAlert = DateTime.MinValue;
         public event Action<string>? CarrierJumpEvent;   // the detail for the fleet carrier animation: SCHEDULED (CarrierJumpRequest), CANCELLED (CarrierJumpCancelled) or ARRIVED (CarrierJump); live only
@@ -3802,6 +3803,8 @@ namespace EliteBioRadar
             }
             else if (!backfill && evt == "WingInvite") WingCrewEvent?.Invoke($"INVITE|{Clean(obj.Value<string>("Name") ?? "")}");
             else if (!backfill && evt == "CrewMemberJoins") WingCrewEvent?.Invoke($"CREW|{Clean(obj.Value<string>("Crew") ?? "")}");
+
+            if (!backfill && evt == "CockpitBreached") CockpitBreachedEvent?.Invoke();
 
             // Combat alerts. UnderAttack is written for every volley, so it plays at most once in 25 s; ShipTargetted plays on a fresh lock (scan stage 0); Scanned when another ship scans you. Live only.
             if (!backfill && evt == "UnderAttack" && (DateTime.UtcNow - _lastAttackAlert).TotalSeconds >= 25)

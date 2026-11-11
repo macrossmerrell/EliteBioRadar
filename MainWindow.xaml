@@ -319,6 +319,7 @@
         <local:EngineerVisual x:Name="engineerVisual"/>
         <local:CombatAlertVisual x:Name="combatAlertVisual"/>
         <local:WingCrewVisual x:Name="wingCrewVisual"/>
+        <local:CockpitBreachVisual x:Name="cockpitBreachVisual"/>
         <local:CarrierJumpVisual x:Name="carrierJumpVisual"/>
         <local:TechBrokerVisual x:Name="techBrokerVisual"/>
         <local:SilentRunningVisual x:Name="silentRunningVisual"/>

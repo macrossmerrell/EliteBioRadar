@@ -52,6 +52,8 @@ namespace EliteBioRadar
             new("material", "Material collected", "Exploration", AnimationSurfaces.Both, 0.85, "", "Iron|Raw|iron|3|190|300", PreviewCycle: new[] { "Iron|Raw|iron|3|190|300", "Carbon|Raw|carbon|3|300|300", "Basic Conductors|Manufactured|basicconductors|2|-1|-1" });
         public static readonly AnimationDef CombatAlert =
             new("combat-alert", "Under attack / target locked / scanned", "Combat", AnimationSurfaces.Both, 0.85, "", "ATTACK|You", PreviewCycle: new[] { "ATTACK|You", "LOCK|Federal Gunship|Cmdr Vance|Deadly|Federal Navy|Wanted|100|100", "SCAN|Cargo" });
+        public static readonly AnimationDef CockpitBreach =
+            new("cockpit-breach", "Cockpit breached", "Combat", AnimationSurfaces.Both, 0.85, "", "");
         public static readonly AnimationDef WingCrew =
             new("wing-crew", "Wing invite / joined / left / crew member", "HUD", AnimationSurfaces.Both, 0.85, "", "INVITE|Cmdr Vance", PreviewCycle: new[] { "INVITE|Cmdr Vance", "ADD|Cmdr Vance|Cmdr Aria", "LEAVE||Cmdr Aria;Cmdr Vance", "CREW|Cmdr Vance" });
         public static readonly AnimationDef Engineer =
@@ -144,7 +146,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef AtmosphericJump =
             new("atmospheric-jump", "Hyperspace jump from an atmosphere", "Atmosphere", AnimationSurfaces.Main, 1.0, "", "", Live: true);
 
-        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, Arrival, CarrierJump, Supercruise, SupercruiseOverdrive, SupercruiseAssist, SupercruiseExit, Supercharge, Route, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, Shields, LowFuel, Overheat, Vitals, Thermal, RankUp, HullDamage, ShipLost, Fighter, MassLock, FsdCooldown, Interdiction, InterdictionOutcome, Engineer, TechBroker, WingCrew, SilentRunning, DriveAssist, Handbrake, Turret, FlightAssist, Disembark, Embark, Srv, Landed, Liftoff, FirstFootfall, DockingRequest, Docked, OrganismScan, ColonyRange, FssComplete, CodexEntry, Mapped, Material, Payout, Mission, Bounty, CombatAlert, Cargo, Descent, Climb, AtmosphericJump };
+        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, Arrival, CarrierJump, Supercruise, SupercruiseOverdrive, SupercruiseAssist, SupercruiseExit, Supercharge, Route, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, Shields, LowFuel, Overheat, Vitals, Thermal, RankUp, HullDamage, ShipLost, Fighter, MassLock, FsdCooldown, Interdiction, InterdictionOutcome, Engineer, TechBroker, WingCrew, SilentRunning, DriveAssist, Handbrake, Turret, FlightAssist, Disembark, Embark, Srv, Landed, Liftoff, FirstFootfall, DockingRequest, Docked, OrganismScan, ColonyRange, FssComplete, CodexEntry, Mapped, Material, Payout, Mission, Bounty, CombatAlert, CockpitBreach, Cargo, Descent, Climb, AtmosphericJump };
 
         // The user's choice from the settings file, else the animation's own default.
         public static AnimationSurfaces SurfacesFor(AnimationDef def, AppSettingsData settings) =>

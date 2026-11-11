@@ -42,6 +42,7 @@ namespace EliteBioRadar
                 ["engineer"] = engineerVisual,
                 ["combat-alert"] = combatAlertVisual,
                 ["wing-crew"] = wingCrewVisual,
+                ["cockpit-breach"] = cockpitBreachVisual,
                 ["carrier-jump"] = carrierJumpVisual,
                 ["tech-broker"] = techBrokerVisual,
                 ["silent-running"] = silentRunningVisual,
