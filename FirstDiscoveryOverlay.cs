@@ -314,6 +314,10 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Overheat, "", "")));
             svc.InterdictionStarted += () => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Interdiction, "", "")));
+            svc.EngineerEvent += detail => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Engineer, "", detail)));
+            svc.InterdictionEnded += (kind, who) => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.InterdictionOutcome, "", $"{kind}|{who.Replace('|', '/')}")));
             svc.SilentRunningChanged += on => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.SilentRunning, "", on ? "ON" : "OFF")));
             svc.DriveAssistChanged += on => Dispatcher.InvokeAsync(() =>
@@ -369,6 +373,8 @@ namespace EliteBioRadar
                     ["low-fuel"] = _w.lowFuelVisual,
                     ["overheat"] = _w.overheatVisual,
                     ["interdiction"] = _w.interdictionVisual,
+                    ["interdiction-outcome"] = _w.interdictionOutcomeVisual,
+                    ["engineer"] = _w.engineerVisual,
                     ["silent-running"] = _w.silentRunningVisual,
                     ["supercruise"] = _w.supercruiseVisual,
                     ["supercruise-overdrive"] = _w.supercruiseOverdriveVisual,

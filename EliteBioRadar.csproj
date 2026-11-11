@@ -29,7 +29,6 @@
   <ItemGroup>
     <Resource Include="Assets\PlanetIcons\png\*.png" />
     <Resource Include="Shaders\*.ps" />
-    <Resource Include="Assets\AsteroidIcons\png\*.png" />
     <Resource Include="Assets\Fonts\*.ttf" />
   </ItemGroup>
 

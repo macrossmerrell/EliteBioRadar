@@ -105,6 +105,12 @@ namespace EliteBioRadar
         public event Action<string, int>? FssCompleted;   // (system, body count) the journal's FSSAllBodiesFound; live only
         public event Action<string, string, string>? CodexEntryFound;   // (entry name, category, sub-category) the journal's CodexEntry with IsNewEntry; live only
         public event Action<int, long, long, long>? ExplorationSold;   // (systems sold, base value, bonus, total) the journal's SellExplorationData / MultiSellExplorationData; live only
+        public event Action<string>? EngineerEvent;   // the detail for the engineer animation: a module engineered (EngineerCraft), an engineer unlocked or ranked up (EngineerProgress); live only
+        private readonly Dictionary<string, (string progress, int rank)> _engineerState = new();
+        private static string PrettyJournalName(string s) =>
+            System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
+        private static string Clean(string s) => (s ?? "").Replace('|', '/').Replace(';', ' ').Replace(':', ' ');
+        public event Action<string, string>? InterdictionEnded;   // ("EVADED", "SUBMITTED" or "PULLED", the interdictor's name or "") the journal's EscapeInterdiction / Interdicted; live only
         public event Action<string, int, string, string, long, string>? BountyPaid;   // ("BOUNTY" or "BOND", how many in the batch, first target / bond label, victim faction, total reward, awarding faction) the journal's Bounty / FactionKillBond; kills within 1.5 s of each other are one event; live only
         private readonly object _bountyLock = new(); private string _bountyKind = "", _bountyName = "", _bountyVictim = "", _bountyAwarder = ""; private int _bountyCount; private long _bountyReward; private System.Threading.Timer? _bountyTimer;
         public event Action<string, int, int>? PlanetMapped;   // (body short name, probes used, efficiency target) the journal's SAAScanComplete; live only
@@ -200,51 +206,6 @@ namespace EliteBioRadar
         private volatile bool   _chargeFlagStaleSinceArrival;
         private DateTime        _chargeStaleSetAtUtc;
         private bool            _loggedStaleChargeSuppress;
-
-        // Assigns (and remembers) a random belt art variant (1-5) for this body name, so the
-        // same belt keeps the same look for as long as it's targeted this session.
-        public int GetBeltVariant(string bodyName)
-        {
-            lock (_beltVariants)
-            {
-                if (!_beltVariants.TryGetValue(bodyName, out var variant))
-                {
-                    variant = _beltVariantRandom.Next(1, 6);
-                    _beltVariants[bodyName] = variant;
-                }
-                return variant;
-            }
-        }
-
-        // How many numbered art variants (<code>_1.png .. <code>_N.png) exist per planet icon
-        // code, on top of the original base <code>.png. Classes not listed here have no variant
-        // pool and always render their base image.
-        private static readonly Dictionary<string, int> PlanetVariantCounts = new(StringComparer.OrdinalIgnoreCase)
-        {
-            ["ICY"] = 6, ["HMC"] = 6, ["RBD"] = 6, ["RIB"] = 6, ["MRB"] = 6,
-            ["WTR"] = 3, ["AMW"] = 3, ["ELW"] = 3,
-            ["GG1"] = 2, ["GG2"] = 2, ["GG3"] = 2, ["GG4"] = 2, ["GG5"] = 2,
-            ["GGA"] = 2, ["GGH"] = 2, ["GGW"] = 2, ["WTG"] = 2,
-        };
-
-        // Assigns (and remembers) a random art variant for this body's planet class, so the
-        // same body keeps the same look for as long as it's targeted this session — same idea
-        // as GetBeltVariant. Returns 0 (meaning "use the base <code>.png") for classes with no
-        // variant pool, or when picked at random alongside the numbered variants.
-        public int GetPlanetVariant(string bodyName, string planetCode)
-        {
-            if (string.IsNullOrEmpty(planetCode) || !PlanetVariantCounts.TryGetValue(planetCode, out var count))
-                return 0;
-            lock (_planetVariants)
-            {
-                if (!_planetVariants.TryGetValue(bodyName, out var variant))
-                {
-                    variant = _beltVariantRandom.Next(0, count + 1); // 0 = base image, 1..count = numbered variants
-                    _planetVariants[bodyName] = variant;
-                }
-                return variant;
-            }
-        }
 
         public EliteStatus CurrentStatus { get; private set; } = new();
         public string CurrentBody    { get; private set; } = "";
@@ -716,16 +677,6 @@ namespace EliteBioRadar
             return Search(_bodyScanDetails) ?? Search(_sessionBodyDetails);
         }
 
-        // Random asteroid-belt art variant (1-5), assigned once per body the first time it's
-        // looked up and kept for as long as that belt stays targeted — cleared alongside
-        // _bodyScanDetails on a real system change so a new belt gets a fresh roll.
-        private readonly Dictionary<string, int> _beltVariants =
-            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        private static readonly Random _beltVariantRandom = new();
-        // Random planet art variant, assigned once per body the first time its icon is looked
-        // up and kept for as long as that body stays targeted — same lifecycle as _beltVariants.
-        private readonly Dictionary<string, int> _planetVariants =
-            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         // Genus names known from detailed planet scan (SAASignalsFound Genuses array)
         public List<string>          KnownGenera     { get; } = new();
         public List<ScannedOrganism> ScannedOrganisms { get; } = new();
@@ -3770,6 +3721,53 @@ namespace EliteBioRadar
                 PlanetMapped?.Invoke(mappedShort.Length > 0 ? mappedShort : mappedBody, probesUsed, effTarget);
             }
 
+            // Engineers. EngineerProgress at start-up lists every engineer (remembered, so later events can tell an unlock or a rank-up from a repeat); afterwards it names one engineer.
+            // EngineerCraft: a blueprint applied, with the module's changed stats in Modifiers (value against the original). Animated live only.
+            if (evt == "EngineerProgress")
+            {
+                if (obj["Engineers"] is Newtonsoft.Json.Linq.JArray engineers)
+                {
+                    foreach (var e in engineers)
+                        if (e.Value<string>("Engineer") is { Length: > 0 } en) _engineerState[en] = (e.Value<string>("Progress") ?? "", e.Value<int?>("Rank") ?? 0);
+                }
+                else if (obj.Value<string>("Engineer") is { Length: > 0 } eng)
+                {
+                    string prog = obj.Value<string>("Progress") ?? "";
+                    int rank = obj.Value<int?>("Rank") ?? 0, pct = obj.Value<int?>("RankProgress") ?? 0;
+                    _engineerState.TryGetValue(eng, out var prev);
+                    _engineerState[eng] = (prog, rank);
+                    if (!backfill && prog == "Unlocked")
+                    {
+                        bool first = prev.progress != "Unlocked";
+                        if (first || rank > prev.rank) EngineerEvent?.Invoke($"{(first ? "UNLOCK" : "RANKUP")}|{Clean(eng)}|{rank}|{pct}");
+                    }
+                }
+            }
+            if (!backfill && evt == "EngineerCraft")
+            {
+                var rows = new List<(double pct, string text)>();
+                if (obj["Modifiers"] is Newtonsoft.Json.Linq.JArray mods)
+                    foreach (var m in mods)
+                    {
+                        double? now = m.Value<double?>("Value"), was = m.Value<double?>("OriginalValue");
+                        if (now == null || was == null || was == 0 || now == was) continue;
+                        double change = (now.Value - was.Value) / Math.Abs(was.Value) * 100;
+                        rows.Add((Math.Abs(change), $"{Clean(PrettyJournalName(m.Value<string>("Label") ?? ""))}:{(change > 0 ? "+" : "")}{change.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}:{Math.Min(1, Math.Abs(change) / 50).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}"));
+                    }
+                rows.Sort((x, y) => y.pct.CompareTo(x.pct));
+                string effect = obj.Value<string>("ExperimentalEffect_Localised") ?? "";
+                EngineerEvent?.Invoke($"CRAFT|{Clean(PrettyJournalName(obj.Value<string>("BlueprintName") ?? ""))}|{Clean(obj.Value<string>("Engineer") ?? "")}|{obj.Value<int?>("Level") ?? 0}|{Clean(effect)}|{string.Join(";", rows.Take(3).Select(r => r.text))}");
+            }
+
+            // An interdiction ended: EscapeInterdiction (the player got away) or Interdicted (Submitted says whether the player gave in or was pulled out). Live only.
+            if (!backfill && evt is "EscapeInterdiction" or "Interdicted")
+            {
+                string who = obj.Value<string>("Interdictor_Localised") ?? obj.Value<string>("Interdictor") ?? "";
+                if (who.StartsWith("$")) who = "";
+                string kind = evt == "EscapeInterdiction" ? "EVADED" : obj.Value<bool?>("Submitted") == true ? "SUBMITTED" : "PULLED";
+                InterdictionEnded?.Invoke(kind, who);
+            }
+
             // A bounty or combat bond paid: Bounty carries the target ship, its faction and the reward (TotalReward, or Reward in older journals); FactionKillBond the victim and awarding factions. Live only.
             if (!backfill && evt is "Bounty" or "FactionKillBond")
             {
@@ -5162,8 +5160,6 @@ namespace EliteBioRadar
                                 _routeCache = null;
                                 RouteCache.Delete();
                             }
-                            lock (_beltVariants) _beltVariants.Clear();
-                            lock (_planetVariants) _planetVariants.Clear();
                             StarScanUpdated?.Invoke(this, EventArgs.Empty);
                             PlanetTargetUpdated?.Invoke(this, EventArgs.Empty);
                             DestinationUpdated?.Invoke(this, EventArgs.Empty);

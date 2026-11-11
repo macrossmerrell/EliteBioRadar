@@ -38,6 +38,8 @@ namespace EliteBioRadar
                 ["low-fuel"] = lowFuelVisual,
                 ["overheat"] = overheatVisual,
                 ["interdiction"] = interdictionVisual,
+                ["interdiction-outcome"] = interdictionOutcomeVisual,
+                ["engineer"] = engineerVisual,
                 ["silent-running"] = silentRunningVisual,
                 ["supercruise"] = supercruiseVisual,
                 ["supercruise-overdrive"] = supercruiseOverdriveVisual,

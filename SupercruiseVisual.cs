@@ -35,6 +35,21 @@ namespace EliteBioRadar
         // Where each streak sits: its angle, its distance from the centre when it starts, its length factor and its starting phase (all fixed, so it is the same every time).
         private static readonly double[] Angle = StarValues(Streaks, 0, 2 * Math.PI), Start = StarValues(Streaks, 1, 1), Length = StarValues(Streaks, 2, 1), Offset = StarValues(Streaks, 3, 1);
 
+        private const double ShrinkSeconds = 0.9;
+        private static readonly Brush[] CyanFade = AlphaBrushes(Cyan);
+        private static readonly Pen[] ShrinkPen = { FrozenPen(Cyan, 3), FrozenPen(Cyan, 2.4), FrozenPen(Cyan, 1.8) };
+        // The glow that builds behind the ship while the entry counts down: white at the heart, cyan, fading to nothing.
+        private static readonly Brush LeakGlow = MakeLeakGlow();
+        private static Brush MakeLeakGlow()
+        {
+            var b = new RadialGradientBrush();
+            b.GradientStops.Add(new GradientStop(Color.FromRgb(255, 255, 255), 0));
+            b.GradientStops.Add(new GradientStop(Color.FromArgb(217, Cyan.R, Cyan.G, Cyan.B), 0.3));
+            b.GradientStops.Add(new GradientStop(Color.FromArgb(0, Cyan.R, Cyan.G, Cyan.B), 1));
+            b.Freeze();
+            return b;
+        }
+
         private readonly Dictionary<int, Geometry> _arcs = new();
         private bool _preview, _entryOnly;
         private double _endAt = -1, _flow, _lastT;
@@ -127,17 +142,38 @@ namespace EliteBioRadar
             }
 
             // The charge ring closes while the drive spools; when it engages a pulse leaves the ship.
+            // Once the ring is full it stays put, then shrinks onto the ship and is hidden behind it (the ship is drawn over it). A glow then builds behind the ship, leaking round the hull,
+            // and when the drive engages the entry ring grows out of it and expands past the ship.
+            double leak = 0;
             dc.PushTransform(new TranslateTransform(CentreX, CentreY));
-            if (!entered) dc.DrawGeometry(null, ArcPen, Arc(fired ? 100 : (int)Math.Round(frac * 100)));
+            if (!fired) dc.DrawGeometry(null, ArcPen, Arc((int)Math.Round(frac * 100)));
+            else if (!entered)
+            {
+                double sh = Phase(tf, 0, ShrinkSeconds);
+                if (sh < 1) { double s = sh * sh * sh * 0.7 + sh * sh * 0.3, r = 31 * (1 - s); dc.DrawEllipse(null, ShrinkPen[Math.Min(2, (int)(s * 3))], new Point(0, 0), r, r); }
+                if (tf >= ShrinkSeconds - 0.1)
+                {
+                    double b = Phase(tf, ShrinkSeconds - 0.1, 3.0), pu = 0.5 + 0.5 * Math.Sin(tf * (5 + b * 6)), lr = 18 + b * 22 + pu * 3;
+                    dc.PushOpacity(Clamp01(0.25 + b * 0.55));
+                    dc.DrawEllipse(LeakGlow, null, new Point(0, 0), lr, lr);
+                    dc.Pop();
+                    leak = b * 0.15;
+                }
+            }
             double rp = entered ? Phase(te, 0, 0.9) : 0;
-            if (rp > 0 && rp < 1) dc.DrawEllipse(null, Ring[(int)Math.Round((1 - rp) * 8)], new Point(0, 0), 14 + rp * 80, 14 + rp * 80);
+            if (rp > 0 && rp < 1)
+            {
+                double e = rp * rp * rp, R = 3 + e * 92;
+                dc.DrawEllipse(null, new Pen(CyanFade[(int)Math.Round((1 - e * 0.9) * 8)], 1.2 + e * 2.2), new Point(0, 0), R, R);
+                dc.DrawEllipse(null, Ring[(int)Math.Round((1 - rp) * 0.5 * 8)], new Point(0, 0), R * 0.82, R * 0.82);
+            }
             dc.Pop();
 
             // The ship from behind: a glow that swells with the drive, the RearHull, wings and RearFin, and three engine nozzles that flare as it speeds up.
-            int lv = (int)Math.Round(accel * 8);
+            int lv = (int)Math.Round(Math.Min(1, accel + leak * 1.17) * 8);
             dc.PushTransform(new TranslateTransform(CentreX, CentreY));
             dc.PushTransform(new ScaleTransform(1.15, 1.15));
-            dc.DrawEllipse(HullGlow[lv], null, new Point(0, 2), 22 + accel * 10, 22 + accel * 10);
+            dc.DrawEllipse(HullGlow[lv], null, new Point(0, 2), 22 + accel * 10 + leak * 8, 22 + accel * 10 + leak * 8);
             dc.DrawGeometry(HullBrush, HullEdge, RearHull);
             dc.DrawGeometry(HullBrush, HullEdge, RearWingL);
             dc.DrawGeometry(HullBrush, HullEdge, RearWingR);

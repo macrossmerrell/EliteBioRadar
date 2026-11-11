@@ -315,6 +315,8 @@
         <local:LowFuelVisual x:Name="lowFuelVisual"/>
         <local:OverheatVisual x:Name="overheatVisual"/>
         <local:InterdictionVisual x:Name="interdictionVisual"/>
+        <local:InterdictionOutcomeVisual x:Name="interdictionOutcomeVisual"/>
+        <local:EngineerVisual x:Name="engineerVisual"/>
         <local:SilentRunningVisual x:Name="silentRunningVisual"/>
         <local:SupercruiseVisual x:Name="supercruiseVisual"/>
         <local:SupercruiseOverdriveVisual x:Name="supercruiseOverdriveVisual"/>

@@ -1303,18 +1303,9 @@ namespace EliteBioRadar
             if (ringCode != null)
                 planetPanelCanvas.Children.Add(MakeImg($"PlanetIcons/png/ring_{ringCode}_back.png", 217, 197, 186));
 
-            // Gas-giant family already returned above via RenderGasGiantPanel, so anything
-            // reaching here is one of the classes still on the pre-rework flat PNG set.
-            string? planetCode = MapPlanetClassToIconCode(detail.PlanetClass);
-            if (planetCode != null)
-            {
-                // Random-but-stable art variant per body, same idea as the asteroid belt art —
-                // picked once per body and kept for as long as it's targeted this session.
-                int variant = _watcher?.GetPlanetVariant(detail.BodyName, planetCode) ?? 0;
-                string variantSuffix = variant > 0 ? $"_{variant}" : "";
-                planetPanelCanvas.Children.Add(MakeImg($"PlanetIcons/png/{planetCode}{variantSuffix}.png", 217, 197, 186));
-            }
-
+            // Every class the app knows is drawn by the gas-giant or terrain renderer above, so this is only reached for a body whose class it does not recognise: no planet art,
+            // just the ring halves, atmosphere / terraformable overlays and signal badge (the flat PNGs still in Assets/PlanetIcons/png).
+            string? planetCode = gasGiantCode;   // the icon code (null here, as every known class returned above); the callouts below still read it
             if (ringCode != null)
                 planetPanelCanvas.Children.Add(MakeImg($"PlanetIcons/png/ring_{ringCode}_front.png", 217, 197, 186));
 
