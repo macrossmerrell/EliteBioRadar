@@ -40,6 +40,7 @@ namespace EliteBioRadar
                 ["interdiction"] = interdictionVisual,
                 ["interdiction-outcome"] = interdictionOutcomeVisual,
                 ["engineer"] = engineerVisual,
+                ["carrier-jump"] = carrierJumpVisual,
                 ["tech-broker"] = techBrokerVisual,
                 ["silent-running"] = silentRunningVisual,
                 ["supercruise"] = supercruiseVisual,

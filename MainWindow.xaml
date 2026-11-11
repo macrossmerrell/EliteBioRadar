@@ -317,6 +317,7 @@
         <local:InterdictionVisual x:Name="interdictionVisual"/>
         <local:InterdictionOutcomeVisual x:Name="interdictionOutcomeVisual"/>
         <local:EngineerVisual x:Name="engineerVisual"/>
+        <local:CarrierJumpVisual x:Name="carrierJumpVisual"/>
         <local:TechBrokerVisual x:Name="techBrokerVisual"/>
         <local:SilentRunningVisual x:Name="silentRunningVisual"/>
         <local:SupercruiseVisual x:Name="supercruiseVisual"/>

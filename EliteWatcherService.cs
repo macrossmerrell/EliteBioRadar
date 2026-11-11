@@ -106,6 +106,9 @@ namespace EliteBioRadar
         public event Action<string, string, string>? CodexEntryFound;   // (entry name, category, sub-category) the journal's CodexEntry with IsNewEntry; live only
         public event Action<int, long, long, long>? ExplorationSold;   // (systems sold, base value, bonus, total) the journal's SellExplorationData / MultiSellExplorationData; live only
         public event Action<string>? EngineerEvent;   // the detail for the engineer animation: a module engineered (EngineerCraft), an engineer unlocked or ranked up (EngineerProgress); live only
+        public event Action<string>? CarrierJumpEvent;   // the detail for the fleet carrier animation: SCHEDULED (CarrierJumpRequest), CANCELLED (CarrierJumpCancelled) or ARRIVED (CarrierJump); live only
+        private string _carrierDestination = "";
+        private DateTime _carrierDeparture = DateTime.MinValue;
         public event Action<string>? TechBrokerEvent;   // the detail for the tech broker animation ("HUMAN|GUARDIAN", materials spent, item names); the journal's TechnologyBroker; live only
         private readonly Dictionary<string, (string progress, int rank)> _engineerState = new();
         private static string PrettyJournalName(string s) =>
@@ -3758,6 +3761,26 @@ namespace EliteBioRadar
                 rows.Sort((x, y) => y.pct.CompareTo(x.pct));
                 string effect = obj.Value<string>("ExperimentalEffect_Localised") ?? "";
                 EngineerEvent?.Invoke($"CRAFT|{Clean(PrettyJournalName(obj.Value<string>("BlueprintName") ?? ""))}|{Clean(obj.Value<string>("Engineer") ?? "")}|{obj.Value<int?>("Level") ?? 0}|{Clean(effect)}|{string.Join(";", rows.Take(3).Select(r => r.text))}");
+            }
+
+            // A fleet carrier's jump: CarrierJumpRequest (destination, body and the departure time), CarrierJumpCancelled (remembering what was left on the clock) and CarrierJump (arrived). Live only.
+            if (!backfill && evt == "CarrierJumpRequest")
+            {
+                _carrierDestination = obj.Value<string>("SystemName") ?? "";
+                var dep = obj.Value<DateTime?>("DepartureTime");
+                _carrierDeparture = dep?.ToUniversalTime() ?? DateTime.MinValue;
+                CarrierJumpEvent?.Invoke($"SCHEDULED|{Clean(_carrierDestination)}|{Clean(obj.Value<string>("Body") ?? "")}|{(dep != null ? _carrierDeparture.ToString("o", System.Globalization.CultureInfo.InvariantCulture) : "")}");
+            }
+            if (!backfill && evt == "CarrierJumpCancelled")
+            {
+                double left = _carrierDeparture > DateTime.UtcNow ? (_carrierDeparture - DateTime.UtcNow).TotalSeconds : 898;
+                CarrierJumpEvent?.Invoke($"CANCELLED|{Clean(_carrierDestination)}||{left.ToString("0", System.Globalization.CultureInfo.InvariantCulture)}");
+                _carrierDeparture = DateTime.MinValue;
+            }
+            if (!backfill && evt == "CarrierJump")
+            {
+                CarrierJumpEvent?.Invoke($"ARRIVED|{Clean(obj.Value<string>("StarSystem") ?? _carrierDestination)}");
+                _carrierDestination = ""; _carrierDeparture = DateTime.MinValue;
             }
 
             // A technology broker unlocked modules: ItemsUnlocked names them, Materials / Commodities are what was paid. Live only.
