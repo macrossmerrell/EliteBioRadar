@@ -318,6 +318,7 @@
         <local:InterdictionOutcomeVisual x:Name="interdictionOutcomeVisual"/>
         <local:EngineerVisual x:Name="engineerVisual"/>
         <local:CombatAlertVisual x:Name="combatAlertVisual"/>
+        <local:WingCrewVisual x:Name="wingCrewVisual"/>
         <local:CarrierJumpVisual x:Name="carrierJumpVisual"/>
         <local:TechBrokerVisual x:Name="techBrokerVisual"/>
         <local:SilentRunningVisual x:Name="silentRunningVisual"/>

@@ -107,6 +107,8 @@ namespace EliteBioRadar
         public event Action<int, long, long, long>? ExplorationSold;   // (systems sold, base value, bonus, total) the journal's SellExplorationData / MultiSellExplorationData; live only
         public event Action<string>? EngineerEvent;   // the detail for the engineer animation: a module engineered (EngineerCraft), an engineer unlocked or ranked up (EngineerProgress); live only
         public event Action<string>? CombatAlertEvent;   // the detail for the combat alert animation: ATTACK (UnderAttack), LOCK (ShipTargetted, first lock) or SCAN (Scanned); each limited so a fight is not a stream of animations; live only
+        public event Action<string>? WingCrewEvent;   // the detail for the wing / crew animation: INVITE, ADD, JOIN, LEAVE (WingInvite / WingAdd / WingJoin / WingLeave) or CREW (CrewMemberJoins); live only
+        private readonly List<string> _wingMembers = new();   // the pilots in your wing, kept so a leave can say who went
         private DateTime _lastAttackAlert = DateTime.MinValue, _lastLockAlert = DateTime.MinValue, _lastScanAlert = DateTime.MinValue;
         public event Action<string>? CarrierJumpEvent;   // the detail for the fleet carrier animation: SCHEDULED (CarrierJumpRequest), CANCELLED (CarrierJumpCancelled) or ARRIVED (CarrierJump); live only
         private string _carrierDestination = "";
@@ -3777,6 +3779,29 @@ namespace EliteBioRadar
                 string effect = obj.Value<string>("ExperimentalEffect_Localised") ?? "";
                 EngineerEvent?.Invoke($"CRAFT|{Clean(PrettyJournalName(obj.Value<string>("BlueprintName") ?? ""))}|{Clean(obj.Value<string>("Engineer") ?? "")}|{obj.Value<int?>("Level") ?? 0}|{Clean(effect)}|{string.Join(";", rows.Take(3).Select(r => r.text))}");
             }
+
+            // The wing and the crew. The member list is kept from every event (backfill too) so a leave can name who was in the wing; the animation is live only.
+            if (evt == "WingJoin")
+            {
+                _wingMembers.Clear();
+                if (obj["Others"] is Newtonsoft.Json.Linq.JArray others) foreach (var o in others) { var n = Clean(o.ToString()); if (n.Length > 0) _wingMembers.Add(n); }
+                if (!backfill) WingCrewEvent?.Invoke($"JOIN||{string.Join(";", _wingMembers)}");
+            }
+            else if (evt == "WingAdd")
+            {
+                string n = Clean(obj.Value<string>("Name") ?? "");
+                var before = string.Join(";", _wingMembers);
+                if (n.Length > 0 && !_wingMembers.Contains(n)) _wingMembers.Add(n);
+                if (!backfill) WingCrewEvent?.Invoke($"ADD|{n}|{before}");
+            }
+            else if (evt == "WingLeave")
+            {
+                var left = string.Join(";", _wingMembers);
+                _wingMembers.Clear();
+                if (!backfill) WingCrewEvent?.Invoke($"LEAVE||{left}");
+            }
+            else if (!backfill && evt == "WingInvite") WingCrewEvent?.Invoke($"INVITE|{Clean(obj.Value<string>("Name") ?? "")}");
+            else if (!backfill && evt == "CrewMemberJoins") WingCrewEvent?.Invoke($"CREW|{Clean(obj.Value<string>("Crew") ?? "")}");
 
             // Combat alerts. UnderAttack is written for every volley, so it plays at most once in 25 s; ShipTargetted plays on a fresh lock (scan stage 0); Scanned when another ship scans you. Live only.
             if (!backfill && evt == "UnderAttack" && (DateTime.UtcNow - _lastAttackAlert).TotalSeconds >= 25)
