@@ -106,6 +106,8 @@ namespace EliteBioRadar
         public event Action<string, string, string>? CodexEntryFound;   // (entry name, category, sub-category) the journal's CodexEntry with IsNewEntry; live only
         public event Action<int, long, long, long>? ExplorationSold;   // (systems sold, base value, bonus, total) the journal's SellExplorationData / MultiSellExplorationData; live only
         public event Action<string>? EngineerEvent;   // the detail for the engineer animation: a module engineered (EngineerCraft), an engineer unlocked or ranked up (EngineerProgress); live only
+        public event Action<string>? CombatAlertEvent;   // the detail for the combat alert animation: ATTACK (UnderAttack), LOCK (ShipTargetted, first lock) or SCAN (Scanned); each limited so a fight is not a stream of animations; live only
+        private DateTime _lastAttackAlert = DateTime.MinValue, _lastLockAlert = DateTime.MinValue, _lastScanAlert = DateTime.MinValue;
         public event Action<string>? CarrierJumpEvent;   // the detail for the fleet carrier animation: SCHEDULED (CarrierJumpRequest), CANCELLED (CarrierJumpCancelled) or ARRIVED (CarrierJump); live only
         private string _carrierDestination = "";
         private DateTime _carrierDeparture = DateTime.MinValue;
@@ -3761,6 +3763,26 @@ namespace EliteBioRadar
                 rows.Sort((x, y) => y.pct.CompareTo(x.pct));
                 string effect = obj.Value<string>("ExperimentalEffect_Localised") ?? "";
                 EngineerEvent?.Invoke($"CRAFT|{Clean(PrettyJournalName(obj.Value<string>("BlueprintName") ?? ""))}|{Clean(obj.Value<string>("Engineer") ?? "")}|{obj.Value<int?>("Level") ?? 0}|{Clean(effect)}|{string.Join(";", rows.Take(3).Select(r => r.text))}");
+            }
+
+            // Combat alerts. UnderAttack is written for every volley, so it plays at most once in 25 s; ShipTargetted plays on a fresh lock (scan stage 0); Scanned when another ship scans you. Live only.
+            if (!backfill && evt == "UnderAttack" && (DateTime.UtcNow - _lastAttackAlert).TotalSeconds >= 25)
+            {
+                _lastAttackAlert = DateTime.UtcNow;
+                CombatAlertEvent?.Invoke($"ATTACK|{Clean(obj.Value<string>("Target") ?? "You")}");
+            }
+            if (!backfill && evt == "ShipTargetted" && (obj.Value<bool?>("TargetLocked") ?? false) && (obj.Value<int?>("ScanStage") ?? 0) == 0 && (DateTime.UtcNow - _lastLockAlert).TotalSeconds >= 4)
+            {
+                _lastLockAlert = DateTime.UtcNow;
+                string ship = obj.Value<string>("Ship_Localised") ?? System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase((obj.Value<string>("Ship") ?? "").Replace('_', ' '));
+                string pilot = obj.Value<string>("PilotName_Localised") ?? "";
+                string Pct(string key) => obj.Value<double?>(key) is double d ? Math.Round(d).ToString("0", System.Globalization.CultureInfo.InvariantCulture) : "";
+                CombatAlertEvent?.Invoke($"LOCK|{Clean(ship)}|{Clean(pilot)}|{Clean(obj.Value<string>("PilotRank") ?? "")}|{Clean(obj.Value<string>("Faction") ?? "")}|{Clean(obj.Value<string>("LegalStatus") ?? "")}|{Pct("ShieldHealth")}|{Pct("HullHealth")}");
+            }
+            if (!backfill && evt == "Scanned" && (DateTime.UtcNow - _lastScanAlert).TotalSeconds >= 4)
+            {
+                _lastScanAlert = DateTime.UtcNow;
+                CombatAlertEvent?.Invoke($"SCAN|{Clean(obj.Value<string>("ScanType") ?? "")}");
             }
 
             // A fleet carrier's jump: CarrierJumpRequest (destination, body and the departure time), CarrierJumpCancelled (remembering what was left on the clock) and CarrierJump (arrived). Live only.

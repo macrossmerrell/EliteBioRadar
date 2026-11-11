@@ -314,6 +314,8 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Overheat, "", "")));
             svc.InterdictionStarted += () => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Interdiction, "", "")));
+            svc.CombatAlertEvent += detail => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.CombatAlert, "", detail)));
             svc.CarrierJumpEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.CarrierJump, "", detail)));
             svc.TechBrokerEvent += detail => Dispatcher.InvokeAsync(() =>
@@ -379,6 +381,7 @@ namespace EliteBioRadar
                     ["interdiction"] = _w.interdictionVisual,
                     ["interdiction-outcome"] = _w.interdictionOutcomeVisual,
                     ["engineer"] = _w.engineerVisual,
+                    ["combat-alert"] = _w.combatAlertVisual,
                     ["carrier-jump"] = _w.carrierJumpVisual,
                     ["tech-broker"] = _w.techBrokerVisual,
                     ["silent-running"] = _w.silentRunningVisual,
