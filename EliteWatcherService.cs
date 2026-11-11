@@ -121,7 +121,7 @@ namespace EliteBioRadar
         private readonly object _bountyLock = new(); private string _bountyKind = "", _bountyName = "", _bountyVictim = "", _bountyAwarder = ""; private int _bountyCount; private long _bountyReward; private System.Threading.Timer? _bountyTimer;
         public event Action<string, int, int>? PlanetMapped;   // (body short name, probes used, efficiency target) the journal's SAAScanComplete; live only
         public event Action<string, int>? RankedUp;   // (category, new rank number) the journal's Promotion; live only
-        public event Action<string, int, string, string, long>? MissionsChanged;   // ("ACCEPTED" or "COMPLETED", how many in the batch, first mission, its faction, total reward) missions accepted or completed within 1.2 s of each other are one event; live only
+        public event Action<string, int, string, string, long>? MissionsChanged;   // ("ACCEPTED", "COMPLETED", "FAILED", "ABANDONED" or "REDIRECTED", how many in the batch, first mission, its faction, total reward) missions accepted or completed within 1.2 s of each other are one event; live only
         private readonly object _missionLock = new(); private string _missionKind = "", _missionName = "", _missionFaction = ""; private int _missionCount; private long _missionReward; private System.Threading.Timer? _missionTimer;
         public event Action<string, string, string, int, int, int>? MaterialPicked;   // (name, category, internal name, count, stock or -1, cap or -1) a material pickup that starts a new animation (pickups of the same material within 2 s only update the one playing); live only
         public event Action<string, string, string>? ShipLostChanged;   // ("DESTROYED" or "RESTORED", ship name, killer / rebuy text) the journal's Died and Resurrect; live only
@@ -3714,8 +3714,21 @@ namespace EliteBioRadar
                 CodexEntryFound?.Invoke(codexName, codexCat, codexSub);
             }
             // Missions accepted or completed (a mission board can add five at once): folded into one animation when they arrive within 1.2 s of each other. Live only.
-            if (!backfill && evt is "MissionAccepted" or "MissionCompleted")
-                QueueMission(evt == "MissionCompleted" ? "COMPLETED" : "ACCEPTED", obj.Value<string>("LocalisedName") ?? obj.Value<string>("Name") ?? "", obj.Value<string>("Faction") ?? "", obj.Value<long?>("Reward") ?? 0);
+            // Failed and abandoned missions carry the fine instead of a reward; a redirected one names where to go next (carried in the faction slot).
+            if (!backfill && evt is "MissionAccepted" or "MissionCompleted" or "MissionFailed" or "MissionAbandoned" or "MissionRedirected")
+            {
+                string missionName = obj.Value<string>("LocalisedName") ?? obj.Value<string>("Name") ?? "";
+                string missionKind = evt switch { "MissionCompleted" => "COMPLETED", "MissionFailed" => "FAILED", "MissionAbandoned" => "ABANDONED", "MissionRedirected" => "REDIRECTED", _ => "ACCEPTED" };
+                if (evt == "MissionRedirected")
+                {
+                    string newStation = obj.Value<string>("NewDestinationStation") ?? "", newSystem = obj.Value<string>("NewDestinationSystem") ?? "";
+                    QueueMission(missionKind, missionName, newStation + (newStation.Length > 0 && newSystem.Length > 0 ? "  (" + newSystem + ")" : newSystem), 0);
+                }
+                else if (evt is "MissionFailed" or "MissionAbandoned")
+                    QueueMission(missionKind, missionName, "", obj.Value<long?>("Fine") ?? 0);
+                else
+                    QueueMission(missionKind, missionName, obj.Value<string>("Faction") ?? "", obj.Value<long?>("Reward") ?? 0);
+            }
 
             // A planet's detailed surface scan finished: the journal's SAAScanComplete with the probes used and the efficiency target. Live only.
             if (!backfill && evt == "SAAScanComplete")

@@ -63,7 +63,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef Payout =
             new("payout", "Exploration data sold", "Exploration", AnimationSurfaces.Both, 0.85, "", "14|1840000|2310000|4150000", PreviewCycle: new[] { "14|1840000|2310000|4150000", "3|420000|0|420000", "1|96000|310000|406000" });
         public static readonly AnimationDef Mission =
-            new("mission", "Mission accepted / completed", "Missions", AnimationSurfaces.Both, 0.85, "", "ACCEPTED|1|Deliver 24t Biowaste|Lugh Mining Cartel|1250000", PreviewCycle: new[] { "ACCEPTED|1|Deliver 24t Biowaste|Lugh Mining Cartel|1250000", "COMPLETED|1|Deliver 24t Biowaste|Lugh Mining Cartel|1250000", "ACCEPTED|4|Deliver 24t Biowaste|Lugh Mining Cartel|3800000" });
+            new("mission", "Mission accepted / completed / failed / abandoned / redirected", "Missions", AnimationSurfaces.Both, 0.85, "", "ACCEPTED|1|Deliver 24t Biowaste|Lugh Mining Cartel|1250000", PreviewCycle: new[] { "ACCEPTED|1|Deliver 24t Biowaste|Lugh Mining Cartel|1250000", "COMPLETED|1|Deliver 24t Biowaste|Lugh Mining Cartel|1250000", "FAILED|1|Deliver 24t Biowaste||12000", "ABANDONED|1|Deliver 24t Biowaste||4000", "REDIRECTED|1|Deliver 24t Biowaste|Jameson Memorial  (Shinrarta Dezhra)|0", "ACCEPTED|4|Deliver 24t Biowaste|Lugh Mining Cartel|3800000" });
         public static readonly AnimationDef OrganismScan =
             new("organism-scan", "Organism sample 1 / 2 / 3 / genus complete", "Biology", AnimationSurfaces.Both, 0.85, "Bacterium Aurasus", "1", PreviewCycle: new[] { "1", "2", "3", "4" });
         public static readonly AnimationDef ColonyRange =
