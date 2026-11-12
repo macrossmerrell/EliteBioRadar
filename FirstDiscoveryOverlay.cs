@@ -316,6 +316,8 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Interdiction, "", "")));
             svc.OrganicSoldEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.ExobiologySold, "", detail)));
+            svc.CargoSoldEvent += detail => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.TradeProfit, "", detail)));
             svc.CockpitBreachedEvent += () => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.CockpitBreach, "", "")));
             svc.WingCrewEvent += detail => Dispatcher.InvokeAsync(() =>
@@ -389,6 +391,7 @@ namespace EliteBioRadar
                     ["engineer"] = _w.engineerVisual,
                     ["combat-alert"] = _w.combatAlertVisual,
                     ["wing-crew"] = _w.wingCrewVisual,
+                    ["trade-profit"] = _w.tradeProfitVisual,
                     ["exobiology-sold"] = _w.exobiologySoldVisual,
                     ["cockpit-breach"] = _w.cockpitBreachVisual,
                     ["carrier-jump"] = _w.carrierJumpVisual,
