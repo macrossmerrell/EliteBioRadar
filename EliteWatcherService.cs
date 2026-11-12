@@ -112,6 +112,8 @@ namespace EliteBioRadar
         public event Action<string>? CargoSoldEvent;   // the detail for the trade profit animation (MarketSell): item|tonnes|average price paid|sold price per tonne; live only, skipped when no purchase price is known
         public event Action<string>? CrimeEvent;   // the detail for the crime animation: FINE / WANTED (CommitCrime, at most one every 6 s) or PAID (PayFines / PayBounties); live only
         private DateTime _lastCrimeAlert = DateTime.MinValue;
+        public event Action<string>? BodySignalsEvent;   // the detail for the body signals animation (FSSBodySignals / SAASignalsFound): body|TYPE:count;...; live only, once per body and set of counts
+        private readonly HashSet<string> _signalsShown = new();
         public event Action? CockpitBreachedEvent;   // the journal's CockpitBreached; live only
         private readonly List<string> _wingMembers = new();   // the pilots in your wing, kept so a leave can say who went
         private DateTime _lastAttackAlert = DateTime.MinValue, _lastLockAlert = DateTime.MinValue, _lastScanAlert = DateTime.MinValue;
@@ -3831,6 +3833,24 @@ namespace EliteBioRadar
             }
             if (!backfill && (evt == "PayFines" || evt == "PayBounties") && (obj.Value<long?>("Amount") ?? 0) > 0)
                 CrimeEvent?.Invoke($"PAID|{(evt == "PayFines" ? "FINES CLEARED" : "BOUNTIES CLEARED")}|{Clean(obj.Value<string>("Faction") ?? "")}|{obj.Value<long?>("Amount")}|{(evt == "PayFines" ? "FINES PAID" : "BOUNTIES PAID")}");
+            if (!backfill && (evt == "FSSBodySignals" || evt == "SAASignalsFound") && obj["Signals"] is Newtonsoft.Json.Linq.JArray sigArr && sigArr.Count > 0)
+            {
+                var parts = new List<string>();
+                foreach (var s in sigArr)
+                {
+                    int cnt = s.Value<int?>("Count") ?? 0;
+                    string type = Clean(s.Value<string>("Type_Localised") ?? PrettyJournalName((s.Value<string>("Type") ?? "").Trim('$', ';')));
+                    if (cnt > 0 && type.Length > 0) parts.Add($"{type}:{cnt}");
+                }
+                string sigBody = obj.Value<string>("BodyName") ?? "";
+                string sigShort = GetShortBodyName(sigBody, StarSystem ?? "");
+                string sigKey = $"{StarSystem}|{sigBody}|{string.Join(";", parts)}";
+                if (parts.Count > 0 && _signalsShown.Add(sigKey))
+                {
+                    if (_signalsShown.Count > 300) { _signalsShown.Clear(); _signalsShown.Add(sigKey); }
+                    BodySignalsEvent?.Invoke($"{Clean(sigShort.Length > 0 ? sigShort : sigBody)}|{string.Join(";", parts)}");
+                }
+            }
             if (!backfill && evt == "CockpitBreached") CockpitBreachedEvent?.Invoke();
 
             // Combat alerts. UnderAttack is written for every volley, so it plays at most once in 25 s; ShipTargetted plays on a fresh lock (scan stage 0); Scanned when another ship scans you. Live only.
