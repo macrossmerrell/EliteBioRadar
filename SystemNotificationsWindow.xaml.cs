@@ -42,6 +42,7 @@ namespace EliteBioRadar
                 ["engineer"] = engineerVisual,
                 ["combat-alert"] = combatAlertVisual,
                 ["wing-crew"] = wingCrewVisual,
+                ["crime"] = crimeVisual,
                 ["trade-profit"] = tradeProfitVisual,
                 ["exobiology-sold"] = exobiologySoldVisual,
                 ["cockpit-breach"] = cockpitBreachVisual,

@@ -39,6 +39,7 @@
         <local:EngineerVisual x:Name="engineerVisual"/>
         <local:CombatAlertVisual x:Name="combatAlertVisual"/>
         <local:WingCrewVisual x:Name="wingCrewVisual"/>
+        <local:CrimeVisual x:Name="crimeVisual"/>
         <local:TradeProfitVisual x:Name="tradeProfitVisual"/>
         <local:ExobiologySoldVisual x:Name="exobiologySoldVisual"/>
         <local:CockpitBreachVisual x:Name="cockpitBreachVisual"/>

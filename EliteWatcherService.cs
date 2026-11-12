@@ -110,6 +110,8 @@ namespace EliteBioRadar
         public event Action<string>? WingCrewEvent;   // the detail for the wing / crew animation: INVITE, ADD, JOIN, LEAVE (WingInvite / WingAdd / WingJoin / WingLeave) or CREW (CrewMemberJoins); live only
         public event Action<string>? OrganicSoldEvent;   // the detail for the exobiology sold animation (SellOrganicData): count|first species|base value|bonus; live only
         public event Action<string>? CargoSoldEvent;   // the detail for the trade profit animation (MarketSell): item|tonnes|average price paid|sold price per tonne; live only, skipped when no purchase price is known
+        public event Action<string>? CrimeEvent;   // the detail for the crime animation: FINE / WANTED (CommitCrime, at most one every 6 s) or PAID (PayFines / PayBounties); live only
+        private DateTime _lastCrimeAlert = DateTime.MinValue;
         public event Action? CockpitBreachedEvent;   // the journal's CockpitBreached; live only
         private readonly List<string> _wingMembers = new();   // the pilots in your wing, kept so a leave can say who went
         private DateTime _lastAttackAlert = DateTime.MinValue, _lastLockAlert = DateTime.MinValue, _lastScanAlert = DateTime.MinValue;
@@ -3818,6 +3820,17 @@ namespace EliteBioRadar
                 string item = obj.Value<string>("Type_Localised") ?? PrettyJournalName(obj.Value<string>("Type") ?? "");
                 CargoSoldEvent?.Invoke($"{Clean(item)}|{obj.Value<long?>("Count")}|{obj.Value<long?>("AvgPricePaid")}|{obj.Value<long?>("SellPrice") ?? 0}");
             }
+            if (!backfill && evt == "CommitCrime" && (DateTime.UtcNow - _lastCrimeAlert).TotalSeconds >= 6)
+            {
+                long bounty = obj.Value<long?>("Bounty") ?? 0, fine = obj.Value<long?>("Fine") ?? 0;
+                if (bounty > 0 || fine > 0)
+                {
+                    _lastCrimeAlert = DateTime.UtcNow;
+                    CrimeEvent?.Invoke($"{(bounty > 0 ? "WANTED" : "FINE")}|{Clean(PrettyJournalName(obj.Value<string>("CrimeType") ?? ""))}|{Clean(obj.Value<string>("Faction") ?? "")}|{(bounty > 0 ? bounty : fine)}");
+                }
+            }
+            if (!backfill && (evt == "PayFines" || evt == "PayBounties") && (obj.Value<long?>("Amount") ?? 0) > 0)
+                CrimeEvent?.Invoke($"PAID|{(evt == "PayFines" ? "FINES CLEARED" : "BOUNTIES CLEARED")}|{Clean(obj.Value<string>("Faction") ?? "")}|{obj.Value<long?>("Amount")}|{(evt == "PayFines" ? "FINES PAID" : "BOUNTIES PAID")}");
             if (!backfill && evt == "CockpitBreached") CockpitBreachedEvent?.Invoke();
 
             // Combat alerts. UnderAttack is written for every volley, so it plays at most once in 25 s; ShipTargetted plays on a fresh lock (scan stage 0); Scanned when another ship scans you. Live only.
