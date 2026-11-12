@@ -112,6 +112,7 @@ namespace EliteBioRadar
         public event Action<string>? CargoSoldEvent;   // the detail for the trade profit animation (MarketSell): item|tonnes|average price paid|sold price per tonne; live only, skipped when no purchase price is known
         public event Action<string>? CrimeEvent;   // the detail for the crime animation: FINE / WANTED (CommitCrime, at most one every 6 s) or PAID (PayFines / PayBounties); live only
         private DateTime _lastCrimeAlert = DateTime.MinValue;
+        public event Action<string>? DiscoveryScanEvent;   // the detail for the discovery scan animation (FSSDiscoveryScan, the honk): bodyCount|system; live only
         public event Action<string>? BodySignalsEvent;   // the detail for the body signals animation (FSSBodySignals / SAASignalsFound): body|TYPE:count;...; live only, once per body and set of counts
         private readonly HashSet<string> _signalsShown = new();
         public event Action? CockpitBreachedEvent;   // the journal's CockpitBreached; live only
@@ -3851,6 +3852,8 @@ namespace EliteBioRadar
                     BodySignalsEvent?.Invoke($"{Clean(sigShort.Length > 0 ? sigShort : sigBody)}|{string.Join(";", parts)}");
                 }
             }
+            if (!backfill && evt == "FSSDiscoveryScan" && (obj.Value<int?>("BodyCount") ?? 0) > 0)
+                DiscoveryScanEvent?.Invoke($"{obj.Value<int?>("BodyCount")}|{Clean(obj.Value<string>("SystemName") ?? StarSystem ?? "")}");
             if (!backfill && evt == "CockpitBreached") CockpitBreachedEvent?.Invoke();
 
             // Combat alerts. UnderAttack is written for every volley, so it plays at most once in 25 s; ShipTargetted plays on a fresh lock (scan stage 0); Scanned when another ship scans you. Live only.
