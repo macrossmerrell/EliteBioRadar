@@ -45,7 +45,7 @@ namespace EliteBioRadar
             ("Combat",              new[] { "combat-alert", "interdiction", "interdiction-outcome", "crime", "bounty", "fighter", "cockpit-breach", "ship-lost" }),
             ("Ship controls",       new[] { "landing-gear", "hardpoints", "cargo-scoop", "headlights", "night-vision", "flight-assist", "silent-running", "combat-mode", "analysis-mode" }),
             ("Ship alerts",         new[] { "shields", "hull-damage", "low-fuel", "overheat", "mass-lock", "fsd-cooldown" }),
-            ("Cargo and trade",     new[] { "mining", "cargo", "trade-profit" }),
+            ("Cargo and trade",     new[] { "mining", "cargo", "search-rescue", "trade-profit" }),
             ("Missions",            new[] { "mission" }),
             ("Stations",            new[] { "docking-request", "docked" }),
             ("Commander",           new[] { "rank-up", "vitals", "thermal", "wing-crew", "engineer", "tech-broker" }),

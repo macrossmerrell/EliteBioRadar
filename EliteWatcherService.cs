@@ -114,6 +114,7 @@ namespace EliteBioRadar
         private DateTime _lastCrimeAlert = DateTime.MinValue;
         public event Action<string>? DiscoveryScanEvent;   // the detail for the discovery scan animation (FSSDiscoveryScan, the honk): bodyCount|system; live only
         public event Action<string>? MiningEvent;   // the detail for the mining animation (ProspectedAsteroid / AsteroidCracked / MiningRefined): PROSPECT|grade|mat:pct;... / CRACKED| / REFINED|item|tonnes; live only
+        public event Action<string>? SearchRescueEvent;   // the detail for the search and rescue animation (SearchAndRescue): RESCUE|RECOVER|count|item|reward; live only
         public event Action<string>? ShipCallEvent;   // the detail for the ship dismissed / recalled animation (Liftoff / Touchdown with PlayerControlled false): DISMISS or RECALL; live only
         public event Action<string>? NavBeaconEvent;   // the detail for the nav beacon animation (NavBeaconScan): bodyCount|system; live only
         public event Action<string>? SignalSourceEvent;   // the detail for the signal source animation (FSSSignalDiscovered batched, and USSDrop): KIND|NAME|DETAIL|MORE|THREAT; live only
@@ -3908,6 +3909,14 @@ namespace EliteBioRadar
                 // The recall normally announced itself when the gear went down; the Touchdown only plays it if that was missed.
                 if (evt == "Touchdown") { if ((DateTime.UtcNow - _recallAnnouncedAt).TotalSeconds > 120) { _recallAnnouncedAt = DateTime.UtcNow; ShipCallEvent?.Invoke("RECALL"); } }
                 else ShipCallEvent?.Invoke("DISMISS");
+            }
+            if (!backfill && evt == "SearchAndRescue" && (obj.Value<int?>("Count") ?? 0) > 0)
+            {
+                // Occupied escape pods are the rescue; black boxes, wreckage, personal effects and empty pods are recovered goods.
+                string sarName = obj.Value<string>("Name") ?? "";
+                string sarItem = Clean(obj.Value<string>("Name_Localised") ?? PrettyJournalName(sarName.Trim('$', ';')));
+                bool sarPod = sarName.Contains("occupied", StringComparison.OrdinalIgnoreCase) || sarItem.Contains("Occupied", StringComparison.OrdinalIgnoreCase);
+                SearchRescueEvent?.Invoke($"{(sarPod ? "RESCUE" : "RECOVER")}|{obj.Value<int?>("Count")}|{sarItem}|{obj.Value<long?>("Reward") ?? 0}");
             }
             if (!backfill && evt == "NavBeaconScan" && (obj.Value<int?>("NumBodies") ?? 0) > 0)
                 NavBeaconEvent?.Invoke($"{obj.Value<int?>("NumBodies")}|{Clean(StarSystem ?? "")}");
