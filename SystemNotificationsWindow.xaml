@@ -64,6 +64,7 @@
         <local:MilestoneVisual x:Name="milestoneVisual"/>
         <local:MaterialDiscoveredVisual x:Name="materialDiscoveredVisual"/>
         <local:ScreenshotVisual x:Name="screenshotVisual"/>
+        <local:SuitLoadoutVisual x:Name="suitLoadoutVisual"/>
         <local:SettlementVisual x:Name="settlementVisual"/>
         <local:SynthesisVisual x:Name="synthesisVisual"/>
         <local:CommunityGoalVisual x:Name="communityGoalVisual"/>

@@ -139,6 +139,7 @@ namespace EliteBioRadar
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
         public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
         private DateTime _lastModuleAlert = DateTime.MinValue;
+        public event Action<string>? SuitLoadoutEvent;   // the detail for the suit loadout / consumable animation: KIND|name|second line|primary weapon|sidearm (KIND SW, NEW, DEL, CELL, KIT, USE); live only
         public event Action<string>? ScreenshotEvent;   // the detail for the screenshot animation: frame|body|second line|surface; live only
         private DateTime _lastScreenshotAlert = DateTime.MinValue;
         public event Action<string>? MaterialDiscoveredEvent;   // the detail for the first-find card: name|category|internal name|discovery number; live only
@@ -4232,6 +4233,32 @@ namespace EliteBioRadar
             }
             if (!backfill && evt == "MaterialDiscovered")
                 _pendingDiscovery = (obj.Value<string>("Name") ?? "", obj.Value<int?>("DiscoveryNumber") ?? 0, DateTime.UtcNow);
+            if (!backfill && (evt == "SwitchSuitLoadout" || evt == "CreateSuitLoadout" || evt == "DeleteSuitLoadout"))
+            {
+                string loName = Clean(obj.Value<string>("LoadoutName") ?? "");
+                string suitName = Clean(GearName(obj.Value<string>("SuitName") ?? "", obj.Value<string>("SuitName_Localised"))).ToUpperInvariant();
+                string w1 = "", w2 = "";
+                if (obj["Modules"] is JArray mods)
+                    foreach (var m in mods)
+                    {
+                        var slot = m.Value<string>("SlotName") ?? "";
+                        if (!slot.Contains("Weapon")) continue;
+                        var wn = Clean(m.Value<string>("ModuleName_Localised") ?? PrettyJournalName(m.Value<string>("ModuleName") ?? ""));
+                        if (w1.Length == 0) w1 = wn; else if (w2.Length == 0) w2 = wn;
+                    }
+                int modCount = (obj["SuitMods"] as JArray)?.Count ?? 0;
+                string loSub = evt == "DeleteSuitLoadout" ? suitName
+                    : evt == "CreateSuitLoadout" ? suitName + (modCount > 0 ? $"  {modCount} MOD{(modCount == 1 ? "" : "S")}" : "")
+                    : (w1.Length > 0 && w2.Length > 0 ? $"{w1} + {w2}".ToUpperInvariant() : suitName);
+                string loKind = evt == "DeleteSuitLoadout" ? "DEL" : evt == "CreateSuitLoadout" ? "NEW" : "SW";
+                SuitLoadoutEvent?.Invoke($"{loKind}|{(loName.Length > 0 ? loName : suitName)}|{loSub}|{(loKind == "DEL" ? "" : w1)}|{(loKind == "DEL" ? "" : w2)}");
+            }
+            if (!backfill && evt == "UseConsumable")
+            {
+                string cKey = (obj.Value<string>("Name") ?? "").ToLowerInvariant();
+                string cKind = cKey == "energycell" ? "CELL" : cKey == "healthpack" ? "KIT" : "USE";
+                SuitLoadoutEvent?.Invoke($"{cKind}|{Clean(obj.Value<string>("Name_Localised") ?? PrettyJournalName(cKey))}|CONSUMABLE||");
+            }
             if (!backfill && evt == "LaunchDrone")
             {
                 string lt = (obj.Value<string>("Type") ?? "").Trim();

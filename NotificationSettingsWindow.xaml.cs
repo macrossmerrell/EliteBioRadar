@@ -39,7 +39,7 @@ namespace EliteBioRadar
             ("Firsts",              new[] { "first-discovery", "first-footfall" }),
             ("Travel",              new[] { "route", "hyperspace-jump", "supercharge", "arrival", "fuel-scoop", "carrier-jump", "carrier-panel","supercruise", "supercruise-overdrive", "supercruise-assist", "supercruise-exit" }),
             ("Atmosphere",          new[] { "descent", "climb", "atmospheric-jump" }),
-            ("Surface and vehicles", new[] { "approach-settlement", "landed", "liftoff", "srv", "ship-call", "embark", "disembark", "drive-assist", "handbrake", "turret" }),
+            ("Surface and vehicles", new[] { "approach-settlement", "landed", "liftoff", "srv", "ship-call", "embark", "disembark", "suit-loadout", "drive-assist", "handbrake", "turret" }),
             ("Exploration",         new[] { "discovery-scan", "signal-source", "nav-beacon", "data-link", "fss-complete", "body-signals", "planet-mapped", "codex-entry", "material", "material-discovered", "screenshot", "synthesis", "payout" }),
             ("Biology",             new[] { "organism-scan", "colony-range", "exobiology-sold" }),
             ("Combat",              new[] { "combat-alert", "target-scan","interdiction", "interdiction-outcome", "crime", "bounty", "fighter", "cockpit-breach", "self-destruct", "ship-lost" }),
