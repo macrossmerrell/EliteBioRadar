@@ -146,6 +146,8 @@ namespace EliteBioRadar
         public event Action<string>? SynthesisEvent;       // the detail for the synthesis animation: RECIPE|grade|mat:count;...; live only
         public event Action<string>? CommunityGoalEvent;   // the detail for the community goal animation: JOIN|goal|system, TIER|goal|tier|contributors or REWARD|goal|credits; live only
         private readonly Dictionary<int, int> _goalTier = new();   // the tier reached per community goal, so only a rise is announced
+        public event Action<string>? SettlementEvent;   // the detail for the approach settlement animation: NAME|faction|government|economy|body|services; live only
+        private string _lastSettlement = ""; private DateTime _lastSettlementAt = DateTime.MinValue;
         private double _svcFuel;
         private int _svcRepairItems;
         private System.Threading.Timer? _svcTimer;
@@ -4097,6 +4099,20 @@ namespace EliteBioRadar
                     _goalTier[cgid] = Math.Max(tierNow, known ? tierBefore : 0);
                     if (!backfill && known && tierNow > tierBefore && tierNow <= 5)
                         CommunityGoalEvent?.Invoke($"TIER|{Clean(cg.Value<string>("Title") ?? "")}|{tierNow}|{cg.Value<long?>("NumContributors") ?? 0}");
+                }
+            }
+            if (!backfill && evt == "ApproachSettlement" && obj["MarketID"] != null)
+            {
+                // Only places with a market (the signal sites that fire this too have their own animation); the same place is not announced again within two minutes.
+                string settleName = Clean(obj.Value<string>("Name") ?? "");
+                if (settleName.Length > 0 && !(settleName == _lastSettlement && (DateTime.UtcNow - _lastSettlementAt).TotalSeconds < 120))
+                {
+                    _lastSettlement = settleName; _lastSettlementAt = DateTime.UtcNow;
+                    var have = new HashSet<string>((obj["StationServices"] as Newtonsoft.Json.Linq.JArray)?.Select(s => (string?)s ?? "") ?? Enumerable.Empty<string>());
+                    var letters = new System.Text.StringBuilder();
+                    foreach (var (svcName, letter) in new[] { ("commodities", 'M'), ("outfitting", 'O'), ("shipyard", 'Y'), ("engineer", 'E'), ("refuel", 'F'), ("repair", 'R'), ("rearm", 'A'), ("missions", 'P'), ("searchrescue", 'S') })
+                        if (have.Contains(svcName) && letters.Length < 6) letters.Append(letter);
+                    SettlementEvent?.Invoke($"{settleName}|{Clean(obj["StationFaction"]?.Value<string>("Name") ?? "")}|{Clean(obj.Value<string>("StationGovernment_Localised") ?? "")}|{Clean(obj.Value<string>("StationEconomy_Localised") ?? "")}|{Clean(obj.Value<string>("BodyName") ?? "")}|{letters}");
                 }
             }
             if (!backfill && evt == "CommunityGoalJoin")
