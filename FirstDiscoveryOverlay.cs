@@ -330,6 +330,8 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.CommunityGoal, "", detail)));
             svc.SettlementEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Settlement, "", detail)));
+            svc.AfmuEvent += detail => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Afmu, "", detail)));
             svc.TargetEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Target, "", detail)));
             svc.DataLinkEvent += detail => Dispatcher.InvokeAsync(() =>
@@ -461,6 +463,7 @@ namespace EliteBioRadar
                     ["session"] = _w.sessionVisual,
                     ["data-link"] = _w.dataLinkVisual,
                     ["target-scan"] = _w.targetVisual,
+                    ["afmu-repair"] = _w.afmuVisual,
                     ["approach-settlement"] = _w.settlementVisual,
                     ["synthesis"] = _w.synthesisVisual,
                     ["community-goal"] = _w.communityGoalVisual,

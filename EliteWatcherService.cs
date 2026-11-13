@@ -139,6 +139,33 @@ namespace EliteBioRadar
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
         public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
         private DateTime _lastModuleAlert = DateTime.MinValue;
+        public event Action<string>? AfmuEvent;   // the detail for the AFMU repair receipt: total|partly repaired|name~health percent;...; one run of repairs, batched; live only
+        private readonly object _afmuGate = new();
+        private readonly List<(string Name, int Health)> _afmuRows = new();
+        private DateTime _afmuFirst = DateTime.MinValue;
+        private System.Threading.Timer? _afmuTimer;
+        private void AddAfmuRepair(string name, double health)
+        {
+            lock (_afmuGate)
+            {
+                if (_afmuRows.Count == 0) _afmuFirst = DateTime.UtcNow;
+                int i = _afmuRows.FindIndex(r => r.Name == name), hp = (int)Math.Round(Math.Clamp(health, 0, 1) * 100);
+                if (i >= 0) _afmuRows[i] = (name, hp); else _afmuRows.Add((name, hp));
+                // The AFMU works through the damaged modules one by one, seconds apart: wait for a quiet spell (or 90 s at most) and show the run as one receipt.
+                double due = Math.Clamp(90000 - (DateTime.UtcNow - _afmuFirst).TotalMilliseconds, 500, 20000);
+                _afmuTimer?.Dispose();
+                _afmuTimer = new System.Threading.Timer(_ =>
+                {
+                    string detail;
+                    lock (_afmuGate)
+                    {
+                        detail = $"{_afmuRows.Count}|{_afmuRows.Count(r => r.Health < 100)}|{string.Join(";", _afmuRows.Take(5).Select(r => $"{r.Name}~{r.Health}"))}";
+                        _afmuRows.Clear();
+                    }
+                    AfmuEvent?.Invoke(detail);
+                }, null, (int)due, System.Threading.Timeout.Infinite);
+            }
+        }
         public event Action<string>? TargetEvent;   // the detail for the target dossier animation: LEGAL|ship|pilot|rank|faction|shield|hull|bounty; live only, at scan stage 3
         private string _lastTargetKey = ""; private DateTime _lastTargetAt = DateTime.MinValue;
         public event Action<string>? DataLinkEvent;   // the detail for the data link animation: KIND|target|chip line|payout; live only
@@ -4174,6 +4201,11 @@ namespace EliteBioRadar
                     var inv = System.Globalization.CultureInfo.InvariantCulture;
                     TargetEvent?.Invoke($"{(obj.Value<string>("LegalStatus") ?? "").ToUpperInvariant()}|{tShip}|{(tPilot.Length > 0 ? tPilot : "UNKNOWN PILOT")}|{Clean(obj.Value<string>("PilotRank") ?? "")}|{Clean(obj.Value<string>("Faction") ?? "")}|{(obj.Value<double?>("ShieldHealth") ?? 100).ToString("0", inv)}|{(obj.Value<double?>("HullHealth") ?? 100).ToString("0", inv)}|{obj.Value<long?>("Bounty") ?? 0}");
                 }
+            }
+            if (!backfill && evt == "AfmuRepairs")
+            {
+                string afName = Clean(obj.Value<string>("Module_Localised") ?? PrettyJournalName((obj.Value<string>("Module") ?? "").Trim('$', ';'))).ToUpperInvariant();
+                if (afName.Length > 0) AddAfmuRepair(afName, obj.Value<double?>("Health") ?? 1.0);
             }
             if (!backfill && evt == "DataScanned")
             {
