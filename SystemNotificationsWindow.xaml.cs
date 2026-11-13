@@ -60,6 +60,7 @@ namespace EliteBioRadar
                 ["contact"] = contactVisual,
                 ["carrier-panel"] = carrierPanelVisual,
                 ["session"] = sessionVisual,
+                ["data-link"] = dataLinkVisual,
                 ["approach-settlement"] = settlementVisual,
                 ["synthesis"] = synthesisVisual,
                 ["community-goal"] = communityGoalVisual,

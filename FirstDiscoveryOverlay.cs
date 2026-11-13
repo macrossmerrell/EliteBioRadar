@@ -330,6 +330,8 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.CommunityGoal, "", detail)));
             svc.SettlementEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Settlement, "", detail)));
+            svc.DataLinkEvent += detail => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.DataLink, "", detail)));
             svc.SessionEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Session, "", detail)));
             svc.CarrierPanelEvent += detail => Dispatcher.InvokeAsync(() =>
@@ -455,6 +457,7 @@ namespace EliteBioRadar
                     ["contact"] = _w.contactVisual,
                     ["carrier-panel"] = _w.carrierPanelVisual,
                     ["session"] = _w.sessionVisual,
+                    ["data-link"] = _w.dataLinkVisual,
                     ["approach-settlement"] = _w.settlementVisual,
                     ["synthesis"] = _w.synthesisVisual,
                     ["community-goal"] = _w.communityGoalVisual,

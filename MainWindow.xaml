@@ -337,6 +337,7 @@
         <local:ContactVisual x:Name="contactVisual"/>
         <local:CarrierPanelVisual x:Name="carrierPanelVisual"/>
         <local:SessionVisual x:Name="sessionVisual"/>
+        <local:DataLinkVisual x:Name="dataLinkVisual"/>
         <local:SettlementVisual x:Name="settlementVisual"/>
         <local:SynthesisVisual x:Name="synthesisVisual"/>
         <local:CommunityGoalVisual x:Name="communityGoalVisual"/>

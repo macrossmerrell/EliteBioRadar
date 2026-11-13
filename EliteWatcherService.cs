@@ -139,6 +139,8 @@ namespace EliteBioRadar
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
         public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
         private DateTime _lastModuleAlert = DateTime.MinValue;
+        public event Action<string>? DataLinkEvent;   // the detail for the data link animation: KIND|target|chip line|payout; live only
+        private string _lastDataType = ""; private DateTime _lastDataAt = DateTime.MinValue;
         public event Action<string>? SessionEvent;   // the detail for the session licence animation: KIND|commander|chip line|mode|credits|combat|trade|explore|exobiologist|group; live only
         private readonly int[] _sessionRanks = { -1, -1, -1, -1 };   // combat, trade, explore, exobiologist, from the Rank line the game writes before LoadGame
         private DateTime _sessionStart = DateTime.MinValue;
@@ -4155,6 +4157,25 @@ namespace EliteBioRadar
                 string mKind = chan switch { "player" or "friend" => "DM", "wing" => "WING", "squadron" => "SQ", _ => "" };
                 if (mKind.Length > 0 && from.Length > 0 && msg.Length > 0)
                     ContactEvent?.Invoke($"{mKind}|{(from.StartsWith("CMDR ", StringComparison.OrdinalIgnoreCase) ? from : "CMDR " + from)}|{(mKind == "DM" ? "DIRECT" : mKind == "WING" ? "WING" : "SQUADRON")}|{msg}");
+            }
+            if (!backfill && evt == "DataScanned")
+            {
+                string dType = obj.Value<string>("Type") ?? "", dName = Clean(obj.Value<string>("Type_Localised") ?? PrettyJournalName(dType.Trim('$', ';').Replace("Datascan_", "")));
+                // The same target scanned again straight away is the same moment.
+                if (dName.Length > 0 && !(dName == _lastDataType && (DateTime.UtcNow - _lastDataAt).TotalSeconds < 3))
+                {
+                    _lastDataType = dName; _lastDataAt = DateTime.UtcNow;
+                    string dKind = dType.Contains("DataPoint", StringComparison.OrdinalIgnoreCase) ? "POINT" : dType.Contains("Wreck", StringComparison.OrdinalIgnoreCase) ? "WRECK" : dType.Contains("Uplink", StringComparison.OrdinalIgnoreCase) ? "UPLINK" : "LOG";
+                    string dSub = dKind switch { "POINT" => "TELEMETRY LINK ESTABLISHED", "WRECK" => "DATA RECOVERED", "UPLINK" => "UPLINK ACCESSED", _ => "DOWNLOAD COMPLETE" };
+                    DataLinkEvent?.Invoke($"{dKind}|{dName}|{dSub}|");
+                }
+            }
+            if (!backfill && evt == "DatalinkVoucher")
+            {
+                long reward = obj.Value<long?>("Reward") ?? 0;
+                string victim = Clean(obj.Value<string>("VictimFaction") ?? ""), payee = Clean(obj.Value<string>("PayeeFaction") ?? "");
+                string pair = victim.Length > 0 && payee.Length > 0 ? $"{victim} TO {payee}" : (payee.Length > 0 ? payee : "INTEL PACKAGE");
+                DataLinkEvent?.Invoke($"INTEL|{pair}|{(reward > 0 ? "+" + Credits(reward) + " VOUCHER" : "VOUCHER EARNED")}|{reward}");
             }
             if (evt == "Rank" && obj["Combat"] != null)
             {
