@@ -143,6 +143,9 @@ namespace EliteBioRadar
         // Servicing at a station writes several journal lines within a second or so; gather them and raise one animation after a short pause.
         private readonly object _svcGate = new();
         private readonly List<(char Key, string Label, string Amount, long Cost)> _svcRows = new();
+        public event Action<string>? SynthesisEvent;       // the detail for the synthesis animation: RECIPE|grade|mat:count;...; live only
+        public event Action<string>? CommunityGoalEvent;   // the detail for the community goal animation: JOIN|goal|system, TIER|goal|tier|contributors or REWARD|goal|credits; live only
+        private readonly Dictionary<int, int> _goalTier = new();   // the tier reached per community goal, so only a rise is announced
         private double _svcFuel;
         private int _svcRepairItems;
         private System.Threading.Timer? _svcTimer;
@@ -4071,6 +4074,35 @@ namespace EliteBioRadar
                         break;
                 }
             }
+            if (!backfill && evt == "Synthesis")
+            {
+                string recipe = Clean(obj.Value<string>("Name") ?? "");
+                if (recipe.Length > 0)
+                {
+                    int synthGrade = recipe.EndsWith("Premium", StringComparison.OrdinalIgnoreCase) ? 3 : recipe.EndsWith("Standard", StringComparison.OrdinalIgnoreCase) ? 2 : 1;
+                    var synthMats = obj["Materials"] is Newtonsoft.Json.Linq.JArray sm
+                        ? string.Join(";", sm.Select(m => $"{Clean(PrettyJournalName(m.Value<string>("Name") ?? ""))}:{m.Value<int?>("Count") ?? 1}").Where(s => !s.StartsWith(":")))
+                        : "";
+                    SynthesisEvent?.Invoke($"{recipe}|{synthGrade}|{synthMats}");
+                }
+            }
+            if (evt == "CommunityGoal" && obj["CurrentGoals"] is Newtonsoft.Json.Linq.JArray goals)
+            {
+                foreach (var cg in goals)
+                {
+                    int cgid = cg.Value<int?>("CGID") ?? 0;
+                    string tierText = cg.Value<string>("TierReached") ?? "";
+                    int tierNow = int.TryParse(new string(tierText.Where(char.IsDigit).ToArray()), out int tn) ? tn : 0;
+                    bool known = _goalTier.TryGetValue(cgid, out int tierBefore);
+                    _goalTier[cgid] = Math.Max(tierNow, known ? tierBefore : 0);
+                    if (!backfill && known && tierNow > tierBefore && tierNow <= 5)
+                        CommunityGoalEvent?.Invoke($"TIER|{Clean(cg.Value<string>("Title") ?? "")}|{tierNow}|{cg.Value<long?>("NumContributors") ?? 0}");
+                }
+            }
+            if (!backfill && evt == "CommunityGoalJoin")
+                CommunityGoalEvent?.Invoke($"JOIN|{Clean(obj.Value<string>("Name") ?? "")}|{Clean(obj.Value<string>("System") ?? "")}");
+            if (!backfill && evt == "CommunityGoalReward")
+                CommunityGoalEvent?.Invoke($"REWARD|{Clean(obj.Value<string>("Name") ?? "")}|{obj.Value<long?>("Reward") ?? 0}");
             if (!backfill && (evt == "ShipyardBuy" || evt == "ShipyardNew" || evt == "ShipyardSwap" || evt == "ShipyardTransfer"))
             {
                 string yardShip = ShipName(obj.Value<string>("ShipType_Localised") ?? obj.Value<string>("ShipType") ?? "");

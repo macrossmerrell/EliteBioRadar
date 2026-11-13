@@ -50,6 +50,8 @@
         <local:ShipyardVisual x:Name="shipyardVisual"/>
         <local:ModuleVisual x:Name="moduleVisual"/>
         <local:ServicesVisual x:Name="servicesVisual"/>
+        <local:SynthesisVisual x:Name="synthesisVisual"/>
+        <local:CommunityGoalVisual x:Name="communityGoalVisual"/>
         <local:DiscoveryScanVisual x:Name="discoveryScanVisual"/>
         <local:CrimeVisual x:Name="crimeVisual"/>
         <local:TradeProfitVisual x:Name="tradeProfitVisual"/>

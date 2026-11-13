@@ -324,6 +324,10 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.DiscoveryScan, "", detail)));
             svc.ModuleEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Module, "", detail)));
+            svc.SynthesisEvent += detail => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Synthesis, "", detail)));
+            svc.CommunityGoalEvent += detail => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.CommunityGoal, "", detail)));
             svc.ServicesEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Services, "", detail)));
             svc.ShipyardEvent += detail => Dispatcher.InvokeAsync(() =>
@@ -428,6 +432,8 @@ namespace EliteBioRadar
                     ["shipyard"] = _w.shipyardVisual,
                     ["module"] = _w.moduleVisual,
                     ["services"] = _w.servicesVisual,
+                    ["synthesis"] = _w.synthesisVisual,
+                    ["community-goal"] = _w.communityGoalVisual,
                     ["discovery-scan"] = _w.discoveryScanVisual,
                     ["crime"] = _w.crimeVisual,
                     ["trade-profit"] = _w.tradeProfitVisual,
