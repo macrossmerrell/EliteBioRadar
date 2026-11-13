@@ -70,7 +70,7 @@ namespace EliteBioRadar
             dc.PushTransform(new TranslateTransform(px, py));
             dc.PushTransform(new ScaleTransform(k, k));
 
-            DrawSpaced(dc, secs.ToString("00", CultureInfo.InvariantCulture), MonoFace, 48, secs <= 5 ? WhiteBrush2 : RedBrush, SceneW / 2, Base - 42, 0.02, Phase(t, 0.1, 0.3));
+            DrawSpaced(dc, secs.ToString("00", CultureInfo.InvariantCulture), MonoFace, 48, secs <= 5 ? WhiteBrush2 : RedBrush, SceneW / 2, Base - 46.5, 0.02, Phase(t, 0.1, 0.3));
 
             string l1 = "SELF DESTRUCT INITIATED", l2 = secs > 0 ? "DETONATION IN " + secs.ToString(CultureInfo.InvariantCulture) + (secs == 1 ? " SECOND" : " SECONDS") : "DETONATION";
             double pa = Phase(t, 0.3, 0.4);

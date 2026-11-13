@@ -137,6 +137,18 @@ namespace EliteBioRadar
         private readonly Dictionary<string, (string progress, int rank)> _engineerState = new();
         private static string PrettyJournalName(string s) =>
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
+        public event Action<string>? ShipyardEvent;   // the detail for the shipyard animation (ShipyardBuy / New / Swap / Transfer): BUY|ship|price, NEW|ship, SWAP|ship|old, XFER|ship|system|ly|price|seconds; live only
+        private DateTime _lastShipBought = DateTime.MinValue;
+        // The journal names ships by id (cobramkiii, type9, federation_dropship); the localised name is used when the event has it, and this table covers the ids whose plain spelling would read badly.
+        private static readonly Dictionary<string, string> ShipNames = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["type6"] = "Type-6 Transporter", ["type7"] = "Type-7 Transporter", ["type9"] = "Type-9 Heavy", ["type9_military"] = "Type-10 Defender", ["typex"] = "Alliance Chieftain", ["typex_2"] = "Alliance Crusader", ["typex_3"] = "Alliance Challenger",
+            ["krait_light"] = "Krait Phantom", ["krait_mkii"] = "Krait Mk II", ["diamondback"] = "Diamondback Scout", ["diamondbackxl"] = "Diamondback Explorer", ["empire_courier"] = "Imperial Courier", ["empire_eagle"] = "Imperial Eagle",
+            ["empire_trader"] = "Imperial Clipper", ["cutter"] = "Imperial Cutter", ["federation_dropship"] = "Federal Dropship", ["federation_dropship_mkii"] = "Federal Assault Ship", ["federation_gunship"] = "Federal Gunship",
+            ["federation_corvette"] = "Federal Corvette", ["independant_trader"] = "Keelback", ["asp_scout"] = "Asp Scout", ["belugaliner"] = "Beluga Liner", ["ferdelance"] = "Fer-de-Lance", ["python_nx"] = "Python Mk II",
+            ["viper_mkiv"] = "Viper Mk IV", ["cobramkiii"] = "Cobra Mk III", ["cobramkiv"] = "Cobra Mk IV", ["cobramkv"] = "Cobra Mk V", ["mandalay"] = "Mandalay", ["corsair"] = "Corsair",
+        };
+        private static string ShipName(string s) => Clean(ShipNames.TryGetValue(s ?? "", out var n) ? n : PrettyJournalName(s ?? ""));
         private static string Clean(string s) => (s ?? "").Replace('|', '/').Replace(';', ' ').Replace(':', ' ');
         public event Action<string, string>? InterdictionEnded;   // ("EVADED", "SUBMITTED" or "PULLED", the interdictor's name or "") the journal's EscapeInterdiction / Interdicted; live only
         public event Action<string, int, string, string, long, string>? BountyPaid;   // ("BOUNTY" or "BOND", how many in the batch, first target / bond label, victim faction, total reward, awarding faction) the journal's Bounty / FactionKillBond; kills within 1.5 s of each other are one event; live only
@@ -3972,6 +3984,18 @@ namespace EliteBioRadar
                 _refineCount = (refined == _refineItem && (nowR - _lastRefine).TotalSeconds < 60) ? _refineCount + 1 : 1;
                 _refineItem = refined; _lastRefine = nowR;
                 if (refined.Length > 0) MiningEvent?.Invoke($"REFINED|{refined}|{_refineCount}");
+            }
+            if (!backfill && (evt == "ShipyardBuy" || evt == "ShipyardNew" || evt == "ShipyardSwap" || evt == "ShipyardTransfer"))
+            {
+                string yardShip = ShipName(obj.Value<string>("ShipType_Localised") ?? obj.Value<string>("ShipType") ?? "");
+                if (yardShip.Length > 0)
+                {
+                    if (evt == "ShipyardBuy") { _lastShipBought = DateTime.UtcNow; ShipyardEvent?.Invoke($"BUY|{yardShip}|{obj.Value<long?>("ShipPrice") ?? 0}"); }
+                    // ShipyardNew follows the purchase straight away: only a delivery with no purchase just before it (a redeemed or rebuilt ship) gets its own animation.
+                    else if (evt == "ShipyardNew") { if ((DateTime.UtcNow - _lastShipBought).TotalSeconds > 120) ShipyardEvent?.Invoke($"NEW|{yardShip}"); }
+                    else if (evt == "ShipyardSwap") ShipyardEvent?.Invoke($"SWAP|{yardShip}|{ShipName(obj.Value<string>("StoreOldShip") ?? "")}");
+                    else ShipyardEvent?.Invoke($"XFER|{yardShip}|{Clean(obj.Value<string>("System") ?? "")}|{(obj.Value<double?>("Distance") ?? 0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}|{obj.Value<long?>("TransferPrice") ?? 0}|{obj.Value<int?>("TransferTime") ?? 0}");
+                }
             }
             if (!backfill && evt == "SelfDestruct") SelfDestructEvent?.Invoke();
             if (!backfill && evt == "CockpitBreached") CockpitBreachedEvent?.Invoke();
