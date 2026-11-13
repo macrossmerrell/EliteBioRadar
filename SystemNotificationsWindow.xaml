@@ -49,6 +49,7 @@
         <local:SelfDestructVisual x:Name="selfDestructVisual"/>
         <local:ShipyardVisual x:Name="shipyardVisual"/>
         <local:ModuleVisual x:Name="moduleVisual"/>
+        <local:ServicesVisual x:Name="servicesVisual"/>
         <local:DiscoveryScanVisual x:Name="discoveryScanVisual"/>
         <local:CrimeVisual x:Name="crimeVisual"/>
         <local:TradeProfitVisual x:Name="tradeProfitVisual"/>

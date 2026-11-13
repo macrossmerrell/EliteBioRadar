@@ -139,6 +139,35 @@ namespace EliteBioRadar
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
         public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
         private DateTime _lastModuleAlert = DateTime.MinValue;
+        public event Action<string>? ServicesEvent;   // the detail for the station services animation (refuel / repair / restock): key|LABEL|amount|cost;...; live only
+        // Servicing at a station writes several journal lines within a second or so; gather them and raise one animation after a short pause.
+        private readonly object _svcGate = new();
+        private readonly List<(char Key, string Label, string Amount, long Cost)> _svcRows = new();
+        private double _svcFuel;
+        private int _svcRepairItems;
+        private System.Threading.Timer? _svcTimer;
+        private void AddService(char key, string label, string amount, long cost, double tonnes = 0)
+        {
+            lock (_svcGate)
+            {
+                int i = _svcRows.FindIndex(r => r.Key == key && r.Label == label);
+                if (key == 'f') { _svcFuel += tonnes; amount = _svcFuel.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " T"; }
+                if (key == 'r' && label == "REPAIRS") { _svcRepairItems++; if (_svcRepairItems > 1 && amount != "ALL") amount = _svcRepairItems + " ITEMS"; }
+                if (i >= 0) _svcRows[i] = (key, label, amount, _svcRows[i].Cost + cost);
+                else _svcRows.Add((key, label, amount, cost));
+                _svcTimer?.Dispose();
+                _svcTimer = new System.Threading.Timer(_ =>
+                {
+                    string detail;
+                    lock (_svcGate)
+                    {
+                        detail = string.Join(";", _svcRows.Take(4).Select(r => $"{r.Key}|{r.Label}|{r.Amount}|{r.Cost}"));
+                        _svcRows.Clear(); _svcFuel = 0; _svcRepairItems = 0;
+                    }
+                    if (detail.Length > 0) ServicesEvent?.Invoke(detail);
+                }, null, 1500, System.Threading.Timeout.Infinite);
+            }
+        }
         // "Slot02_Size5" reads as SLOT 02 SIZE 5; the named slots (PowerPlant, FrameShiftDrive, MediumHardpoint1) are split into words.
         private static string ModuleSlot(string s)
         {
@@ -4019,6 +4048,28 @@ namespace EliteBioRadar
                         break;
                 }
                 if (modDetail.Length > 0) { _lastModuleAlert = DateTime.UtcNow; ModuleEvent?.Invoke(modDetail); }
+            }
+            if (!backfill && (evt == "RefuelAll" || evt == "RefuelPartial" || evt == "RepairAll" || evt == "Repair" || evt == "BuyAmmo" || evt == "RestockVehicle" || evt == "BuyDrones"))
+            {
+                long svcCost = obj.Value<long?>("Cost") ?? obj.Value<long?>("TotalCost") ?? 0;
+                switch (evt)
+                {
+                    case "RefuelAll": case "RefuelPartial":
+                        AddService('f', "REFUEL", "", svcCost, obj.Value<double?>("Amount") ?? 0);
+                        break;
+                    case "RepairAll": AddService('r', "REPAIRS", "ALL", svcCost); break;
+                    case "Repair":
+                        string repItem = Clean(PrettyJournalName((obj.Value<string>("Item") ?? "").Trim('$', ';').Replace("_name", "")));
+                        AddService('r', "REPAIRS", repItem.Length > 0 ? repItem : "ITEM", svcCost);
+                        break;
+                    case "BuyAmmo": AddService('a', "REARM", "AMMO", svcCost); break;
+                    case "BuyDrones": AddService('a', "DRONES", "x" + (obj.Value<int?>("Count") ?? 0), svcCost); break;
+                    default:
+                        string veh = (obj.Value<string>("Type") ?? "").Trim();
+                        veh = string.Equals(veh, "testbuggy", StringComparison.OrdinalIgnoreCase) ? "SCARAB" : Clean(PrettyJournalName(veh));
+                        AddService('a', "RESTOCK", veh.Length > 0 ? veh : "VEHICLE", svcCost);
+                        break;
+                }
             }
             if (!backfill && (evt == "ShipyardBuy" || evt == "ShipyardNew" || evt == "ShipyardSwap" || evt == "ShipyardTransfer"))
             {
