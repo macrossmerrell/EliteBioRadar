@@ -321,6 +321,9 @@
         <local:WingCrewVisual x:Name="wingCrewVisual"/>
         <local:BodySignalsVisual x:Name="bodySignalsVisual"/>
         <local:MiningVisual x:Name="miningVisual"/>
+        <local:SignalSourceVisual x:Name="signalSourceVisual"/>
+        <local:NavBeaconVisual x:Name="navBeaconVisual"/>
+        <local:ShipCallVisual x:Name="shipCallVisual"/>
         <local:DiscoveryScanVisual x:Name="discoveryScanVisual"/>
         <local:CrimeVisual x:Name="crimeVisual"/>
         <local:TradeProfitVisual x:Name="tradeProfitVisual"/>

@@ -18,20 +18,48 @@ namespace EliteBioRadar
         {
             InitializeComponent();
             var settings = AppSettings.Load();
-            string? group = null;
-            foreach (var def in AnimationCatalog.All)
+            var placed = new System.Collections.Generic.HashSet<string>();
+            foreach (var (heading, ids) in Layout)
             {
-                if (def.Group != group)
-                {
-                    group = def.Group;
-                    rows.Children.Add(new TextBlock
-                    {
-                        Text = group.ToUpperInvariant(), Foreground = GroupBrush, FontSize = 12, FontWeight = FontWeights.Bold,
-                        Margin = new Thickness(0, rows.Children.Count == 0 ? 0 : 12, 0, 4),
-                    });
-                }
-                rows.Children.Add(BuildRow(def, AnimationCatalog.SurfacesFor(def, settings)));
+                var defs = new System.Collections.Generic.List<AnimationDef>();
+                foreach (var id in ids)
+                    foreach (var def in AnimationCatalog.All)
+                        if (def.Id == id && placed.Add(id)) defs.Add(def);
+                AddSection(heading, defs, settings);
             }
+            // An animation added to the catalog but not listed above still shows, under its own catalog group at the end.
+            foreach (var g in System.Linq.Enumerable.GroupBy(System.Linq.Enumerable.Where(AnimationCatalog.All, d => !placed.Contains(d.Id)), d => d.Group))
+                AddSection(g.Key, System.Linq.Enumerable.ToList(g), settings);
+        }
+
+        // The headings in the order of play: arriving somewhere new, getting there, the ground, what you find, the fight, the ship, the haul, the stations, and you.
+        // Ids within a heading are in the order things usually happen.
+        private static readonly (string Heading, string[] Ids)[] Layout =
+        {
+            ("Firsts",              new[] { "first-discovery", "first-footfall" }),
+            ("Travel",              new[] { "route", "hyperspace-jump", "supercharge", "arrival", "fuel-scoop", "carrier-jump", "supercruise", "supercruise-overdrive", "supercruise-assist", "supercruise-exit" }),
+            ("Atmosphere",          new[] { "descent", "climb", "atmospheric-jump" }),
+            ("Surface and vehicles", new[] { "landed", "liftoff", "srv", "ship-call", "embark", "disembark", "drive-assist", "handbrake", "turret" }),
+            ("Exploration",         new[] { "discovery-scan", "signal-source", "nav-beacon", "fss-complete", "body-signals", "planet-mapped", "codex-entry", "material", "payout" }),
+            ("Biology",             new[] { "organism-scan", "colony-range", "exobiology-sold" }),
+            ("Combat",              new[] { "combat-alert", "interdiction", "interdiction-outcome", "crime", "bounty", "fighter", "cockpit-breach", "ship-lost" }),
+            ("Ship controls",       new[] { "landing-gear", "hardpoints", "cargo-scoop", "headlights", "night-vision", "flight-assist", "silent-running", "combat-mode", "analysis-mode" }),
+            ("Ship alerts",         new[] { "shields", "hull-damage", "low-fuel", "overheat", "mass-lock", "fsd-cooldown" }),
+            ("Cargo and trade",     new[] { "mining", "cargo", "trade-profit" }),
+            ("Missions",            new[] { "mission" }),
+            ("Stations",            new[] { "docking-request", "docked" }),
+            ("Commander",           new[] { "rank-up", "vitals", "thermal", "wing-crew", "engineer", "tech-broker" }),
+        };
+
+        private void AddSection(string heading, System.Collections.Generic.List<AnimationDef> defs, AppSettingsData settings)
+        {
+            if (defs.Count == 0) return;
+            rows.Children.Add(new TextBlock
+            {
+                Text = heading.ToUpperInvariant(), Foreground = GroupBrush, FontSize = 12, FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, rows.Children.Count == 0 ? 0 : 14, 0, 4),
+            });
+            foreach (var def in defs) rows.Children.Add(BuildRow(def, AnimationCatalog.SurfacesFor(def, settings)));
         }
 
         private static Brush Frozen(string hex)
@@ -44,12 +72,12 @@ namespace EliteBioRadar
         private Grid BuildRow(AnimationDef def, AnimationSurfaces current)
         {
             var g = new Grid { Margin = new Thickness(0, 3, 0, 3) };
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(300) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(380) });
             g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
             g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
             g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
 
-            var name = new TextBlock { Text = def.Name, Foreground = TextBrush, FontSize = 13, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+            var name = new TextBlock { Text = def.Name, Foreground = TextBrush, FontSize = 13, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, ToolTip = def.Name };
             var main = new CheckBox { IsChecked = current.HasFlag(AnimationSurfaces.Main), VerticalAlignment = VerticalAlignment.Center };
             var notif = new CheckBox { IsChecked = current.HasFlag(AnimationSurfaces.Notifications), VerticalAlignment = VerticalAlignment.Center };
             var play = new Button

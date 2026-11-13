@@ -322,6 +322,12 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Crime, "", detail)));
             svc.DiscoveryScanEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.DiscoveryScan, "", detail)));
+            svc.ShipCallEvent += detail => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.ShipCall, "", detail)));
+            svc.NavBeaconEvent += detail => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.NavBeacon, "", detail)));
+            svc.SignalSourceEvent += detail => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.SignalSource, "", detail)));
             svc.MiningEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Mining, "", detail)));
             svc.BodySignalsEvent += detail => Dispatcher.InvokeAsync(() =>
@@ -401,6 +407,9 @@ namespace EliteBioRadar
                     ["wing-crew"] = _w.wingCrewVisual,
                     ["body-signals"] = _w.bodySignalsVisual,
                     ["mining"] = _w.miningVisual,
+                    ["signal-source"] = _w.signalSourceVisual,
+                    ["nav-beacon"] = _w.navBeaconVisual,
+                    ["ship-call"] = _w.shipCallVisual,
                     ["discovery-scan"] = _w.discoveryScanVisual,
                     ["crime"] = _w.crimeVisual,
                     ["trade-profit"] = _w.tradeProfitVisual,

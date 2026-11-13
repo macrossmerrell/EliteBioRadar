@@ -114,6 +114,11 @@ namespace EliteBioRadar
         private DateTime _lastCrimeAlert = DateTime.MinValue;
         public event Action<string>? DiscoveryScanEvent;   // the detail for the discovery scan animation (FSSDiscoveryScan, the honk): bodyCount|system; live only
         public event Action<string>? MiningEvent;   // the detail for the mining animation (ProspectedAsteroid / AsteroidCracked / MiningRefined): PROSPECT|grade|mat:pct;... / CRACKED| / REFINED|item|tonnes; live only
+        public event Action<string>? ShipCallEvent;   // the detail for the ship dismissed / recalled animation (Liftoff / Touchdown with PlayerControlled false): DISMISS or RECALL; live only
+        public event Action<string>? NavBeaconEvent;   // the detail for the nav beacon animation (NavBeaconScan): bodyCount|system; live only
+        public event Action<string>? SignalSourceEvent;   // the detail for the signal source animation (FSSSignalDiscovered batched, and USSDrop): KIND|NAME|DETAIL|MORE|THREAT; live only
+        private readonly List<(string kind, string name, string detail, int threat)> _signalBatch = new();
+        private readonly HashSet<string> _signalsAnnounced = new();
         private DateTime _lastProspectAlert = DateTime.MinValue, _lastRefine = DateTime.MinValue;
         private string _refineItem = "";
         private int _refineCount;
@@ -170,6 +175,8 @@ namespace EliteBioRadar
         }
         private bool? _wasAnalysis;
         private bool? _wasGear;
+        private volatile bool _awayFromShip;   // the last status read had you in the SRV or on foot
+        private DateTime _recallAnnouncedAt = DateTime.MinValue;   // when the recall animation last started, so the Touchdown that ends the flight does not play it a second time
         private bool? _wasHardpoints;
         private DateTime _lastHonk = DateTime.MinValue;   // when the last live discovery scan (FSSDiscoveryScan) arrived
         private bool? _wasCargoScoop;
@@ -1099,7 +1106,18 @@ namespace EliteBioRadar
                 _wasAnalysis = status.AnalysisMode;
 
                 // Landing gear (Flags bit 2): the first read only sets the baseline.
-                if (!quiet && _wasGear != null && _wasGear != status.LandingGearDown) { Log.Write(status.LandingGearDown ? "Landing gear down" : "Landing gear up"); GearChanged?.Invoke(status.LandingGearDown); }
+                // While you are in the SRV or on foot, a gear change is the ship's own: gear down is a recalled ship coming in (the start of its flight, about half a minute before its Touchdown event), and gear up is the dismissed
+                // ship leaving (its Liftoff event announces that). Neither is you working the gear, so the gear animation stays silent and the recall animation plays now.
+                _awayFromShip = status.InSRV || status.OnFoot;
+                if (!quiet && _wasGear != null && _wasGear != status.LandingGearDown)
+                {
+                    Log.Write(status.LandingGearDown ? "Landing gear down" : "Landing gear up");
+                    if (_awayFromShip)
+                    {
+                        if (status.LandingGearDown && (DateTime.UtcNow - _recallAnnouncedAt).TotalSeconds > 120) { _recallAnnouncedAt = DateTime.UtcNow; ShipCallEvent?.Invoke("RECALL"); }
+                    }
+                    else GearChanged?.Invoke(status.LandingGearDown);
+                }
                 _wasGear = status.LandingGearDown;
 
                 // Hardpoints (Flags bit 6): the first read only sets the baseline.
@@ -3848,7 +3866,8 @@ namespace EliteBioRadar
             }
             if (!backfill && (evt == "PayFines" || evt == "PayBounties") && (obj.Value<long?>("Amount") ?? 0) > 0)
                 CrimeEvent?.Invoke($"PAID|{(evt == "PayFines" ? "FINES CLEARED" : "BOUNTIES CLEARED")}|{Clean(obj.Value<string>("Faction") ?? "")}|{obj.Value<long?>("Amount")}|{(evt == "PayFines" ? "FINES PAID" : "BOUNTIES PAID")}");
-            if (!backfill && (evt == "FSSBodySignals" || evt == "SAASignalsFound") && obj["Signals"] is Newtonsoft.Json.Linq.JArray sigArr && sigArr.Count > 0)
+            // From the SRV or on foot the Detailed Surface Scanner can't be used: a SAASignalsFound then is the game re-sending a body's signals as the ship is recalled, not a new find.
+            if (!backfill && !(evt == "SAASignalsFound" && _awayFromShip) && (evt == "FSSBodySignals" || evt == "SAASignalsFound") && obj["Signals"] is Newtonsoft.Json.Linq.JArray sigArr && sigArr.Count > 0)
             {
                 var parts = new List<string>();
                 foreach (var s in sigArr)
@@ -3882,6 +3901,49 @@ namespace EliteBioRadar
                     if (pct > 0 && mn.Length > 0) mats.Add($"{mn}:{pct.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}");
                 }
                 MiningEvent?.Invoke($"PROSPECT|{grade}|{string.Join(";", mats)}");
+            }
+            // The ship dismissed from, or recalled to, an SRV: the journal reuses Liftoff / Touchdown with PlayerControlled false (not a taxi, not a crew member flying).
+            if (!backfill && (evt == "Liftoff" || evt == "Touchdown") && obj.Value<bool?>("PlayerControlled") == false && obj.Value<bool?>("Taxi") != true && obj.Value<bool?>("Multicrew") != true)
+            {
+                // The recall normally announced itself when the gear went down; the Touchdown only plays it if that was missed.
+                if (evt == "Touchdown") { if ((DateTime.UtcNow - _recallAnnouncedAt).TotalSeconds > 120) { _recallAnnouncedAt = DateTime.UtcNow; ShipCallEvent?.Invoke("RECALL"); } }
+                else ShipCallEvent?.Invoke("DISMISS");
+            }
+            if (!backfill && evt == "NavBeaconScan" && (obj.Value<int?>("NumBodies") ?? 0) > 0)
+                NavBeaconEvent?.Invoke($"{obj.Value<int?>("NumBodies")}|{Clean(StarSystem ?? "")}");
+            if (!backfill && evt == "USSDrop")
+            {
+                int th = obj.Value<int?>("USSThreat") ?? 0;
+                SignalSourceEvent?.Invoke($"USS|{Clean(obj.Value<string>("USSType_Localised") ?? "Signal source")}|{(th > 0 ? "THREAT LEVEL " + th : "")}|0|{th}");
+            }
+            if (!backfill && evt == "FSSSignalDiscovered")
+            {
+                // A honk or an FSS sweep reports every signal in the system at once, stations and fleet carriers included: keep the interesting kinds, gather them for a couple of seconds, announce the best one.
+                string sType = obj.Value<string>("SignalType") ?? "";
+                string sName = Clean(obj.Value<string>("SignalName_Localised") ?? obj.Value<string>("USSType_Localised") ?? "");
+                string kind = sType switch { "USS" => "USS", "ResourceExtraction" => "RES", "Combat" => "CZ", "NavBeacon" => "NAV", "Generic" => sName.Contains("Pirate", StringComparison.OrdinalIgnoreCase) ? "PIRATE" : "OTHER", _ => "" };
+                string sKey = $"{obj.Value<long?>("SystemAddress")}|{obj.Value<string>("SignalName")}|{obj.Value<string>("USSType")}|{obj.Value<string>("SpawningFaction")}|{obj.Value<int?>("ThreatLevel")}";
+                if (kind.Length > 0 && sName.Length > 0 && _signalsAnnounced.Add(sKey))
+                {
+                    if (_signalsAnnounced.Count > 500) { _signalsAnnounced.Clear(); _signalsAnnounced.Add(sKey); }
+                    string detailText = "";
+                    int br = sName.IndexOf('[');
+                    if (br > 0 && sName.EndsWith(']')) { detailText = sName[(br + 1)..^1]; sName = sName[..br].Trim(); }
+                    else if (kind == "USS") { detailText = Clean(obj.Value<string>("USSType_Localised") ?? ""); sName = "Unidentified signal source"; }
+                    int th2 = obj.Value<int?>("ThreatLevel") ?? 0;
+                    bool first;
+                    lock (_signalBatch) { first = _signalBatch.Count == 0; _signalBatch.Add((kind, sName, detailText, th2)); }
+                    if (first)
+                        _ = Task.Run(async () =>
+                        {
+                            await Task.Delay(2500);
+                            (string kind, string name, string detail, int threat)[] got;
+                            lock (_signalBatch) { got = _signalBatch.ToArray(); _signalBatch.Clear(); }
+                            string[] order = { "USS", "RES", "PIRATE", "CZ", "NAV", "OTHER" };
+                            var best = got.OrderBy(g => Array.IndexOf(order, g.kind)).First();
+                            SignalSourceEvent?.Invoke($"{best.kind}|{best.name}|{best.detail}|{got.Length - 1}|{best.threat}");
+                        });
+                }
             }
             if (!backfill && evt == "AsteroidCracked") MiningEvent?.Invoke("CRACKED|");
             if (!backfill && evt == "MiningRefined")
