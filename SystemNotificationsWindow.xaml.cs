@@ -66,6 +66,7 @@ namespace EliteBioRadar
                 ["limpet"] = limpetVisual,
                 ["milestone"] = milestoneVisual,
                 ["material-discovered"] = materialDiscoveredVisual,
+                ["screenshot"] = screenshotVisual,
                 ["approach-settlement"] = settlementVisual,
                 ["synthesis"] = synthesisVisual,
                 ["community-goal"] = communityGoalVisual,

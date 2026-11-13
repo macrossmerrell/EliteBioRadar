@@ -139,6 +139,8 @@ namespace EliteBioRadar
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
         public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
         private DateTime _lastModuleAlert = DateTime.MinValue;
+        public event Action<string>? ScreenshotEvent;   // the detail for the screenshot animation: frame|body|second line|surface; live only
+        private DateTime _lastScreenshotAlert = DateTime.MinValue;
         public event Action<string>? MaterialDiscoveredEvent;   // the detail for the first-find card: name|category|internal name|discovery number; live only
         private (string Key, int Number, DateTime At)? _pendingDiscovery;   // set by MaterialDiscovered, used by the MaterialCollected that follows it
         public event Action<string>? MilestoneEvent;   // the detail for the milestone plate: LIVE or RECAP|short~full~value~step;...; live only
@@ -4680,6 +4682,19 @@ namespace EliteBioRadar
                 case "Screenshot":
                 {
                     if (!backfill) ScreenshotConverterService.OnScreenshotEventFireAndForget(obj);
+                    if (!backfill && (DateTime.UtcNow - _lastScreenshotAlert).TotalSeconds > 3)
+                    {
+                        _lastScreenshotAlert = DateTime.UtcNow;
+                        var file = System.IO.Path.GetFileNameWithoutExtension((obj.Value<string>("Filename") ?? "").Replace('\\', '/'));
+                        var frame = file.Contains('_') ? file.Substring(file.LastIndexOf('_') + 1) : file;
+                        var shotBody = obj.Value<string>("Body");
+                        if (string.IsNullOrWhiteSpace(shotBody)) shotBody = obj.Value<string>("System") ?? "";
+                        bool onSurface = obj["Latitude"] != null && obj["Longitude"] != null;
+                        string second = onSurface
+                            ? $"LAT {obj.Value<double>("Latitude"):0.00}  LON {obj.Value<double>("Longitude"):0.00}" + (obj["Heading"] != null ? $"  HDG {obj.Value<double>("Heading"):0}" : "")
+                            : $"{obj.Value<int>("Width")} X {obj.Value<int>("Height")}  SCREENSHOT {frame}";
+                        ScreenshotEvent?.Invoke($"{Clean(frame)}|{Clean(shotBody)}|{Clean(second)}|{(onSurface ? 1 : 0)}");
+                    }
                     break;
                 }
 
