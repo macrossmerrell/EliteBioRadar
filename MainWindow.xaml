@@ -325,6 +325,7 @@
         <local:NavBeaconVisual x:Name="navBeaconVisual"/>
         <local:ShipCallVisual x:Name="shipCallVisual"/>
         <local:SearchRescueVisual x:Name="searchRescueVisual"/>
+        <local:VoucherVisual x:Name="voucherVisual"/>
         <local:DiscoveryScanVisual x:Name="discoveryScanVisual"/>
         <local:CrimeVisual x:Name="crimeVisual"/>
         <local:TradeProfitVisual x:Name="tradeProfitVisual"/>

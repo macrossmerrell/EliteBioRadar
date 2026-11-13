@@ -114,6 +114,7 @@ namespace EliteBioRadar
         private DateTime _lastCrimeAlert = DateTime.MinValue;
         public event Action<string>? DiscoveryScanEvent;   // the detail for the discovery scan animation (FSSDiscoveryScan, the honk): bodyCount|system; live only
         public event Action<string>? MiningEvent;   // the detail for the mining animation (ProspectedAsteroid / AsteroidCracked / MiningRefined): PROSPECT|grade|mat:pct;... / CRACKED| / REFINED|item|tonnes; live only
+        public event Action<string>? VoucherEvent;   // the detail for the vouchers redeemed animation (RedeemVoucher): type|amount|faction;faction; live only
         public event Action<string>? SearchRescueEvent;   // the detail for the search and rescue animation (SearchAndRescue): RESCUE|RECOVER|count|item|reward; live only
         public event Action<string>? ShipCallEvent;   // the detail for the ship dismissed / recalled animation (Liftoff / Touchdown with PlayerControlled false): DISMISS or RECALL; live only
         public event Action<string>? NavBeaconEvent;   // the detail for the nav beacon animation (NavBeaconScan): bodyCount|system; live only
@@ -3917,6 +3918,13 @@ namespace EliteBioRadar
                 string sarItem = Clean(obj.Value<string>("Name_Localised") ?? PrettyJournalName(sarName.Trim('$', ';')));
                 bool sarPod = sarName.Contains("occupied", StringComparison.OrdinalIgnoreCase) || sarItem.Contains("Occupied", StringComparison.OrdinalIgnoreCase);
                 SearchRescueEvent?.Invoke($"{(sarPod ? "RESCUE" : "RECOVER")}|{obj.Value<int?>("Count")}|{sarItem}|{obj.Value<long?>("Reward") ?? 0}");
+            }
+            if (!backfill && evt == "RedeemVoucher" && (obj.Value<long?>("Amount") ?? 0) > 0)
+            {
+                var vFactions = new List<string>();
+                if (obj["Factions"] is Newtonsoft.Json.Linq.JArray vArr)
+                    foreach (var vf in vArr) { string vn = Clean(vf.Value<string>("Faction") ?? ""); if (vn.Length > 0 && !vFactions.Contains(vn)) vFactions.Add(vn); }
+                VoucherEvent?.Invoke($"{obj.Value<string>("Type") ?? ""}|{obj.Value<long?>("Amount")}|{string.Join(";", vFactions)}");
             }
             if (!backfill && evt == "NavBeaconScan" && (obj.Value<int?>("NumBodies") ?? 0) > 0)
                 NavBeaconEvent?.Invoke($"{obj.Value<int?>("NumBodies")}|{Clean(StarSystem ?? "")}");
