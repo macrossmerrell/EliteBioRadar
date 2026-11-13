@@ -48,7 +48,7 @@ namespace EliteBioRadar
             ("Cargo and trade",     new[] { "mining", "cargo", "search-rescue", "trade-profit", "voucher" }),
             ("Missions",            new[] { "mission", "community-goal" }),
             ("Stations",            new[] { "docking-request", "docked", "shipyard", "module", "services", "gear", "taxi" }),
-            ("Commander",           new[] { "rank-up", "vitals", "thermal", "wing-crew", "squadron", "powerplay", "engineer", "tech-broker" }),
+            ("Commander",           new[] { "rank-up", "vitals", "thermal", "wing-crew", "squadron", "powerplay", "contact", "engineer", "tech-broker" }),
         };
 
         private void AddSection(string heading, System.Collections.Generic.List<AnimationDef> defs, AppSettingsData settings)

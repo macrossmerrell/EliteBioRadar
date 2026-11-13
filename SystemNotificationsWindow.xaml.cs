@@ -57,6 +57,7 @@ namespace EliteBioRadar
                 ["taxi"] = taxiVisual,
                 ["squadron"] = squadronVisual,
                 ["powerplay"] = powerplayVisual,
+                ["contact"] = contactVisual,
                 ["approach-settlement"] = settlementVisual,
                 ["synthesis"] = synthesisVisual,
                 ["community-goal"] = communityGoalVisual,

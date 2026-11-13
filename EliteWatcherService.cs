@@ -139,6 +139,7 @@ namespace EliteBioRadar
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
         public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
         private DateTime _lastModuleAlert = DateTime.MinValue;
+        public event Action<string>? ContactEvent;   // the detail for the friends / chat animation: KIND|commander|chip line|message; live only
         public event Action<string>? PowerplayEvent;   // the detail for the Powerplay animation: KIND|power|chip line|old rank|new rank|gain|total; live only
         private int _ppRank = -1;   // the last known Powerplay rank (from the start-up Powerplay line or a rank event), so a rank-up can say "from"
         public event Action<string>? SquadronEvent;   // the detail for the squadron animation: KIND|squadron|chip line|old rank|new rank; live only
@@ -4132,6 +4133,21 @@ namespace EliteBioRadar
                         if (have.Contains(svcName) && letters.Length < 6) letters.Append(letter);
                     SettlementEvent?.Invoke($"{settleName}|{Clean(obj["StationFaction"]?.Value<string>("Name") ?? "")}|{Clean(obj.Value<string>("StationGovernment_Localised") ?? "")}|{Clean(obj.Value<string>("StationEconomy_Localised") ?? "")}|{Clean(obj.Value<string>("BodyName") ?? "")}|{letters}");
                 }
+            }
+            if (!backfill && evt == "Friends")
+            {
+                string fWho = Clean(obj.Value<string>("Name") ?? ""), fStatus = obj.Value<string>("Status") ?? "";
+                string fKind = fStatus switch { "Online" => "ON", "Offline" => "OFF", "Requested" => "REQ", "Added" => "ADD", "Lost" => "LOST", "Declined" => "DECL", _ => "" };
+                if (fKind.Length > 0 && fWho.Length > 0) ContactEvent?.Invoke($"{fKind}|CMDR {fWho}|{(fKind == "REQ" ? "AWAITING YOUR ANSWER" : "")}|");
+            }
+            if (!backfill && evt == "ReceiveText")
+            {
+                string chan = obj.Value<string>("Channel") ?? "";
+                string from = Clean(obj.Value<string>("From_Localised") ?? obj.Value<string>("From") ?? "");
+                string msg = Clean(obj.Value<string>("Message_Localised") ?? obj.Value<string>("Message") ?? "").Replace('|', '/');
+                string mKind = chan switch { "player" or "friend" => "DM", "wing" => "WING", "squadron" => "SQ", _ => "" };
+                if (mKind.Length > 0 && from.Length > 0 && msg.Length > 0)
+                    ContactEvent?.Invoke($"{mKind}|{(from.StartsWith("CMDR ", StringComparison.OrdinalIgnoreCase) ? from : "CMDR " + from)}|{(mKind == "DM" ? "DIRECT" : mKind == "WING" ? "WING" : "SQUADRON")}|{msg}");
             }
             if (evt == "Powerplay" && obj["Rank"] != null) _ppRank = obj.Value<int?>("Rank") ?? _ppRank;
             if (evt == "PowerplayJoin" || evt == "PowerplayLeave") _ppRank = -1;
