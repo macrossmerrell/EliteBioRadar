@@ -335,6 +335,7 @@
         <local:SquadronVisual x:Name="squadronVisual"/>
         <local:PowerplayVisual x:Name="powerplayVisual"/>
         <local:ContactVisual x:Name="contactVisual"/>
+        <local:CarrierPanelVisual x:Name="carrierPanelVisual"/>
         <local:SettlementVisual x:Name="settlementVisual"/>
         <local:SynthesisVisual x:Name="synthesisVisual"/>
         <local:CommunityGoalVisual x:Name="communityGoalVisual"/>

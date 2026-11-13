@@ -139,6 +139,8 @@ namespace EliteBioRadar
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
         public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
         private DateTime _lastModuleAlert = DateTime.MinValue;
+        public event Action<string>? CarrierPanelEvent;   // the detail for the carrier management animation: ROW|carrier|chip title|chip line|prefix|number|suffix|bar from|bar to|switch; live only
+        private string _myCarrier = "";   // the commander's own carrier (name and callsign), from CarrierStats / CarrierBuy
         public event Action<string>? ContactEvent;   // the detail for the friends / chat animation: KIND|commander|chip line|message; live only
         public event Action<string>? PowerplayEvent;   // the detail for the Powerplay animation: KIND|power|chip line|old rank|new rank|gain|total; live only
         private int _ppRank = -1;   // the last known Powerplay rank (from the start-up Powerplay line or a rank event), so a rank-up can say "from"
@@ -4311,6 +4313,76 @@ namespace EliteBioRadar
             {
                 CarrierJumpEvent?.Invoke($"ARRIVED|{Clean(obj.Value<string>("StarSystem") ?? _carrierDestination)}");
                 _carrierDestination = ""; _carrierDeparture = DateTime.MinValue;
+            }
+
+            // The commander's own carrier: remember its name for the management animation (also kept during backfill).
+            if ((evt == "CarrierStats" || evt == "CarrierBuy") && (obj["Name"] != null || obj["Callsign"] != null))
+            {
+                string cn = Clean(obj.Value<string>("Name") ?? ""), cs = Clean(obj.Value<string>("Callsign") ?? "");
+                if (cn.Length > 0 || cs.Length > 0) _myCarrier = (cn + " " + cs).Trim();
+            }
+            if (!backfill && (evt == "CarrierDepositFuel" || evt == "CarrierCrewServices" || evt == "CarrierBankTransfer" || evt == "CarrierTradeOrder" || evt == "CarrierDockingPermission" || evt == "CarrierDecommission" || evt == "CarrierCancelDecommission"))
+            {
+                string cName = _myCarrier.Length > 0 ? _myCarrier : "FLEET CARRIER";
+                string Num(long n) => n.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+                string inv(double d) => d.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+                switch (evt)
+                {
+                    case "CarrierDepositFuel":
+                    {
+                        long amt = obj.Value<long?>("Amount") ?? 0, total = obj.Value<long?>("Total") ?? 0;
+                        double barTo = Math.Min(1.0, total / 1000.0), barFrom = Math.Max(0.0, (total - amt) / 1000.0);
+                        CarrierPanelEvent?.Invoke($"FUEL|{cName}|CARRIER REFUELLED|+{Num(amt)} T TRITIUM  TOTAL {Num(total)} T|+|{amt}|T|{inv(barFrom)}|{inv(barTo)}|");
+                        break;
+                    }
+                    case "CarrierCrewServices":
+                    {
+                        string op = obj.Value<string>("Operation") ?? "", role = Clean(PrettyJournalName(obj.Value<string>("CrewRole") ?? "")).ToUpperInvariant();
+                        bool on = op == "Activate" || op == "Resume" || op == "Replace";
+                        string title = op switch { "Activate" => "CARRIER SERVICE ON", "Deactivate" => "CARRIER SERVICE OFF", "Pause" => "CARRIER SERVICE PAUSED", "Resume" => "CARRIER SERVICE RESUMED", "Replace" => "CARRIER CREW REPLACED", _ => "CARRIER SERVICE" };
+                        string crew = Clean(obj.Value<string>("CrewName") ?? "");
+                        CarrierPanelEvent?.Invoke($"SVC|{cName}|{title}|{role}{(op == "Replace" && crew.Length > 0 ? " - " + crew.ToUpperInvariant() : "")}||||||{(on ? "1" : "0")}");
+                        break;
+                    }
+                    case "CarrierBankTransfer":
+                    {
+                        long dep = obj.Value<long?>("Deposit") ?? 0, wd = obj.Value<long?>("Withdraw") ?? 0, bal = obj.Value<long?>("CarrierBalance") ?? 0;
+                        bool deposit = dep > 0; long amt = deposit ? dep : wd;
+                        CarrierPanelEvent?.Invoke($"BANK|{cName}|CARRIER BANK|{(deposit ? "DEPOSIT" : "WITHDRAWAL")} {Num(amt)} CR{(bal > 0 ? "  BALANCE " + Num(bal) : "")}|{(deposit ? "+" : "-")}|{amt}| CR||||");
+                        break;
+                    }
+                    case "CarrierTradeOrder":
+                    {
+                        string com = Clean(obj.Value<string>("Commodity_Localised") ?? PrettyJournalName(obj.Value<string>("Commodity") ?? "")).ToUpperInvariant();
+                        long buy = obj.Value<long?>("PurchaseOrder") ?? 0, sell = obj.Value<long?>("SaleOrder") ?? 0;
+                        bool cancel = obj.Value<bool?>("CancelTrade") == true;
+                        string verb = cancel ? "CANCELLED" : buy > 0 ? "BUYING" : sell > 0 ? "SELLING" : "ORDER";
+                        long qty = buy > 0 ? buy : sell;
+                        CarrierPanelEvent?.Invoke($"TRADE|{cName}|CARRIER TRADE ORDER|{verb} {com}{(qty > 0 && !cancel ? " " + Num(qty) + " T" : "")}|{verb} {com} |{(qty > 0 && !cancel ? qty.ToString() : "")}| T|||");
+                        break;
+                    }
+                    case "CarrierDockingPermission":
+                    {
+                        string who = (obj.Value<string>("DockingAccess") ?? "").ToLowerInvariant() switch { "all" => "EVERYONE", "none" => "NO ONE", "friends" => "FRIENDS", "squadron" => "SQUADRON", "squadronfriends" => "FRIENDS + SQUADRON", _ => "" };
+                        if (who.Length > 0) CarrierPanelEvent?.Invoke($"DOCK|{cName}|DOCKING ACCESS|{who}{(obj.Value<bool?>("AllowNotorious") == true ? "  NOTORIOUS OK" : "")}|{who}||||||");
+                        break;
+                    }
+                    case "CarrierDecommission":
+                    {
+                        long scrap = obj.Value<long?>("ScrapTime") ?? 0;
+                        string left = "SCRAP SCHEDULED";
+                        if (scrap > 0)
+                        {
+                            double days = (DateTimeOffset.FromUnixTimeSeconds(scrap) - DateTimeOffset.UtcNow).TotalDays;
+                            if (days > 0) left = days >= 1 ? $"SCRAP IN {Math.Ceiling(days):0} DAYS" : "SCRAP IN UNDER A DAY";
+                        }
+                        CarrierPanelEvent?.Invoke($"DECOM|{cName}|CARRIER DECOMMISSION|{left}|{left}||||||");
+                        break;
+                    }
+                    default:
+                        CarrierPanelEvent?.Invoke($"CANCEL|{cName}|DECOMMISSION CANCELLED|CARRIER KEPT||||||||");
+                        break;
+                }
             }
 
             // A technology broker unlocked modules: ItemsUnlocked names them, Materials / Commodities are what was paid. Live only.

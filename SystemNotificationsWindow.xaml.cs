@@ -58,6 +58,7 @@ namespace EliteBioRadar
                 ["squadron"] = squadronVisual,
                 ["powerplay"] = powerplayVisual,
                 ["contact"] = contactVisual,
+                ["carrier-panel"] = carrierPanelVisual,
                 ["approach-settlement"] = settlementVisual,
                 ["synthesis"] = synthesisVisual,
                 ["community-goal"] = communityGoalVisual,

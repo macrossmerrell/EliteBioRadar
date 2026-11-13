@@ -37,7 +37,7 @@ namespace EliteBioRadar
         private static readonly (string Heading, string[] Ids)[] Layout =
         {
             ("Firsts",              new[] { "first-discovery", "first-footfall" }),
-            ("Travel",              new[] { "route", "hyperspace-jump", "supercharge", "arrival", "fuel-scoop", "carrier-jump", "supercruise", "supercruise-overdrive", "supercruise-assist", "supercruise-exit" }),
+            ("Travel",              new[] { "route", "hyperspace-jump", "supercharge", "arrival", "fuel-scoop", "carrier-jump", "carrier-panel","supercruise", "supercruise-overdrive", "supercruise-assist", "supercruise-exit" }),
             ("Atmosphere",          new[] { "descent", "climb", "atmospheric-jump" }),
             ("Surface and vehicles", new[] { "approach-settlement", "landed", "liftoff", "srv", "ship-call", "embark", "disembark", "drive-assist", "handbrake", "turret" }),
             ("Exploration",         new[] { "discovery-scan", "signal-source", "nav-beacon", "fss-complete", "body-signals", "planet-mapped", "codex-entry", "material", "synthesis", "payout" }),
