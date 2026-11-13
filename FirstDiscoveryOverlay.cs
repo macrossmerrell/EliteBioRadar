@@ -330,6 +330,8 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.CommunityGoal, "", detail)));
             svc.SettlementEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Settlement, "", detail)));
+            svc.MilestoneEvent += detail => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Milestone, "", detail)));
             svc.LimpetEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Limpet, "", detail)));
             svc.AfmuEvent += detail => Dispatcher.InvokeAsync(() =>
@@ -467,6 +469,7 @@ namespace EliteBioRadar
                     ["target-scan"] = _w.targetVisual,
                     ["afmu-repair"] = _w.afmuVisual,
                     ["limpet"] = _w.limpetVisual,
+                    ["milestone"] = _w.milestoneVisual,
                     ["approach-settlement"] = _w.settlementVisual,
                     ["synthesis"] = _w.synthesisVisual,
                     ["community-goal"] = _w.communityGoalVisual,

@@ -139,6 +139,28 @@ namespace EliteBioRadar
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
         public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
         private DateTime _lastModuleAlert = DateTime.MinValue;
+        public event Action<string>? MilestoneEvent;   // the detail for the milestone plate: LIVE or RECAP|short~full~value~step;...; live only
+        // Lifetime counters: the game writes Statistics at start-up (and when its Statistics screen is opened), so the app keeps a baseline from that line plus what it has seen since.
+        private readonly Dictionary<string, long> _msAnnounced = new();
+        private bool _msHaveBase;
+        private double _msJumps, _msLy, _msSeconds, _msBounties;
+        private DateTime _msBaseTime = DateTime.MinValue;
+        private (string Short, string Full, double Step)[] MsDefs => new[] { ("JUMPS", "HYPERSPACE JUMPS", 1000.0), ("LIGHT-YEARS", "LIGHT-YEARS", 10000.0), ("HOURS", "HOURS PLAYED", 100.0), ("BOUNTIES", "BOUNTIES CLAIMED", 500.0), ("WEALTH", "BILLION CREDITS", 1.0) };
+        // Returns the "short~full~value~step" item when the counter has passed a new round number since it was last looked at (and always records the level).
+        private string? MsCheck(int def, double value)
+        {
+            var (sh, full, step) = MsDefs[def];
+            long lvl = (long)Math.Floor(value / step);
+            if (!_msAnnounced.TryGetValue(sh, out long old)) { _msAnnounced[sh] = lvl; return null; }
+            if (lvl <= old) return null;
+            _msAnnounced[sh] = lvl;
+            return $"{sh}~{full}~{(lvl * step).ToString("0", System.Globalization.CultureInfo.InvariantCulture)}~{step.ToString("0", System.Globalization.CultureInfo.InvariantCulture)}";
+        }
+        private void MsLive(bool live, int def, double value)
+        {
+            var item = MsCheck(def, value);
+            if (item != null && live) MilestoneEvent?.Invoke("LIVE|" + item);
+        }
         public event Action<string>? LimpetEvent;   // the detail for the limpet animation: L or R|type|chip name|chip line|hull repaired; live only
         private string _lastLimpetType = ""; private DateTime _lastLimpetAt = DateTime.MinValue;
         public event Action<string>? AfmuEvent;   // the detail for the AFMU repair receipt: total|partly repaired|name~health percent;...; one run of repairs, batched; live only
@@ -4246,6 +4268,25 @@ namespace EliteBioRadar
                 string victim = Clean(obj.Value<string>("VictimFaction") ?? ""), payee = Clean(obj.Value<string>("PayeeFaction") ?? "");
                 string pair = victim.Length > 0 && payee.Length > 0 ? $"{victim} TO {payee}" : (payee.Length > 0 ? payee : "INTEL PACKAGE");
                 DataLinkEvent?.Invoke($"INTEL|{pair}|{(reward > 0 ? "+" + Credits(reward) + " VOUCHER" : "VOUCHER EARNED")}|{reward}");
+            }
+            // Milestones: the Statistics line is the baseline (anything passed since the last one is a recap); FSDJump, Bounty and the clock move the counters between those.
+            if (evt == "Statistics" && obj["Exploration"] != null)
+            {
+                var exp = obj["Exploration"]!; var combat = obj["Combat"]; var bank = obj["Bank_Account"];
+                _msJumps = exp.Value<double?>("Total_Hyperspace_Jumps") ?? 0; _msLy = exp.Value<double?>("Total_Hyperspace_Distance") ?? 0; _msSeconds = exp.Value<double?>("Time_Played") ?? 0;
+                _msBounties = combat?.Value<double?>("Bounties_Claimed") ?? 0;
+                _msBaseTime = obj.Value<DateTime?>("timestamp")?.ToUniversalTime() ?? DateTime.UtcNow; _msHaveBase = true;
+                var recap = new List<string>();
+                foreach (var item in new[] { MsCheck(0, _msJumps), MsCheck(1, _msLy), MsCheck(2, _msSeconds / 3600.0), MsCheck(3, _msBounties), MsCheck(4, (bank?.Value<double?>("Current_Wealth") ?? 0) / 1e9) })
+                    if (item != null) recap.Add(item);
+                if (!backfill && recap.Count > 0) MilestoneEvent?.Invoke("RECAP|" + string.Join(";", recap.Take(3)));
+            }
+            else if (_msHaveBase)
+            {
+                if (evt == "FSDJump") { _msJumps++; _msLy += obj.Value<double?>("JumpDist") ?? 0; MsLive(!backfill, 0, _msJumps); MsLive(!backfill, 1, _msLy); }
+                else if (evt == "Bounty") { _msBounties++; MsLive(!backfill, 3, _msBounties); }
+                if (obj.Value<DateTime?>("timestamp") is DateTime tsEvt)
+                    MsLive(!backfill, 2, (_msSeconds + Math.Max(0, (tsEvt.ToUniversalTime() - _msBaseTime).TotalSeconds)) / 3600.0);
             }
             if (evt == "Rank" && obj["Combat"] != null)
             {
