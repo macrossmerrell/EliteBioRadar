@@ -40,6 +40,7 @@
         <local:CombatAlertVisual x:Name="combatAlertVisual"/>
         <local:WingCrewVisual x:Name="wingCrewVisual"/>
         <local:BodySignalsVisual x:Name="bodySignalsVisual"/>
+        <local:MiningVisual x:Name="miningVisual"/>
         <local:DiscoveryScanVisual x:Name="discoveryScanVisual"/>
         <local:CrimeVisual x:Name="crimeVisual"/>
         <local:TradeProfitVisual x:Name="tradeProfitVisual"/>

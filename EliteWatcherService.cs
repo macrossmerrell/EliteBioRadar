@@ -113,6 +113,10 @@ namespace EliteBioRadar
         public event Action<string>? CrimeEvent;   // the detail for the crime animation: FINE / WANTED (CommitCrime, at most one every 6 s) or PAID (PayFines / PayBounties); live only
         private DateTime _lastCrimeAlert = DateTime.MinValue;
         public event Action<string>? DiscoveryScanEvent;   // the detail for the discovery scan animation (FSSDiscoveryScan, the honk): bodyCount|system; live only
+        public event Action<string>? MiningEvent;   // the detail for the mining animation (ProspectedAsteroid / AsteroidCracked / MiningRefined): PROSPECT|grade|mat:pct;... / CRACKED| / REFINED|item|tonnes; live only
+        private DateTime _lastProspectAlert = DateTime.MinValue, _lastRefine = DateTime.MinValue;
+        private string _refineItem = "";
+        private int _refineCount;
         public event Action<string>? BodySignalsEvent;   // the detail for the body signals animation (FSSBodySignals / SAASignalsFound): body|TYPE:count;...; live only, once per body and set of counts
         private readonly HashSet<string> _signalsShown = new();
         public event Action? CockpitBreachedEvent;   // the journal's CockpitBreached; live only
@@ -167,6 +171,7 @@ namespace EliteBioRadar
         private bool? _wasAnalysis;
         private bool? _wasGear;
         private bool? _wasHardpoints;
+        private DateTime _lastHonk = DateTime.MinValue;   // when the last live discovery scan (FSSDiscoveryScan) arrived
         private bool? _wasCargoScoop;
         public event Action<string, string>? SystemArrived;   // (system name, star class) a completed hyperspace jump into a new system, live only
         public event Action<string, string>? FirstFootfall;   // (body name, scene tint) the commander's first step on a world nobody had walked on
@@ -1098,7 +1103,16 @@ namespace EliteBioRadar
                 _wasGear = status.LandingGearDown;
 
                 // Hardpoints (Flags bit 6): the first read only sets the baseline.
-                if (!quiet && _wasHardpoints != null && _wasHardpoints != status.HardpointsDeployed) { Log.Write(status.HardpointsDeployed ? "Hardpoints deployed" : "Hardpoints retracted"); HardpointsChanged?.Invoke(status.HardpointsDeployed); }
+                // The Discovery Scanner (the system honk) puts the hardpoints flag out too, and that isn't weapons. Weapons can't be deployed in supercruise (where most honks happen), so stay silent there;
+                // and in normal space the honk's journal event (FSSDiscoveryScan) comes at the end of the hold, so the retract that follows it is silent as well.
+                if (!quiet && _wasHardpoints != null && _wasHardpoints != status.HardpointsDeployed)
+                {
+                    bool deployed = status.HardpointsDeployed;
+                    Log.Write(deployed ? "Hardpoints deployed" : "Hardpoints retracted");
+                    if (status.Supercruise) Log.Write("Hardpoints animation skipped: in supercruise (the Discovery Scanner)");
+                    else if (!deployed && (DateTime.UtcNow - _lastHonk).TotalSeconds < 20) Log.Write("Hardpoints animation skipped: right after a discovery scan");
+                    else HardpointsChanged?.Invoke(deployed);
+                }
                 _wasHardpoints = status.HardpointsDeployed;
 
                 // Cargo scoop (Flags bit 9): the first read only sets the baseline.
@@ -3852,8 +3866,33 @@ namespace EliteBioRadar
                     BodySignalsEvent?.Invoke($"{Clean(sigShort.Length > 0 ? sigShort : sigBody)}|{string.Join(";", parts)}");
                 }
             }
+            if (!backfill && evt == "FSSDiscoveryScan") _lastHonk = DateTime.UtcNow;
             if (!backfill && evt == "FSSDiscoveryScan" && (obj.Value<int?>("BodyCount") ?? 0) > 0)
                 DiscoveryScanEvent?.Invoke($"{obj.Value<int?>("BodyCount")}|{Clean(obj.Value<string>("SystemName") ?? StarSystem ?? "")}");
+            if (!backfill && evt == "ProspectedAsteroid" && (DateTime.UtcNow - _lastProspectAlert).TotalSeconds >= 4 && obj["Materials"] is Newtonsoft.Json.Linq.JArray prospMats)
+            {
+                _lastProspectAlert = DateTime.UtcNow;
+                string content = obj.Value<string>("Content_Localised") ?? obj.Value<string>("Content") ?? "";
+                string grade = content.Contains("High", StringComparison.OrdinalIgnoreCase) ? "HIGH" : content.Contains("Medium", StringComparison.OrdinalIgnoreCase) ? "MEDIUM" : content.Contains("Low", StringComparison.OrdinalIgnoreCase) ? "LOW" : "";
+                var mats = new List<string>();
+                foreach (var m in prospMats)
+                {
+                    double pct = m.Value<double?>("Proportion") ?? 0;
+                    string mn = Clean(m.Value<string>("Name_Localised") ?? PrettyJournalName((m.Value<string>("Name") ?? "").Trim('$', ';')));
+                    if (pct > 0 && mn.Length > 0) mats.Add($"{mn}:{pct.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}");
+                }
+                MiningEvent?.Invoke($"PROSPECT|{grade}|{string.Join(";", mats)}");
+            }
+            if (!backfill && evt == "AsteroidCracked") MiningEvent?.Invoke("CRACKED|");
+            if (!backfill && evt == "MiningRefined")
+            {
+                string refined = Clean(obj.Value<string>("Type_Localised") ?? PrettyJournalName((obj.Value<string>("Type") ?? "").Trim('$', ';')));
+                var nowR = DateTime.UtcNow;
+                // One tonne per event: count a run of the same mineral (a pause of a minute starts a new run) so the plate says how many came in.
+                _refineCount = (refined == _refineItem && (nowR - _lastRefine).TotalSeconds < 60) ? _refineCount + 1 : 1;
+                _refineItem = refined; _lastRefine = nowR;
+                if (refined.Length > 0) MiningEvent?.Invoke($"REFINED|{refined}|{_refineCount}");
+            }
             if (!backfill && evt == "CockpitBreached") CockpitBreachedEvent?.Invoke();
 
             // Combat alerts. UnderAttack is written for every volley, so it plays at most once in 25 s; ShipTargetted plays on a fresh lock (scan stage 0); Scanned when another ship scans you. Live only.

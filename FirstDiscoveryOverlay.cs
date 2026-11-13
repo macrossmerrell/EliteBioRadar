@@ -322,6 +322,8 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Crime, "", detail)));
             svc.DiscoveryScanEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.DiscoveryScan, "", detail)));
+            svc.MiningEvent += detail => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Mining, "", detail)));
             svc.BodySignalsEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.BodySignals, "", detail)));
             svc.CockpitBreachedEvent += () => Dispatcher.InvokeAsync(() =>
@@ -398,6 +400,7 @@ namespace EliteBioRadar
                     ["combat-alert"] = _w.combatAlertVisual,
                     ["wing-crew"] = _w.wingCrewVisual,
                     ["body-signals"] = _w.bodySignalsVisual,
+                    ["mining"] = _w.miningVisual,
                     ["discovery-scan"] = _w.discoveryScanVisual,
                     ["crime"] = _w.crimeVisual,
                     ["trade-profit"] = _w.tradeProfitVisual,

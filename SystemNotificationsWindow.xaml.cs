@@ -43,6 +43,7 @@ namespace EliteBioRadar
                 ["combat-alert"] = combatAlertVisual,
                 ["wing-crew"] = wingCrewVisual,
                 ["body-signals"] = bodySignalsVisual,
+                ["mining"] = miningVisual,
                 ["discovery-scan"] = discoveryScanVisual,
                 ["crime"] = crimeVisual,
                 ["trade-profit"] = tradeProfitVisual,
