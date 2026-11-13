@@ -61,6 +61,7 @@ namespace EliteBioRadar
                 ["carrier-panel"] = carrierPanelVisual,
                 ["session"] = sessionVisual,
                 ["data-link"] = dataLinkVisual,
+                ["target-scan"] = targetVisual,
                 ["approach-settlement"] = settlementVisual,
                 ["synthesis"] = synthesisVisual,
                 ["community-goal"] = communityGoalVisual,

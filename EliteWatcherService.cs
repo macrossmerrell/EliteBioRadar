@@ -139,6 +139,8 @@ namespace EliteBioRadar
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
         public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
         private DateTime _lastModuleAlert = DateTime.MinValue;
+        public event Action<string>? TargetEvent;   // the detail for the target dossier animation: LEGAL|ship|pilot|rank|faction|shield|hull|bounty; live only, at scan stage 3
+        private string _lastTargetKey = ""; private DateTime _lastTargetAt = DateTime.MinValue;
         public event Action<string>? DataLinkEvent;   // the detail for the data link animation: KIND|target|chip line|payout; live only
         private string _lastDataType = ""; private DateTime _lastDataAt = DateTime.MinValue;
         public event Action<string>? SessionEvent;   // the detail for the session licence animation: KIND|commander|chip line|mode|credits|combat|trade|explore|exobiologist|group; live only
@@ -4157,6 +4159,21 @@ namespace EliteBioRadar
                 string mKind = chan switch { "player" or "friend" => "DM", "wing" => "WING", "squadron" => "SQ", _ => "" };
                 if (mKind.Length > 0 && from.Length > 0 && msg.Length > 0)
                     ContactEvent?.Invoke($"{mKind}|{(from.StartsWith("CMDR ", StringComparison.OrdinalIgnoreCase) ? from : "CMDR " + from)}|{(mKind == "DM" ? "DIRECT" : mKind == "WING" ? "WING" : "SQUADRON")}|{msg}");
+            }
+            // A ship scan builds up in stages (1 pilot, 2 health, 3 legal status and faction): play once, when it is complete, and not again for the same target within 20 seconds.
+            if (!backfill && evt == "ShipTargeted" && obj.Value<bool?>("TargetLocked") == true && obj.Value<int?>("ScanStage") == 3)
+            {
+                string tShip = Clean(obj.Value<string>("Ship_Localised") ?? PrettyJournalName(obj.Value<string>("Ship") ?? "")).ToUpperInvariant();
+                string tPilot = Clean(obj.Value<string>("PilotName_Localised") ?? "").Trim();
+                if (tPilot.StartsWith("unmanned CMDR ", StringComparison.OrdinalIgnoreCase)) tPilot = "CMDR " + tPilot.Substring("unmanned CMDR ".Length);
+                tPilot = tPilot.ToUpperInvariant();
+                string tKey = tShip + "|" + tPilot;
+                if (tShip.Length > 0 && !(tKey == _lastTargetKey && (DateTime.UtcNow - _lastTargetAt).TotalSeconds < 20))
+                {
+                    _lastTargetKey = tKey; _lastTargetAt = DateTime.UtcNow;
+                    var inv = System.Globalization.CultureInfo.InvariantCulture;
+                    TargetEvent?.Invoke($"{(obj.Value<string>("LegalStatus") ?? "").ToUpperInvariant()}|{tShip}|{(tPilot.Length > 0 ? tPilot : "UNKNOWN PILOT")}|{Clean(obj.Value<string>("PilotRank") ?? "")}|{Clean(obj.Value<string>("Faction") ?? "")}|{(obj.Value<double?>("ShieldHealth") ?? 100).ToString("0", inv)}|{(obj.Value<double?>("HullHealth") ?? 100).ToString("0", inv)}|{obj.Value<long?>("Bounty") ?? 0}");
+                }
             }
             if (!backfill && evt == "DataScanned")
             {
