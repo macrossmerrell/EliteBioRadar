@@ -148,6 +148,8 @@ namespace EliteBioRadar
         private readonly Dictionary<int, int> _goalTier = new();   // the tier reached per community goal, so only a rise is announced
         public event Action<string>? SettlementEvent;   // the detail for the approach settlement animation: NAME|faction|government|economy|body|services; live only
         private string _lastSettlement = ""; private DateTime _lastSettlementAt = DateTime.MinValue;
+        public event Action<string>? TaxiEvent;   // the detail for the taxi / dropship animation: KIND|ticket destination|chip name|chip line|fare line|TAXI or DROPSHIP; live only
+        private string _taxiTo = "", _taxiName = "", _taxiTag = "TAXI";   // the last booking, which a cancel does not repeat
         private double _svcFuel;
         private int _svcRepairItems;
         private System.Threading.Timer? _svcTimer;
@@ -4114,6 +4116,27 @@ namespace EliteBioRadar
                         if (have.Contains(svcName) && letters.Length < 6) letters.Append(letter);
                     SettlementEvent?.Invoke($"{settleName}|{Clean(obj["StationFaction"]?.Value<string>("Name") ?? "")}|{Clean(obj.Value<string>("StationGovernment_Localised") ?? "")}|{Clean(obj.Value<string>("StationEconomy_Localised") ?? "")}|{Clean(obj.Value<string>("BodyName") ?? "")}|{letters}");
                 }
+            }
+            if (!backfill && (evt == "BookTaxi" || evt == "BookDropship"))
+            {
+                string bookSystem = Clean(obj.Value<string>("DestinationSystem") ?? ""), bookPlace = Clean(obj.Value<string>("DestinationLocation") ?? "");
+                _taxiTo = bookSystem.Length > 0 ? bookSystem : bookPlace;
+                _taxiName = bookPlace.Length > 0 && bookSystem.Length > 0 ? $"{bookPlace}, {bookSystem}" : _taxiTo;
+                _taxiTag = evt == "BookTaxi" ? "TAXI" : "DROPSHIP";
+                string fare = (obj.Value<long?>("Cost") ?? 0) > 0 ? "-" + obj.Value<long>("Cost").ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " CR" : "";
+                TaxiEvent?.Invoke($"{(evt == "BookTaxi" ? "TAXI" : "DROP")}|{_taxiTo}|{_taxiName}|{fare}|{fare}|{_taxiTag}");
+            }
+            if (!backfill && (evt == "CancelTaxi" || evt == "CancelDropship"))
+            {
+                string refund = (obj.Value<long?>("Refund") ?? 0) > 0 ? "REFUND +" + obj.Value<long>("Refund").ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " CR" : "";
+                string tag = evt == "CancelTaxi" ? "TAXI" : "DROPSHIP";
+                TaxiEvent?.Invoke($"CANCEL|{(_taxiTag == tag ? _taxiTo : "")}|{(_taxiTag == tag ? _taxiName : "")}|{refund}|{refund}|{tag}");
+            }
+            if (!backfill && evt == "DropshipDeploy")
+            {
+                string depSystem = Clean(obj.Value<string>("StarSystem") ?? ""), depBody = Clean(obj.Value<string>("Body") ?? "");
+                string where = obj.Value<bool?>("OnPlanet") == true ? "ON PLANET" : obj.Value<bool?>("OnStation") == true ? "ON STATION" : "";
+                TaxiEvent?.Invoke($"DEPLOY|{depSystem}|{(depBody.Length > 0 ? depBody : depSystem)}|{where}|FARE PAID|DROPSHIP");
             }
             if (!backfill && evt == "CommunityGoalJoin")
                 CommunityGoalEvent?.Invoke($"JOIN|{Clean(obj.Value<string>("Name") ?? "")}|{Clean(obj.Value<string>("System") ?? "")}");
