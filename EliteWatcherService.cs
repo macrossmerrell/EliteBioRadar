@@ -139,6 +139,7 @@ namespace EliteBioRadar
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
         public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
         private DateTime _lastModuleAlert = DateTime.MinValue;
+        public event Action<string>? SquadronEvent;   // the detail for the squadron animation: KIND|squadron|chip line|old rank|new rank; live only
         public event Action<string>? ServicesEvent;   // the detail for the station services animation (refuel / repair / restock): key|LABEL|amount|cost;...; live only
         // Servicing at a station writes several journal lines within a second or so; gather them and raise one animation after a short pause.
         private readonly object _svcGate = new();
@@ -4129,6 +4130,25 @@ namespace EliteBioRadar
                         if (have.Contains(svcName) && letters.Length < 6) letters.Append(letter);
                     SettlementEvent?.Invoke($"{settleName}|{Clean(obj["StationFaction"]?.Value<string>("Name") ?? "")}|{Clean(obj.Value<string>("StationGovernment_Localised") ?? "")}|{Clean(obj.Value<string>("StationEconomy_Localised") ?? "")}|{Clean(obj.Value<string>("BodyName") ?? "")}|{letters}");
                 }
+            }
+            if (!backfill && (evt == "InvitedToSquadron" || evt == "AppliedToSquadron" || evt == "JoinedSquadron" || evt == "SquadronCreated" || evt == "SquadronPromotion" || evt == "SquadronDemotion" || evt == "LeftSquadron" || evt == "KickedFromSquadron" || evt == "DisbandedSquadron" || evt == "WonATrophyForSquadron"))
+            {
+                string squad = Clean(obj.Value<string>("SquadronName") ?? ""), sqKind, sqChip = "";
+                int oldRank = obj.Value<int?>("OldRank") ?? 0, newRank = obj.Value<int?>("NewRank") ?? 0;
+                switch (evt)
+                {
+                    case "InvitedToSquadron": sqKind = "INVITE"; sqChip = "AWAITING YOUR ANSWER"; break;
+                    case "AppliedToSquadron": sqKind = "APPLY"; sqChip = "AWAITING REPLY"; break;
+                    case "SquadronCreated": sqKind = "CREATE"; break;
+                    case "SquadronPromotion": sqKind = "PROMOTE"; sqChip = $"RANK {oldRank} TO {newRank}"; break;
+                    case "SquadronDemotion": sqKind = "DEMOTE"; sqChip = $"RANK {oldRank} TO {newRank}"; break;
+                    case "LeftSquadron": sqKind = "LEAVE"; break;
+                    case "KickedFromSquadron": sqKind = "KICK"; break;
+                    case "DisbandedSquadron": sqKind = "DISBAND"; break;
+                    case "WonATrophyForSquadron": sqKind = "TROPHY"; sqChip = Clean(obj.Value<string>("Name_Localised") ?? obj.Value<string>("Name") ?? ""); break;
+                    default: sqKind = "JOIN"; break;
+                }
+                if (squad.Length > 0) SquadronEvent?.Invoke($"{sqKind}|{squad}|{sqChip}|{oldRank}|{newRank}");
             }
             if (!backfill && (evt == "BookTaxi" || evt == "BookDropship"))
             {

@@ -332,6 +332,7 @@
         <local:ServicesVisual x:Name="servicesVisual"/>
         <local:GearVisual x:Name="gearVisual"/>
         <local:TaxiVisual x:Name="taxiVisual"/>
+        <local:SquadronVisual x:Name="squadronVisual"/>
         <local:SettlementVisual x:Name="settlementVisual"/>
         <local:SynthesisVisual x:Name="synthesisVisual"/>
         <local:CommunityGoalVisual x:Name="communityGoalVisual"/>
