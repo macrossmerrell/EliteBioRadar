@@ -150,6 +150,19 @@ namespace EliteBioRadar
         private string _lastSettlement = ""; private DateTime _lastSettlementAt = DateTime.MinValue;
         public event Action<string>? TaxiEvent;   // the detail for the taxi / dropship animation: KIND|ticket destination|chip name|chip line|fare line|TAXI or DROPSHIP; live only
         private string _taxiTo = "", _taxiName = "", _taxiTag = "TAXI";   // the last booking, which a cancel does not repeat
+        public event Action<string>? GearEvent;   // the detail for the on-foot gear animation: ACTION|ICON|name|chip line|grade before|grade after; live only
+        // "explorationsuit_class5" and "$ExplorationSuit_Class1_Name;" both read as Artemis Suit; weapons use the game's own localised name.
+        private static string GearName(string raw, string? localised)
+        {
+            if (!string.IsNullOrEmpty(localised) && !localised.StartsWith("$")) return localised;
+            string n = System.Text.RegularExpressions.Regex.Replace((raw ?? "").Trim('$', ';').ToLowerInvariant().Replace("_name", ""), "_class\\d+$", "");
+            return n switch
+            {
+                "explorationsuit" => "Artemis Suit", "utilitysuit" => "Maverick Suit", "tacticalsuit" => "Dominator Suit", "flightsuit" => "Flight Suit",
+                _ => PrettyJournalName(n),
+            };
+        }
+        private static string Credits(long v) => v.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " CR";
         private double _svcFuel;
         private int _svcRepairItems;
         private System.Threading.Timer? _svcTimer;
@@ -4137,6 +4150,38 @@ namespace EliteBioRadar
                 string depSystem = Clean(obj.Value<string>("StarSystem") ?? ""), depBody = Clean(obj.Value<string>("Body") ?? "");
                 string where = obj.Value<bool?>("OnPlanet") == true ? "ON PLANET" : obj.Value<bool?>("OnStation") == true ? "ON STATION" : "";
                 TaxiEvent?.Invoke($"DEPLOY|{depSystem}|{(depBody.Length > 0 ? depBody : depSystem)}|{where}|FARE PAID|DROPSHIP");
+            }
+            if (!backfill && (evt == "BuySuit" || evt == "SellSuit" || evt == "UpgradeSuit" || evt == "BuyWeapon" || evt == "SellWeapon" || evt == "UpgradeWeapon"))
+            {
+                bool isSuit = evt.EndsWith("Suit");
+                string gearName = Clean(GearName(obj.Value<string>("Name") ?? "", obj.Value<string>("Name_Localised")));
+                long gearPrice = obj.Value<long?>("Price") ?? obj.Value<long?>("Cost") ?? 0;
+                if (evt.StartsWith("Upgrade"))
+                {
+                    int cls = obj.Value<int?>("Class") ?? 0;
+                    GearEvent?.Invoke($"UP|{(isSuit ? "suit" : "gun")}|{gearName}|{(cls > 0 ? $"GRADE {cls - 1} TO {cls}" : (gearPrice > 0 ? "-" + Credits(gearPrice) : ""))}|{Math.Max(0, cls - 1)}|{cls}");
+                }
+                else
+                {
+                    bool bought = evt.StartsWith("Buy");
+                    GearEvent?.Invoke($"{(bought ? "BUY" : "SELL")}|{(isSuit ? "suit" : "gun")}|{gearName}|{(gearPrice > 0 ? (bought ? "-" : "+") + Credits(gearPrice) : "")}||");
+                }
+            }
+            if (!backfill && (evt == "SellMicroResources" || evt == "BuyMicroResources"))
+            {
+                bool bought = evt == "BuyMicroResources";
+                int items = obj.Value<int?>("TotalCount") ?? obj.Value<int?>("Count") ?? (obj["MicroResources"] is Newtonsoft.Json.Linq.JArray mr ? mr.Sum(m => m.Value<int?>("Count") ?? 1) : 0);
+                long mrPrice = obj.Value<long?>("Price") ?? 0;
+                string mrName = items > 0 ? $"{items} ITEM{(items == 1 ? "" : "S")}" : Clean(obj.Value<string>("Name_Localised") ?? "ITEMS");
+                GearEvent?.Invoke($"{(bought ? "BUY" : "SELL")}|box|{mrName}|{(mrPrice > 0 ? (bought ? "-" : "+") + Credits(mrPrice) : "")}||");
+            }
+            if (!backfill && evt == "TradeMicroResources")
+            {
+                int offeredCount = obj.Value<int?>("TotalCount") ?? (obj["Offered"] is Newtonsoft.Json.Linq.JArray off ? off.Sum(m => m.Value<int?>("Count") ?? 1) : 0);
+                string offeredCat = obj["Offered"] is Newtonsoft.Json.Linq.JArray off2 && off2.Count > 0 ? Clean(off2[0].Value<string>("Category") ?? "") : "";
+                int gotCount = obj.Value<int?>("Count") ?? 0;
+                string gotCat = Clean(obj.Value<string>("Category") ?? "");
+                GearEvent?.Invoke($"TRADE|box|{offeredCount} ITEM{(offeredCount == 1 ? "" : "S")} FOR {gotCount} ITEM{(gotCount == 1 ? "" : "S")}|{(offeredCat.Length > 0 && gotCat.Length > 0 ? offeredCat + " TO " + gotCat : "")}||");
             }
             if (!backfill && evt == "CommunityGoalJoin")
                 CommunityGoalEvent?.Invoke($"JOIN|{Clean(obj.Value<string>("Name") ?? "")}|{Clean(obj.Value<string>("System") ?? "")}");

@@ -332,6 +332,8 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Settlement, "", detail)));
             svc.TaxiEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Taxi, "", detail)));
+            svc.GearEvent += detail => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Gear, "", detail)));
             svc.ServicesEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Services, "", detail)));
             svc.ShipyardEvent += detail => Dispatcher.InvokeAsync(() =>
@@ -436,6 +438,7 @@ namespace EliteBioRadar
                     ["shipyard"] = _w.shipyardVisual,
                     ["module"] = _w.moduleVisual,
                     ["services"] = _w.servicesVisual,
+                    ["gear"] = _w.gearVisual,
                     ["taxi"] = _w.taxiVisual,
                     ["approach-settlement"] = _w.settlementVisual,
                     ["synthesis"] = _w.synthesisVisual,

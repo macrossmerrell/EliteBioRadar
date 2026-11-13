@@ -53,6 +53,7 @@ namespace EliteBioRadar
                 ["shipyard"] = shipyardVisual,
                 ["module"] = moduleVisual,
                 ["services"] = servicesVisual,
+                ["gear"] = gearVisual,
                 ["taxi"] = taxiVisual,
                 ["approach-settlement"] = settlementVisual,
                 ["synthesis"] = synthesisVisual,
