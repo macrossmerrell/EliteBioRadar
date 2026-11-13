@@ -62,6 +62,8 @@ namespace EliteBioRadar
             new("discovery-scan", "Discovery scan (honk)", "Exploration", AnimationSurfaces.Both, 0.85, "", "6|Sample System", PreviewCycle: new[] { "6|Sample System", "19|Col 285 Sector EB-O D6-3" });
         public static readonly AnimationDef Mining =
             new("mining", "Mining (prospected / cracked / refined)", "Cargo", AnimationSurfaces.Both, 0.85, "", "PROSPECT|HIGH|Painite:31;Platinum:12;Void Opal:6", PreviewCycle: new[] { "PROSPECT|HIGH|Painite:31;Platinum:12;Void Opal:6", "CRACKED|", "REFINED|Painite|3" });
+        public static readonly AnimationDef SelfDestruct =
+            new("self-destruct", "Self destruct countdown", "Combat", AnimationSurfaces.Both, 0.85, "", "");
         public static readonly AnimationDef Voucher =
             new("voucher", "Vouchers redeemed", "Cargo", AnimationSurfaces.Both, 0.85, "", "bounty|811423|Federation", PreviewCycle: new[] { "bounty|811423|Federation", "codex|375000|", "CombatBond|1250000|Empire;Federation" });
         public static readonly AnimationDef SearchRescue =
@@ -168,7 +170,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef AtmosphericJump =
             new("atmospheric-jump", "Hyperspace jump from an atmosphere", "Atmosphere", AnimationSurfaces.Main, 1.0, "", "", Live: true);
 
-        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, Arrival, CarrierJump, Supercruise, SupercruiseOverdrive, SupercruiseAssist, SupercruiseExit, Supercharge, Route, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, Shields, LowFuel, Overheat, Vitals, Thermal, RankUp, HullDamage, ShipLost, Fighter, MassLock, FsdCooldown, Interdiction, InterdictionOutcome, Engineer, TechBroker, WingCrew, SilentRunning, DriveAssist, Handbrake, Turret, FlightAssist, Disembark, Embark, Srv, Landed, Liftoff, FirstFootfall, DockingRequest, Docked, OrganismScan, ColonyRange, FssComplete, CodexEntry, Mapped, Material, Payout, ExobiologySold, DiscoveryScan, SignalSource, NavBeacon, ShipCall, SearchRescue, Voucher, BodySignals, Mission, Bounty, CombatAlert, Crime, CockpitBreach, Cargo, TradeProfit, Mining, Descent, Climb, AtmosphericJump };
+        public static readonly IReadOnlyList<AnimationDef> All = new[] { FirstDiscovery, HyperspaceJump, Arrival, CarrierJump, Supercruise, SupercruiseOverdrive, SupercruiseAssist, SupercruiseExit, Supercharge, Route, FuelScoop, CombatMode, AnalysisMode, LandingGear, Hardpoints, CargoScoop, Headlights, NightVision, Shields, LowFuel, Overheat, Vitals, Thermal, RankUp, HullDamage, ShipLost, Fighter, MassLock, FsdCooldown, Interdiction, InterdictionOutcome, Engineer, TechBroker, WingCrew, SilentRunning, DriveAssist, Handbrake, Turret, FlightAssist, Disembark, Embark, Srv, Landed, Liftoff, FirstFootfall, DockingRequest, Docked, OrganismScan, ColonyRange, FssComplete, CodexEntry, Mapped, Material, Payout, ExobiologySold, DiscoveryScan, SignalSource, NavBeacon, ShipCall, SearchRescue, Voucher, SelfDestruct, BodySignals, Mission, Bounty, CombatAlert, Crime, CockpitBreach, Cargo, TradeProfit, Mining, Descent, Climb, AtmosphericJump };
 
         // The user's choice from the settings file, else the animation's own default.
         public static AnimationSurfaces SurfacesFor(AnimationDef def, AppSettingsData settings) =>

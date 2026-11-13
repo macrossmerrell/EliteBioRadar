@@ -114,6 +114,7 @@ namespace EliteBioRadar
         private DateTime _lastCrimeAlert = DateTime.MinValue;
         public event Action<string>? DiscoveryScanEvent;   // the detail for the discovery scan animation (FSSDiscoveryScan, the honk): bodyCount|system; live only
         public event Action<string>? MiningEvent;   // the detail for the mining animation (ProspectedAsteroid / AsteroidCracked / MiningRefined): PROSPECT|grade|mat:pct;... / CRACKED| / REFINED|item|tonnes; live only
+        public event Action? SelfDestructEvent;   // the commander started the self destruct (SelfDestruct, no fields); live only
         public event Action<string>? VoucherEvent;   // the detail for the vouchers redeemed animation (RedeemVoucher): type|amount|faction;faction; live only
         public event Action<string>? SearchRescueEvent;   // the detail for the search and rescue animation (SearchAndRescue): RESCUE|RECOVER|count|item|reward; live only
         public event Action<string>? ShipCallEvent;   // the detail for the ship dismissed / recalled animation (Liftoff / Touchdown with PlayerControlled false): DISMISS or RECALL; live only
@@ -3972,6 +3973,7 @@ namespace EliteBioRadar
                 _refineItem = refined; _lastRefine = nowR;
                 if (refined.Length > 0) MiningEvent?.Invoke($"REFINED|{refined}|{_refineCount}");
             }
+            if (!backfill && evt == "SelfDestruct") SelfDestructEvent?.Invoke();
             if (!backfill && evt == "CockpitBreached") CockpitBreachedEvent?.Invoke();
 
             // Combat alerts. UnderAttack is written for every volley, so it plays at most once in 25 s; ShipTargetted plays on a fresh lock (scan stage 0); Scanned when another ship scans you. Live only.

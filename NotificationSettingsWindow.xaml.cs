@@ -42,7 +42,7 @@ namespace EliteBioRadar
             ("Surface and vehicles", new[] { "landed", "liftoff", "srv", "ship-call", "embark", "disembark", "drive-assist", "handbrake", "turret" }),
             ("Exploration",         new[] { "discovery-scan", "signal-source", "nav-beacon", "fss-complete", "body-signals", "planet-mapped", "codex-entry", "material", "payout" }),
             ("Biology",             new[] { "organism-scan", "colony-range", "exobiology-sold" }),
-            ("Combat",              new[] { "combat-alert", "interdiction", "interdiction-outcome", "crime", "bounty", "fighter", "cockpit-breach", "ship-lost" }),
+            ("Combat",              new[] { "combat-alert", "interdiction", "interdiction-outcome", "crime", "bounty", "fighter", "cockpit-breach", "self-destruct", "ship-lost" }),
             ("Ship controls",       new[] { "landing-gear", "hardpoints", "cargo-scoop", "headlights", "night-vision", "flight-assist", "silent-running", "combat-mode", "analysis-mode" }),
             ("Ship alerts",         new[] { "shields", "hull-damage", "low-fuel", "overheat", "mass-lock", "fsd-cooldown" }),
             ("Cargo and trade",     new[] { "mining", "cargo", "search-rescue", "trade-profit", "voucher" }),

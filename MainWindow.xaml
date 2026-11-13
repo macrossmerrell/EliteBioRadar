@@ -326,6 +326,7 @@
         <local:ShipCallVisual x:Name="shipCallVisual"/>
         <local:SearchRescueVisual x:Name="searchRescueVisual"/>
         <local:VoucherVisual x:Name="voucherVisual"/>
+        <local:SelfDestructVisual x:Name="selfDestructVisual"/>
         <local:DiscoveryScanVisual x:Name="discoveryScanVisual"/>
         <local:CrimeVisual x:Name="crimeVisual"/>
         <local:TradeProfitVisual x:Name="tradeProfitVisual"/>
