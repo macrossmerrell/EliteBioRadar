@@ -139,6 +139,8 @@ namespace EliteBioRadar
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
         public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
         private DateTime _lastModuleAlert = DateTime.MinValue;
+        public event Action<string>? PowerplayEvent;   // the detail for the Powerplay animation: KIND|power|chip line|old rank|new rank|gain|total; live only
+        private int _ppRank = -1;   // the last known Powerplay rank (from the start-up Powerplay line or a rank event), so a rank-up can say "from"
         public event Action<string>? SquadronEvent;   // the detail for the squadron animation: KIND|squadron|chip line|old rank|new rank; live only
         public event Action<string>? ServicesEvent;   // the detail for the station services animation (refuel / repair / restock): key|LABEL|amount|cost;...; live only
         // Servicing at a station writes several journal lines within a second or so; gather them and raise one animation after a short pause.
@@ -4130,6 +4132,39 @@ namespace EliteBioRadar
                         if (have.Contains(svcName) && letters.Length < 6) letters.Append(letter);
                     SettlementEvent?.Invoke($"{settleName}|{Clean(obj["StationFaction"]?.Value<string>("Name") ?? "")}|{Clean(obj.Value<string>("StationGovernment_Localised") ?? "")}|{Clean(obj.Value<string>("StationEconomy_Localised") ?? "")}|{Clean(obj.Value<string>("BodyName") ?? "")}|{letters}");
                 }
+            }
+            if (evt == "Powerplay" && obj["Rank"] != null) _ppRank = obj.Value<int?>("Rank") ?? _ppRank;
+            if (evt == "PowerplayJoin" || evt == "PowerplayLeave") _ppRank = -1;
+            if (!backfill && (evt == "PowerplayJoin" || evt == "PowerplayLeave" || evt == "PowerplayDefect" || evt == "PowerplayRank" || evt == "PowerplayMerits" || evt == "PowerplaySalary"))
+            {
+                string ppPower = Clean(obj.Value<string>("Power") ?? obj.Value<string>("ToPower") ?? ""), ppKind, ppChip = "", ppGain = "", ppTotal = "";
+                int ppOld = _ppRank, ppNew = _ppRank;
+                string Num(long n) => n.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+                switch (evt)
+                {
+                    case "PowerplayJoin": ppKind = "JOIN"; ppChip = "ALLEGIANCE SWORN"; break;
+                    case "PowerplayLeave": ppKind = "LEAVE"; break;
+                    case "PowerplayDefect":
+                        ppKind = "DEFECT";
+                        ppPower = $"{Clean(obj.Value<string>("FromPower") ?? "")} TO {Clean(obj.Value<string>("ToPower") ?? "")}".Trim();
+                        break;
+                    case "PowerplayRank":
+                        ppKind = "RANK"; ppNew = obj.Value<int?>("Rank") ?? -1; _ppRank = ppNew;
+                        ppChip = ppOld >= 0 && ppNew >= 0 ? $"RANK {ppOld} TO {ppNew}" : (ppNew >= 0 ? $"RANK {ppNew}" : "");
+                        break;
+                    case "PowerplayMerits":
+                        ppKind = "MERIT";
+                        long gained = obj.Value<long?>("MeritsGained") ?? 0, total = obj.Value<long?>("TotalMerits") ?? 0;
+                        ppGain = Num(gained); ppTotal = Num(total);
+                        ppChip = total > 0 ? $"+{ppGain} MERITS  TOTAL {ppTotal}" : $"+{ppGain} MERITS";
+                        break;
+                    default:
+                        ppKind = "PAY";
+                        ppGain = Num(obj.Value<long?>("Amount") ?? 0);
+                        ppChip = $"+{ppGain} CR WEEKLY PAY";
+                        break;
+                }
+                if (ppPower.Length > 0 || ppKind == "LEAVE") PowerplayEvent?.Invoke($"{ppKind}|{ppPower}|{ppChip}|{ppOld}|{ppNew}|{ppGain}|{ppTotal}");
             }
             if (!backfill && (evt == "InvitedToSquadron" || evt == "AppliedToSquadron" || evt == "JoinedSquadron" || evt == "SquadronCreated" || evt == "SquadronPromotion" || evt == "SquadronDemotion" || evt == "LeftSquadron" || evt == "KickedFromSquadron" || evt == "DisbandedSquadron" || evt == "WonATrophyForSquadron"))
             {
