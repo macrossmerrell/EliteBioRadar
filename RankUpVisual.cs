@@ -26,6 +26,9 @@ namespace EliteBioRadar
             ["Federation"] = ("FEDERAL NAVY", new[] { "None", "Recruit", "Cadet", "Midshipman", "Petty Officer", "Chief Petty Officer", "Warrant Officer", "Ensign", "Lieutenant", "Lieutenant Commander", "Post Commander", "Post Captain", "Rear Admiral", "Vice Admiral", "Admiral" }),
             ["Empire"] = ("IMPERIAL NAVY", new[] { "None", "Outsider", "Serf", "Master", "Squire", "Knight", "Lord", "Baron", "Viscount", "Count", "Earl", "Marquis", "Duke", "Prince", "King" }),
         };
+        // The rank's name for a category and number (used by the session licence card); "" if unknown.
+        internal static string RankName(string category, int n) =>
+            Tables.TryGetValue(category, out var t) && n >= 0 && n < t.ranks.Length ? t.ranks[n] : "";
         private static string[] Ranks(params string[] first8)
         {
             var all = new string[first8.Length + Elite.Length];

@@ -139,6 +139,11 @@ namespace EliteBioRadar
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
         public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
         private DateTime _lastModuleAlert = DateTime.MinValue;
+        public event Action<string>? SessionEvent;   // the detail for the session licence animation: KIND|commander|chip line|mode|credits|combat|trade|explore|exobiologist|group; live only
+        private readonly int[] _sessionRanks = { -1, -1, -1, -1 };   // combat, trade, explore, exobiologist, from the Rank line the game writes before LoadGame
+        private DateTime _sessionStart = DateTime.MinValue;
+        private int _sessionJumps;
+        private string _sessionCmdr = "";
         public event Action<string>? CarrierPanelEvent;   // the detail for the carrier management animation: ROW|carrier|chip title|chip line|prefix|number|suffix|bar from|bar to|switch; live only
         private string _myCarrier = "";   // the commander's own carrier (name and callsign), from CarrierStats / CarrierBuy
         public event Action<string>? ContactEvent;   // the detail for the friends / chat animation: KIND|commander|chip line|message; live only
@@ -4150,6 +4155,33 @@ namespace EliteBioRadar
                 string mKind = chan switch { "player" or "friend" => "DM", "wing" => "WING", "squadron" => "SQ", _ => "" };
                 if (mKind.Length > 0 && from.Length > 0 && msg.Length > 0)
                     ContactEvent?.Invoke($"{mKind}|{(from.StartsWith("CMDR ", StringComparison.OrdinalIgnoreCase) ? from : "CMDR " + from)}|{(mKind == "DM" ? "DIRECT" : mKind == "WING" ? "WING" : "SQUADRON")}|{msg}");
+            }
+            if (evt == "Rank" && obj["Combat"] != null)
+            {
+                _sessionRanks[0] = obj.Value<int?>("Combat") ?? -1; _sessionRanks[1] = obj.Value<int?>("Trade") ?? -1;
+                _sessionRanks[2] = obj.Value<int?>("Explore") ?? -1; _sessionRanks[3] = obj.Value<int?>("Exobiologist") ?? -1;
+            }
+            if (evt == "FSDJump") _sessionJumps++;
+            if (evt == "LoadGame")
+            {
+                _sessionStart = obj.Value<DateTime?>("timestamp")?.ToUniversalTime() ?? DateTime.UtcNow;
+                _sessionJumps = 0; _sessionCmdr = obj.Value<string>("Commander") ?? _sessionCmdr;
+                if (!backfill)
+                {
+                    string sMode = (obj.Value<string>("GameMode") ?? "").ToUpperInvariant(), sGroup = Clean(obj.Value<string>("Group") ?? "").ToUpperInvariant();
+                    string sShip = Clean(obj.Value<string>("Ship_Localised") ?? PrettyJournalName(obj.Value<string>("Ship") ?? "")).ToUpperInvariant(), sIdent = Clean(obj.Value<string>("ShipIdent") ?? "").ToUpperInvariant();
+                    string sModeText = sMode == "GROUP" ? (sGroup.Length > 0 ? sGroup : "PRIVATE GROUP") : sMode;
+                    string sCmdr = Clean(obj.Value<string>("Commander") ?? "");
+                    if (sCmdr.Length > 0)
+                        SessionEvent?.Invoke($"START|CMDR {sCmdr}|{(sShip + " " + sIdent).Trim()}  {sModeText}|{sMode}|{obj.Value<long?>("Credits") ?? 0}|{_sessionRanks[0]}|{_sessionRanks[1]}|{_sessionRanks[2]}|{_sessionRanks[3]}|{sGroup}");
+                }
+            }
+            if (!backfill && evt == "Shutdown" && _sessionStart > DateTime.MinValue)
+            {
+                var span = DateTime.UtcNow - _sessionStart;
+                string dur = span.TotalHours >= 1 ? $"{(int)span.TotalHours}H {span.Minutes}M" : $"{Math.Max(1, span.Minutes)}M";
+                SessionEvent?.Invoke($"END|CMDR {Clean(_sessionCmdr)}|SESSION {dur}  {_sessionJumps} JUMP{(_sessionJumps == 1 ? "" : "S")}||0|{_sessionRanks[0]}|{_sessionRanks[1]}|{_sessionRanks[2]}|{_sessionRanks[3]}|");
+                _sessionStart = DateTime.MinValue;
             }
             if (evt == "Powerplay" && obj["Rank"] != null) _ppRank = obj.Value<int?>("Rank") ?? _ppRank;
             if (evt == "PowerplayJoin" || evt == "PowerplayLeave") _ppRank = -1;

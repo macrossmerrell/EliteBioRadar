@@ -59,6 +59,7 @@ namespace EliteBioRadar
                 ["powerplay"] = powerplayVisual,
                 ["contact"] = contactVisual,
                 ["carrier-panel"] = carrierPanelVisual,
+                ["session"] = sessionVisual,
                 ["approach-settlement"] = settlementVisual,
                 ["synthesis"] = synthesisVisual,
                 ["community-goal"] = communityGoalVisual,
