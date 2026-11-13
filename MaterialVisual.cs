@@ -91,6 +91,13 @@ namespace EliteBioRadar
             _version = MaterialPickupState.Snapshot().version;   // pickups added after this one are the ones to pulse for
         }
 
+        // The chemical symbol for a raw material's internal name (used by the discovery card); false for names the table does not know.
+        internal static bool TryElementSymbol(string key, out string symbol)
+        {
+            if (Elements.TryGetValue(key ?? "", out var el)) { symbol = el.sym; return true; }
+            symbol = ""; return false;
+        }
+
         private static readonly Pen PinPen = FrozenPen(Mint, 1);
         private static readonly Brush BitOff = Frozen(Color.FromArgb(51, Mint.R, Mint.G, Mint.B));
 

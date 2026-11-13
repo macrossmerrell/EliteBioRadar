@@ -342,6 +342,7 @@
         <local:AfmuVisual x:Name="afmuVisual"/>
         <local:LimpetVisual x:Name="limpetVisual"/>
         <local:MilestoneVisual x:Name="milestoneVisual"/>
+        <local:MaterialDiscoveredVisual x:Name="materialDiscoveredVisual"/>
         <local:SettlementVisual x:Name="settlementVisual"/>
         <local:SynthesisVisual x:Name="synthesisVisual"/>
         <local:CommunityGoalVisual x:Name="communityGoalVisual"/>

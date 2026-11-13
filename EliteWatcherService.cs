@@ -139,6 +139,8 @@ namespace EliteBioRadar
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
         public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
         private DateTime _lastModuleAlert = DateTime.MinValue;
+        public event Action<string>? MaterialDiscoveredEvent;   // the detail for the first-find card: name|category|internal name|discovery number; live only
+        private (string Key, int Number, DateTime At)? _pendingDiscovery;   // set by MaterialDiscovered, used by the MaterialCollected that follows it
         public event Action<string>? MilestoneEvent;   // the detail for the milestone plate: LIVE or RECAP|short~full~value~step;...; live only
         // Lifetime counters: the game writes Statistics at start-up (and when its Statistics screen is opened), so the app keeps a baseline from that line plus what it has seen since.
         private readonly Dictionary<string, long> _msAnnounced = new();
@@ -4226,6 +4228,8 @@ namespace EliteBioRadar
                     TargetEvent?.Invoke($"{(obj.Value<string>("LegalStatus") ?? "").ToUpperInvariant()}|{tShip}|{(tPilot.Length > 0 ? tPilot : "UNKNOWN PILOT")}|{Clean(obj.Value<string>("PilotRank") ?? "")}|{Clean(obj.Value<string>("Faction") ?? "")}|{(obj.Value<double?>("ShieldHealth") ?? 100).ToString("0", inv)}|{(obj.Value<double?>("HullHealth") ?? 100).ToString("0", inv)}|{obj.Value<long?>("Bounty") ?? 0}");
                 }
             }
+            if (!backfill && evt == "MaterialDiscovered")
+                _pendingDiscovery = (obj.Value<string>("Name") ?? "", obj.Value<int?>("DiscoveryNumber") ?? 0, DateTime.UtcNow);
             if (!backfill && evt == "LaunchDrone")
             {
                 string lt = (obj.Value<string>("Type") ?? "").Trim();
@@ -4619,7 +4623,13 @@ namespace EliteBioRadar
                 if (!MaterialPickupState.Add(matKey, matCount, stock, cap))
                 {
                     Log.Write($"Material collected: {matName} x{matCount} ({matCat}, stock {stock}/{cap})");
-                    MaterialPicked?.Invoke(matName, matCat, matKey, matCount, stock, cap);
+                    // A first-ever find (MaterialDiscovered, written just before this line) plays the discovery card in place of the pickup tile.
+                    if (_pendingDiscovery is { } disc && string.Equals(disc.Key, matKey, StringComparison.OrdinalIgnoreCase) && (DateTime.UtcNow - disc.At).TotalSeconds < 10)
+                    {
+                        _pendingDiscovery = null;
+                        MaterialDiscoveredEvent?.Invoke($"{Clean(matName)}|{matCat}|{matKey}|{disc.Number}");
+                    }
+                    else MaterialPicked?.Invoke(matName, matCat, matKey, matCount, stock, cap);
                 }
             }
             // The ship deploys or recovers its SRV (LaunchSRV / DockSRV), with the SRV's name.
