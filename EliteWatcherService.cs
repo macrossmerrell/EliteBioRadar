@@ -150,7 +150,7 @@ namespace EliteBioRadar
         private bool _msHaveBase;
         private double _msJumps, _msLy, _msSeconds, _msBounties;
         private DateTime _msBaseTime = DateTime.MinValue;
-        private (string Short, string Full, double Step)[] MsDefs => new[] { ("JUMPS", "HYPERSPACE JUMPS", 1000.0), ("LIGHT-YEARS", "LIGHT-YEARS", 10000.0), ("HOURS", "HOURS PLAYED", 100.0), ("BOUNTIES", "BOUNTIES CLAIMED", 500.0), ("WEALTH", "BILLION CREDITS", 1.0) };
+        private static readonly (string Short, string Full, double Step)[] MsDefs = new[] { ("JUMPS", "HYPERSPACE JUMPS", 1000.0), ("LIGHT-YEARS", "LIGHT-YEARS", 10000.0), ("HOURS", "HOURS PLAYED", 100.0), ("BOUNTIES", "BOUNTIES CLAIMED", 500.0), ("WEALTH", "BILLION CREDITS", 1.0) };
         // Returns the "short~full~value~step" item when the counter has passed a new round number since it was last looked at (and always records the level).
         private string? MsCheck(int def, double value)
         {
@@ -173,6 +173,18 @@ namespace EliteBioRadar
         private readonly List<(string Name, int Health)> _afmuRows = new();
         private DateTime _afmuFirst = DateTime.MinValue;
         private System.Threading.Timer? _afmuTimer;
+        private void FlushAfmu()
+        {
+            string detail;
+            lock (_afmuGate)
+            {
+                if (_afmuRows.Count == 0) return;   // nothing waiting (a repair run already flushed)
+                detail = $"{_afmuRows.Count}|{_afmuRows.Count(r => r.Health < 100)}|{string.Join(";", _afmuRows.Take(5).Select(r => $"{r.Name}~{r.Health}"))}";
+                _afmuRows.Clear();
+            }
+            AfmuEvent?.Invoke(detail);
+        }
+
         private void AddAfmuRepair(string name, double health)
         {
             lock (_afmuGate)
@@ -182,17 +194,9 @@ namespace EliteBioRadar
                 if (i >= 0) _afmuRows[i] = (name, hp); else _afmuRows.Add((name, hp));
                 // The AFMU works through the damaged modules one by one, seconds apart: wait for a quiet spell (or 90 s at most) and show the run as one receipt.
                 double due = Math.Clamp(90000 - (DateTime.UtcNow - _afmuFirst).TotalMilliseconds, 500, 20000);
-                _afmuTimer?.Dispose();
-                _afmuTimer = new System.Threading.Timer(_ =>
-                {
-                    string detail;
-                    lock (_afmuGate)
-                    {
-                        detail = $"{_afmuRows.Count}|{_afmuRows.Count(r => r.Health < 100)}|{string.Join(";", _afmuRows.Take(5).Select(r => $"{r.Name}~{r.Health}"))}";
-                        _afmuRows.Clear();
-                    }
-                    AfmuEvent?.Invoke(detail);
-                }, null, (int)due, System.Threading.Timeout.Infinite);
+                // One timer, pushed back on each repair (a replaced timer could still fire its old callback and empty the list under the new one).
+                if (_afmuTimer == null) _afmuTimer = new System.Threading.Timer(_ => FlushAfmu(), null, (int)due, System.Threading.Timeout.Infinite);
+                else _afmuTimer.Change((int)due, System.Threading.Timeout.Infinite);
             }
         }
         public event Action<string>? TargetEvent;   // the detail for the target dossier animation: LEGAL|ship|pilot|rank|faction|shield|hull|bounty; live only, at scan stage 3
@@ -207,6 +211,22 @@ namespace EliteBioRadar
         public event Action<string>? CarrierPanelEvent;   // the detail for the carrier management animation: ROW|carrier|chip title|chip line|prefix|number|suffix|bar from|bar to|switch; live only
         private string _myCarrier = "";   // the commander's own carrier (name and callsign), from CarrierStats / CarrierBuy
         public event Action<string>? ContactEvent;   // the detail for the friends / chat animation: KIND|commander|chip line|message; live only
+        // Friends logging in together at game start, or a busy wing / squadron chat, would play one card per line and hold the animation window for minutes:
+        // presence changes (ON / OFF) are limited to one per 4 s, wing and squadron chat to one per 8 s each. Requests, direct messages and the rest always play.
+        private readonly Dictionary<string, DateTime> _contactLast = new();
+        private bool ContactAllowed(string kind)
+        {
+            string group = kind is "ON" or "OFF" ? "PRESENCE" : kind is "WING" or "SQ" ? kind : "";
+            if (group.Length == 0) return true;
+            double gap = group == "PRESENCE" ? 4 : 8;
+            var now = DateTime.UtcNow;
+            lock (_contactLast)
+            {
+                if (_contactLast.TryGetValue(group, out var last) && (now - last).TotalSeconds < gap) return false;
+                _contactLast[group] = now;
+            }
+            return true;
+        }
         public event Action<string>? PowerplayEvent;   // the detail for the Powerplay animation: KIND|power|chip line|old rank|new rank|gain|total; live only
         private int _ppRank = -1;   // the last known Powerplay rank (from the start-up Powerplay line or a rank event), so a rank-up can say "from"
         public event Action<string>? SquadronEvent;   // the detail for the squadron animation: KIND|squadron|chip line|old rank|new rank; live only
@@ -4205,7 +4225,7 @@ namespace EliteBioRadar
             {
                 string fWho = Clean(obj.Value<string>("Name") ?? ""), fStatus = obj.Value<string>("Status") ?? "";
                 string fKind = fStatus switch { "Online" => "ON", "Offline" => "OFF", "Requested" => "REQ", "Added" => "ADD", "Lost" => "LOST", "Declined" => "DECL", _ => "" };
-                if (fKind.Length > 0 && fWho.Length > 0) ContactEvent?.Invoke($"{fKind}|CMDR {fWho}|{(fKind == "REQ" ? "AWAITING YOUR ANSWER" : "")}|");
+                if (fKind.Length > 0 && fWho.Length > 0 && ContactAllowed(fKind)) ContactEvent?.Invoke($"{fKind}|CMDR {fWho}|{(fKind == "REQ" ? "AWAITING YOUR ANSWER" : "")}|");
             }
             if (!backfill && evt == "ReceiveText")
             {
@@ -4213,7 +4233,7 @@ namespace EliteBioRadar
                 string from = Clean(obj.Value<string>("From_Localised") ?? obj.Value<string>("From") ?? "");
                 string msg = Clean(obj.Value<string>("Message_Localised") ?? obj.Value<string>("Message") ?? "").Replace('|', '/');
                 string mKind = chan switch { "player" or "friend" => "DM", "wing" => "WING", "squadron" => "SQ", _ => "" };
-                if (mKind.Length > 0 && from.Length > 0 && msg.Length > 0)
+                if (mKind.Length > 0 && from.Length > 0 && msg.Length > 0 && ContactAllowed(mKind))
                     ContactEvent?.Invoke($"{mKind}|{(from.StartsWith("CMDR ", StringComparison.OrdinalIgnoreCase) ? from : "CMDR " + from)}|{(mKind == "DM" ? "DIRECT" : mKind == "WING" ? "WING" : "SQUADRON")}|{msg}");
             }
             // A ship scan builds up in stages (1 pilot, 2 health, 3 legal status and faction): play once, when it is complete, and not again for the same target within 20 seconds.
@@ -4318,7 +4338,8 @@ namespace EliteBioRadar
             {
                 if (evt == "FSDJump") { _msJumps++; _msLy += obj.Value<double?>("JumpDist") ?? 0; MsLive(!backfill, 0, _msJumps); MsLive(!backfill, 1, _msLy); }
                 else if (evt == "Bounty") { _msBounties++; MsLive(!backfill, 3, _msBounties); }
-                if (obj.Value<DateTime?>("timestamp") is DateTime tsEvt)
+                // The hours counter only needs a look now and then (a hundred-hour step): on the quieter moments, not on every journal line.
+                if ((evt == "FSDJump" || evt == "Docked" || evt == "Undocked" || evt == "Touchdown" || evt == "Liftoff") && obj.Value<DateTime?>("timestamp") is DateTime tsEvt)
                     MsLive(!backfill, 2, (_msSeconds + Math.Max(0, (tsEvt.ToUniversalTime() - _msBaseTime).TotalSeconds)) / 3600.0);
             }
             if (evt == "Rank" && obj["Combat"] != null)

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
@@ -12,7 +13,11 @@ namespace EliteBioRadar
     public abstract class AnimationVisual : FrameworkElement
     {
         private readonly Stopwatch _clock = new();
-        private bool _running;
+        private bool _running, _failed;
+        // Text layouts and clip shapes are rebuilt only when they change: FormattedText is costly and the same strings are drawn every frame. Cleared on each Start.
+        private readonly Dictionary<(string, Typeface, double, Brush, double), FormattedText> _text = new();
+        private readonly Dictionary<(string, Typeface, double, Brush, double, double), (FormattedText[] Glyphs, double Total)> _spaced = new();
+        private readonly Dictionary<Rect, Geometry> _clips = new();
 
         public event Action? Finished;
 
@@ -63,7 +68,18 @@ namespace EliteBioRadar
         public void Start(string subject, string detail)
         {
             HookDispatcher();
-            OnStart(subject, detail);
+            _text.Clear(); _spaced.Clear(); _clips.Clear();
+            try { OnStart(subject, detail); }
+            catch (Exception ex)
+            {
+                // A detail string the visual cannot read must not leave its lane waiting for a Finished that never comes.
+                Log.Write($"{GetType().Name}: could not start ({ex.GetType().Name}: {ex.Message}); detail '{detail}'");
+                if (_running) { CompositionTarget.Rendering -= OnFrame; _running = false; }
+                _clock.Stop();
+                InvalidateVisual();
+                Finished?.Invoke();
+                return;
+            }
             _clock.Restart();
             _lastFrameAt = -1;
             if (!_running) { _running = true; CompositionTarget.Rendering += OnFrame; }
@@ -113,7 +129,7 @@ namespace EliteBioRadar
             if (_lastFrameAt >= 0 && now - _lastFrameAt > 0.07) Log.Write($"{GetType().Name}: frame gap {(now - _lastFrameAt) * 1000:0} ms at t={now:0.00} (GC pause since last frame {pause - _lastPause:0} ms, gen0 +{g0 - _lastG0}, gen2 +{g2 - _lastG2})");
             _lastPause = pause; _lastG0 = g0; _lastG2 = g2;
             _lastFrameAt = now;
-            if (now >= Duration) { Stop(); Finished?.Invoke(); return; }
+            if (now >= Duration || _failed) { _failed = false; Stop(); Finished?.Invoke(); return; }
             InvalidateVisual();
         }
 
@@ -123,7 +139,13 @@ namespace EliteBioRadar
             double w = ActualWidth, h = ActualHeight;
             if (w < 10 || h < 10) return;
             long t0 = Stopwatch.GetTimestamp();
-            Render(dc, w, h, Elapsed);
+            try { Render(dc, w, h, Elapsed); }
+            catch (Exception ex)
+            {
+                // A drawing bug (an unbalanced Push / Pop, a bad value) must not take the app down: end this animation and say what went wrong.
+                Log.Write($"{GetType().Name}: render failed at t={Elapsed:0.00} ({ex.GetType().Name}: {ex.Message})");
+                _failed = true;
+            }
             double ms = (Stopwatch.GetTimestamp() - t0) * 1000.0 / Stopwatch.Frequency;
             if (ms > 12) Log.Write($"{GetType().Name}: slow render {ms:0.0} ms at t={Elapsed:0.00}");
         }
@@ -202,15 +224,24 @@ namespace EliteBioRadar
         // Centred text with an explicit gap (in em) between the letters; FormattedText has no letter-spacing of its own.
         protected void DrawSpaced(DrawingContext dc, string text, Typeface face, double size, Brush brush, double centreX, double y, double spacingEm, double opacity)
         {
+            if (opacity <= 0 || text.Length == 0) return;
             double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-            var glyphs = new FormattedText[text.Length];
-            double total = 0;
-            for (int i = 0; i < text.Length; i++)
+            var key = (text, face, size, brush, spacingEm, dpi);
+            if (!_spaced.TryGetValue(key, out var run))
             {
-                glyphs[i] = new FormattedText(text[i].ToString(), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, face, size, brush, dpi);
-                total += glyphs[i].WidthIncludingTrailingWhitespace + (i < text.Length - 1 ? spacingEm * TrackScale * size : 0);
+                var built = new FormattedText[text.Length];
+                double sum = 0;
+                for (int i = 0; i < text.Length; i++)
+                {
+                    built[i] = new FormattedText(text[i].ToString(), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, face, size, brush, dpi);
+                    sum += built[i].WidthIncludingTrailingWhitespace + (i < text.Length - 1 ? spacingEm * TrackScale * size : 0);
+                }
+                run = (built, sum);
+                if (_spaced.Count > 200) _spaced.Clear();   // text that changes every frame (a counter) must not grow the cache without end
+                _spaced[key] = run;
             }
-            double x = centreX - total / 2;
+            var glyphs = run.Glyphs;
+            double x = centreX - run.Total / 2;
             dc.PushOpacity(opacity);
             for (int i = 0; i < text.Length; i++)
             {
@@ -220,11 +251,30 @@ namespace EliteBioRadar
             dc.Pop();
         }
 
+        // A clip shape for a rectangle, made once per Start instead of every frame.
+        protected Geometry ClipOf(Rect r)
+        {
+            if (!_clips.TryGetValue(r, out var g))
+            {
+                g = new RectangleGeometry(r); g.Freeze();
+                if (_clips.Count > 50) _clips.Clear();
+                _clips[r] = g;
+            }
+            return g;
+        }
+
         // One run of text, left / centre / right aligned on x, y being the top of the line.
         protected void DrawText(DrawingContext dc, string text, Typeface face, double size, Brush brush, double x, double y, double opacity, TextAlignment align = TextAlignment.Center)
         {
             if (opacity <= 0 || text.Length == 0) return;
-            var ft = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, face, size, brush, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+            double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+            var key = (text, face, size, brush, dpi);
+            if (!_text.TryGetValue(key, out var ft))
+            {
+                ft = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, face, size, brush, dpi);
+                if (_text.Count > 200) _text.Clear();
+                _text[key] = ft;
+            }
             double left = align == TextAlignment.Center ? x - ft.Width / 2 : align == TextAlignment.Right ? x - ft.Width : x;
             dc.PushOpacity(opacity);
             dc.DrawText(ft, new Point(left, y));

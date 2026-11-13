@@ -107,10 +107,33 @@ namespace EliteBioRadar
             return new AppSettingsData();
         }
 
+        // For callers that only read (the animation router asks on every raised animation): the parsed file is kept until the file changes
+        // on disk, so a burst of events costs a timestamp check instead of a read and a parse. The returned object is shared: do not modify it
+        // (use Load() when a change is going to be saved).
+        private static AppSettingsData? _shared;
+        private static DateTime _sharedStamp;
+        private static long _sharedSize = -1;
+        public static AppSettingsData LoadShared()
+        {
+            try
+            {
+                var fi = new FileInfo(_path);
+                DateTime stamp = fi.Exists ? fi.LastWriteTimeUtc : DateTime.MinValue;
+                long size = fi.Exists ? fi.Length : -1;
+                var cached = _shared;
+                if (cached != null && stamp == _sharedStamp && size == _sharedSize) return cached;
+                var fresh = Load();
+                _shared = fresh; _sharedStamp = stamp; _sharedSize = size;
+                return fresh;
+            }
+            catch { return Load(); }
+        }
+
         public static void Save(AppSettingsData settings)
         {
             try
             {
+                _shared = null;
                 var json = JsonConvert.SerializeObject(settings, Formatting.Indented);
                 AtomicFile.WriteAllText(_path, json);
             }

@@ -18,6 +18,9 @@ namespace EliteBioRadar
         private static readonly Brush SegOff = B(Color.FromArgb(20, 255, 255, 255)), CardBrush = B(Color.FromRgb(0xe8, 0xee, 0xee)), CrossBrush = B(Color.FromRgb(0x1f, 0x9a, 0x4a)), DarkText = B(Color.FromRgb(8, 13, 13));
         private static readonly Pen CasePen = FrozenPen(Color.FromRgb(0xcf, 0xe8, 0xe8), 1.5);
 
+        // The suit's torso and chest band never change, so they are built once.
+        private static readonly Geometry Torso = Poly(new[] { (-13.0, -24.0), (13, -24), (9, -2), (-9, -2) }), ChestBand = Poly(new[] { (-12.0, -21.0), (12, -21), (11, -16), (0, -13), (-11, -16) });
+
         private Color _col = Green;
         private Brush _solid = B(Green);
         private Pen _linePen = FrozenPen(Green, 0.8), _ringPen = FrozenPen(Green, 1.5), _platePen = FrozenPen(Color.FromArgb(153, 159, 240, 160), 1), _strikePen = FrozenPen(Red, 2.2);
@@ -57,22 +60,8 @@ namespace EliteBioRadar
             RR(dc, White, Outline, -24, -15, 7, 16, 3); RR(dc, White, Outline, 17, -15, 7, 16, 3);
             RR(dc, White, Outline, -25, 0, 7, 14, 3); RR(dc, White, Outline, 18, 0, 7, 14, 3);
             RR(dc, Grey, null, -25, 13, 7, 5, 2); RR(dc, Grey, null, 18, 13, 7, 5, 2);
-            var torso = new StreamGeometry();
-            using (var c = torso.Open())
-            {
-                c.BeginFigure(new Point(-13, -24), true, true);
-                c.LineTo(new Point(13, -24), true, false); c.LineTo(new Point(9, -2), true, false); c.LineTo(new Point(-9, -2), true, false);
-            }
-            torso.Freeze();
-            dc.DrawGeometry(White, Outline, torso);
-            var band = new StreamGeometry();
-            using (var c = band.Open())
-            {
-                c.BeginFigure(new Point(-12, -21), true, true);
-                c.LineTo(new Point(12, -21), true, false); c.LineTo(new Point(11, -16), true, false); c.LineTo(new Point(0, -13), true, false); c.LineTo(new Point(-11, -16), true, false);
-            }
-            band.Freeze();
-            dc.DrawGeometry(Orange, null, band);
+            dc.DrawGeometry(White, Outline, Torso);
+            dc.DrawGeometry(Orange, null, ChestBand);
             RR(dc, White, Outline, -21, -26, 12, 9, 4); RR(dc, White, Outline, 9, -26, 12, 9, 4);
             dc.DrawRectangle(Orange, null, new Rect(-19, -22, 8, 2)); dc.DrawRectangle(Orange, null, new Rect(11, -22, 8, 2));
             dc.DrawRectangle(Orange, null, new Rect(-10, -3, 20, 4));

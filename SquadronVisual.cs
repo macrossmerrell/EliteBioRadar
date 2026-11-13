@@ -52,6 +52,8 @@ namespace EliteBioRadar
             }
         }
 
+        private Geometry? _star;   // the trophy star, built once for its position
+        private Point _starAt;
         private bool Ends => _kind == "LEAVE" || _kind == "KICK" || _kind == "DISBAND";
         private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
@@ -63,7 +65,7 @@ namespace EliteBioRadar
             // Photo block with a head-and-shoulders silhouette.
             var photo = new Rect(-W / 2 + 7, -H / 2 + 17, 34, 40);
             dc.DrawRectangle(PhotoBack, null, photo);
-            dc.PushClip(new RectangleGeometry(photo));
+            dc.PushClip(ClipOf(photo));
             dc.DrawEllipse(PhotoInk, null, new Point(photo.X + 17, photo.Y + 15), 7, 8);
             dc.DrawEllipse(PhotoInk, null, new Point(photo.X + 17, photo.Y + 42), 15, 15);
             dc.Pop();
@@ -83,20 +85,24 @@ namespace EliteBioRadar
             }
             else if (_kind == "TROPHY")
             {
-                var star = new StreamGeometry();
-                using (var g = star.Open())
+                double cx = tx + 8, cy = -H / 2 + 49;
+                if (_star == null || _starAt != new Point(cx, cy))
                 {
-                    double cx = tx + 8, cy = -H / 2 + 49;
-                    for (int i = 0; i < 10; i++)
+                    var star = new StreamGeometry();
+                    using (var g = star.Open())
                     {
-                        double ang = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 == 0 ? 7 : 3;
-                        var pt = new Point(cx + Math.Cos(ang) * r, cy + Math.Sin(ang) * r);
-                        if (i == 0) g.BeginFigure(pt, true, true); else g.LineTo(pt, true, false);
+                        for (int i = 0; i < 10; i++)
+                        {
+                            double ang = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 == 0 ? 7 : 3;
+                            var pt = new Point(cx + Math.Cos(ang) * r, cy + Math.Sin(ang) * r);
+                            if (i == 0) g.BeginFigure(pt, true, true); else g.LineTo(pt, true, false);
+                        }
                     }
+                    star.Freeze();
+                    _star = star; _starAt = new Point(cx, cy);
                 }
-                star.Freeze();
                 dc.PushOpacity(Phase(t, 1.2, 0.3));
-                dc.DrawGeometry(_pal.Solid, null, star);
+                dc.DrawGeometry(_pal.Solid, null, _star);
                 dc.Pop();
             }
             dc.DrawRectangle(null, _pal.Edge, new Rect(-W / 2, -H / 2, W, H));

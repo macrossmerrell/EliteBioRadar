@@ -87,7 +87,7 @@ namespace EliteBioRadar
                 DrawText(dc, _band, MonoFace, 7, BandInk, -cw / 2 + 5, -ch / 2 + 1.5, 1, TextAlignment.Left);
                 var photo = new Rect(-cw / 2 + 6, -ch / 2 + 15, 28, 40);
                 dc.DrawRectangle(PhotoBack, null, photo);
-                dc.PushClip(new RectangleGeometry(photo));
+                dc.PushClip(ClipOf(photo));
                 dc.DrawEllipse(PhotoInk, null, new Point(photo.X + 14, photo.Y + 13), 6, 7);
                 dc.DrawEllipse(PhotoInk, null, new Point(photo.X + 14, photo.Y + 38), 12, 12);
                 dc.Pop();

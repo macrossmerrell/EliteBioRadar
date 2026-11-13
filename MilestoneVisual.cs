@@ -111,7 +111,7 @@ namespace EliteBioRadar
                 double sp = Phase(t, 1.2, 1.2);
                 if (sp > 0 && sp < 1)
                 {
-                    dc.PushClip(new RectangleGeometry(rect));
+                    dc.PushClip(ClipOf(rect));
                     dc.PushOpacity(0.5 * (1 - Math.Abs(sp - 0.5) * 2));
                     dc.DrawRectangle(Shine, null, new Rect(-pw / 2 - 10 + sp * (pw + 20), -ph / 2, 8, ph));
                     dc.Pop(); dc.Pop();

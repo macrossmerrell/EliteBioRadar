@@ -77,7 +77,7 @@ namespace EliteBioRadar
                 DrawText(dc, "PILOTS FEDERATION LICENCE", MonoFace, 6, BandInk, -cw / 2 + 5, -ch / 2 + 2, 1, TextAlignment.Left);
                 var photo = new Rect(-cw / 2 + 6, -ch / 2 + 15, 27, 33);
                 dc.DrawRectangle(PhotoBack, null, photo);
-                dc.PushClip(new RectangleGeometry(photo));
+                dc.PushClip(ClipOf(photo));
                 dc.DrawEllipse(PhotoInk, null, new Point(photo.X + 13.5, photo.Y + 11), 6, 7);
                 dc.DrawEllipse(PhotoInk, null, new Point(photo.X + 13.5, photo.Y + 32), 12, 11);
                 dc.Pop();

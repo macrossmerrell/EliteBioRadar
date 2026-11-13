@@ -258,7 +258,7 @@ namespace EliteBioRadar
 
         public static void Raise(AnimationRequest request)
         {
-            var targets = AnimationCatalog.SurfacesFor(request.Def, AppSettings.Load());
+            var targets = AnimationCatalog.SurfacesFor(request.Def, AppSettings.LoadShared());
             foreach (var kv in _lanes)
             {
                 if ((targets & kv.Key) == 0) continue;
@@ -284,7 +284,14 @@ namespace EliteBioRadar
                     continue;
                 }
                 lane.Busy = true;
-                lane.Surface.Play(req, () => { lane.Busy = false; Pump(lane); });
+                try { lane.Surface.Play(req, () => { lane.Busy = false; Pump(lane); }); }
+                catch (Exception ex)
+                {
+                    // A visual that fails while starting must not leave the lane waiting for a Finished that never comes.
+                    Log.Write($"Animation '{req.Def.Id}' failed to play on {lane.Surface.Kind}: {ex.GetType().Name}: {ex.Message}");
+                    lane.Busy = false;
+                    continue;
+                }
                 return;
             }
         }

@@ -16,6 +16,23 @@ namespace EliteBioRadar
         private static readonly Brush NameBrush = Frozen(Color.FromRgb(0xe8, 0xf2, 0xff)), Gold = Frozen(Color.FromRgb(255, 216, 144)), PlateBrush = Frozen(Color.FromArgb(209, 5, 10, 20));
         private static readonly Pen PlateEdge = FrozenPen(Color.FromArgb(153, 85, 242, 255), 1), SlotPen = FrozenPen(Color.FromRgb(0x7f, 0xa0, 0xaa), 1);
 
+        // The picture's ground line: the photo area never changes, so the shape is built once.
+        private static readonly Geometry GroundShape = MakeGround();
+        private static Geometry MakeGround()
+        {
+            var area = new Rect(-39, -86 / 2.0 + 7, 78, 58);
+            var g = new StreamGeometry();
+            using (var c = g.Open())
+            {
+                c.BeginFigure(new Point(area.Left, area.Top + area.Height * 0.6), true, true);
+                c.QuadraticBezierTo(new Point(area.Left + area.Width / 2, area.Top + area.Height * 0.35), new Point(area.Right, area.Top + area.Height * 0.62), true, false);
+                c.LineTo(new Point(area.Right, area.Bottom), true, false);
+                c.LineTo(new Point(area.Left, area.Bottom), true, false);
+            }
+            g.Freeze();
+            return g;
+        }
+
         private string _frame = "", _name = "", _sub = "";
         private bool _surface;
 
@@ -57,13 +74,13 @@ namespace EliteBioRadar
             {
                 const double pw = 92, ph = 86;
                 double top = 12 + drop * 6 - (1 - drop) * ph * 0.9;
-                dc.PushClip(new RectangleGeometry(new Rect(60, 11, 120, 100)));
+                dc.PushClip(ClipOf(new Rect(60, 11, 120, 100)));
                 dc.PushTransform(new TranslateTransform(120, top + ph / 2));
                 dc.PushTransform(new RotateTransform(0.04 * 57.3 * 0.5));
                 dc.DrawRectangle(Paper, null, new Rect(-pw / 2, -ph / 2, pw, ph));
                 // the picture, developing from dark
                 var area = new Rect(-39, -ph / 2 + 7, 78, 58);
-                dc.PushClip(new RectangleGeometry(area));
+                dc.PushClip(ClipOf(area));
                 dc.DrawRectangle(Photo, null, area);
                 for (int i = 0; i < 18; i++)
                 {
@@ -72,16 +89,7 @@ namespace EliteBioRadar
                 }
                 if (_surface)
                 {
-                    var g = new StreamGeometry();
-                    using (var c = g.Open())
-                    {
-                        c.BeginFigure(new Point(area.Left, area.Top + area.Height * 0.6), true, true);
-                        c.QuadraticBezierTo(new Point(area.Left + area.Width / 2, area.Top + area.Height * 0.35), new Point(area.Right, area.Top + area.Height * 0.62), true, false);
-                        c.LineTo(new Point(area.Right, area.Bottom), true, false);
-                        c.LineTo(new Point(area.Left, area.Bottom), true, false);
-                    }
-                    g.Freeze();
-                    dc.DrawGeometry(Ground, null, g);
+                    dc.DrawGeometry(Ground, null, GroundShape);
                 }
                 else
                 {
