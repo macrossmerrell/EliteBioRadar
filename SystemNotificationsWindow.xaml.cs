@@ -63,6 +63,7 @@ namespace EliteBioRadar
                 ["data-link"] = dataLinkVisual,
                 ["target-scan"] = targetVisual,
                 ["afmu-repair"] = afmuVisual,
+                ["limpet"] = limpetVisual,
                 ["approach-settlement"] = settlementVisual,
                 ["synthesis"] = synthesisVisual,
                 ["community-goal"] = communityGoalVisual,

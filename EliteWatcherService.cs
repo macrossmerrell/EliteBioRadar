@@ -139,6 +139,8 @@ namespace EliteBioRadar
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
         public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
         private DateTime _lastModuleAlert = DateTime.MinValue;
+        public event Action<string>? LimpetEvent;   // the detail for the limpet animation: L or R|type|chip name|chip line|hull repaired; live only
+        private string _lastLimpetType = ""; private DateTime _lastLimpetAt = DateTime.MinValue;
         public event Action<string>? AfmuEvent;   // the detail for the AFMU repair receipt: total|partly repaired|name~health percent;...; one run of repairs, batched; live only
         private readonly object _afmuGate = new();
         private readonly List<(string Name, int Health)> _afmuRows = new();
@@ -4201,6 +4203,25 @@ namespace EliteBioRadar
                     var inv = System.Globalization.CultureInfo.InvariantCulture;
                     TargetEvent?.Invoke($"{(obj.Value<string>("LegalStatus") ?? "").ToUpperInvariant()}|{tShip}|{(tPilot.Length > 0 ? tPilot : "UNKNOWN PILOT")}|{Clean(obj.Value<string>("PilotRank") ?? "")}|{Clean(obj.Value<string>("Faction") ?? "")}|{(obj.Value<double?>("ShieldHealth") ?? 100).ToString("0", inv)}|{(obj.Value<double?>("HullHealth") ?? 100).ToString("0", inv)}|{obj.Value<long?>("Bounty") ?? 0}");
                 }
+            }
+            if (!backfill && evt == "LaunchDrone")
+            {
+                string lt = (obj.Value<string>("Type") ?? "").Trim();
+                string ltName = (lt.ToLowerInvariant() switch { "hatchbreaker" => "Hatch Breaker", "fueltransfer" => "Fuel Transfer", "" => "", _ => PrettyJournalName(lt) }).ToUpperInvariant();
+                // Several launched in a quick run (mining) are one moment: the same type again within 3 seconds is ignored.
+                if (ltName.Length > 0 && !(ltName == _lastLimpetType && (DateTime.UtcNow - _lastLimpetAt).TotalSeconds < 3))
+                {
+                    _lastLimpetType = ltName; _lastLimpetAt = DateTime.UtcNow;
+                    string ltSub = ltName switch { "REPAIR" => "HULL REPAIR UNDER WAY", "COLLECTION" => "COLLECTING CARGO", "PROSPECTOR" => "SCANNING THE ROCK", "HATCH BREAKER" => "CARGO HATCH TARGETED", "FUEL TRANSFER" => "TRANSFERRING FUEL", "DECONTAMINATION" => "CLEANING THE HULL", "RESEARCH" => "GATHERING DATA", "RECON" => "SCOUTING AHEAD", _ => "" };
+                    LimpetEvent?.Invoke($"L|{Clean(ltName)}|{Clean(ltName)} LIMPET|{ltSub}|0");
+                }
+            }
+            if (!backfill && evt == "RepairDrone")
+            {
+                double hullFixed = obj.Value<double?>("HullRepaired") ?? 0, cockpitFixed = obj.Value<double?>("CockpitRepaired") ?? 0;
+                var lic = System.Globalization.CultureInfo.InvariantCulture;
+                string rSub = hullFixed > 0 ? $"HULL +{hullFixed.ToString("0", lic)}" + (cockpitFixed > 0 ? $"  COCKPIT +{cockpitFixed.ToString("0.0", lic)}" : "") : (cockpitFixed > 0 ? $"COCKPIT +{cockpitFixed.ToString("0.0", lic)}" : "");
+                LimpetEvent?.Invoke($"R|REPAIR|REPAIR LIMPET|{rSub}|{hullFixed.ToString("0.###", lic)}");
             }
             if (!backfill && evt == "AfmuRepairs")
             {
