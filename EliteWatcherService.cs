@@ -137,6 +137,14 @@ namespace EliteBioRadar
         private readonly Dictionary<string, (string progress, int rank)> _engineerState = new();
         private static string PrettyJournalName(string s) =>
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
+        public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
+        private DateTime _lastModuleAlert = DateTime.MinValue;
+        // "Slot02_Size5" reads as SLOT 02 SIZE 5; the named slots (PowerPlant, FrameShiftDrive, MediumHardpoint1) are split into words.
+        private static string ModuleSlot(string s)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(s ?? "", @"^Slot(\d+)_Size(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            return m.Success ? $"SLOT {m.Groups[1].Value} SIZE {m.Groups[2].Value}" : Clean(PrettyJournalName(s ?? "")).ToUpperInvariant();
+        }
         public event Action<string>? ShipyardEvent;   // the detail for the shipyard animation (ShipyardBuy / New / Swap / Transfer): BUY|ship|price, NEW|ship, SWAP|ship|old, XFER|ship|system|ly|price|seconds; live only
         private DateTime _lastShipBought = DateTime.MinValue;
         // The journal names ships by id (cobramkiii, type9, federation_dropship); the localised name is used when the event has it, and this table covers the ids whose plain spelling would read badly.
@@ -3984,6 +3992,33 @@ namespace EliteBioRadar
                 _refineCount = (refined == _refineItem && (nowR - _lastRefine).TotalSeconds < 60) ? _refineCount + 1 : 1;
                 _refineItem = refined; _lastRefine = nowR;
                 if (refined.Length > 0) MiningEvent?.Invoke($"REFINED|{refined}|{_refineCount}");
+            }
+            if (!backfill && (evt == "ModuleBuy" || evt == "ModuleSell" || evt == "ModuleSellRemote" || evt == "ModuleStore" || evt == "ModuleRetrieve" || evt == "MassModuleStore")
+                && (DateTime.UtcNow - _lastModuleAlert).TotalSeconds >= 2.5)
+            {
+                // One tile per module, at most one every couple of seconds so a run of outfitting changes does not queue a dozen of them.
+                string ModItem(string localised, string raw) => Clean(!string.IsNullOrEmpty(obj.Value<string>(localised)) ? obj.Value<string>(localised)! : PrettyJournalName((obj.Value<string>(raw) ?? "").Trim('$', ';').Replace("_name", "")));
+                string slot = ModuleSlot(obj.Value<string>("Slot") ?? "");
+                string engineered = !string.IsNullOrEmpty(obj.Value<string>("EngineerModifications")) ? $"ENGINEERED{(obj.Value<int?>("Level") is int lv and > 0 ? " - GRADE " + lv : "")}" : "";
+                string modDetail = "";
+                switch (evt)
+                {
+                    case "ModuleBuy":
+                        long price = obj.Value<long?>("BuyPrice") ?? 0;
+                        modDetail = $"BUY|{ModItem("BuyItem_Localised", "BuyItem")}|{slot}{(price > 0 ? " - -" + price.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " CR" : "")}";
+                        break;
+                    case "ModuleSell": case "ModuleSellRemote":
+                        long sold = obj.Value<long?>("SellPrice") ?? 0;
+                        modDetail = $"SELL|{ModItem("SellItem_Localised", "SellItem")}|{(sold > 0 ? "+" + sold.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " CR" : slot)}";
+                        break;
+                    case "ModuleStore": modDetail = $"STORE|{ModItem("StoredItem_Localised", "StoredItem")}|{(engineered.Length > 0 ? engineered : slot)}"; break;
+                    case "ModuleRetrieve": modDetail = $"GET|{ModItem("RetrievedItem_Localised", "RetrievedItem")}|{(engineered.Length > 0 ? engineered : slot)}"; break;
+                    default:
+                        int n = obj["Items"] is Newtonsoft.Json.Linq.JArray mItems ? mItems.Count : 0;
+                        if (n > 0) modDetail = $"MASS|{n} modules|{Clean(obj.Value<string>("Ship") is string ms ? PrettyJournalName(ms) : "")}";
+                        break;
+                }
+                if (modDetail.Length > 0) { _lastModuleAlert = DateTime.UtcNow; ModuleEvent?.Invoke(modDetail); }
             }
             if (!backfill && (evt == "ShipyardBuy" || evt == "ShipyardNew" || evt == "ShipyardSwap" || evt == "ShipyardTransfer"))
             {

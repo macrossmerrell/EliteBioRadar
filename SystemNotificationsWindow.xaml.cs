@@ -51,6 +51,7 @@ namespace EliteBioRadar
                 ["voucher"] = voucherVisual,
                 ["self-destruct"] = selfDestructVisual,
                 ["shipyard"] = shipyardVisual,
+                ["module"] = moduleVisual,
                 ["discovery-scan"] = discoveryScanVisual,
                 ["crime"] = crimeVisual,
                 ["trade-profit"] = tradeProfitVisual,
