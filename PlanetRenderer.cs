@@ -277,7 +277,7 @@ namespace EliteBioRadar
                 else if (slice == 7) look = 17;
                 else if (slice >= 10 && slice <= 11) look = 18;
                 else if (slice == 12) look = 19;   // salmon-rose with large sage-green patches (one real body so far)
-                else if (slice == 13) look = 20;   // dark maroon with rose patches and big white patches (one real body so far)
+                else if (slice == 13 && ((pickHash >> 24) & 1) == 0) look = 20;   // half share since 2026-11-13: three airless misses drew it (UP-V d3-5 C 5, C 6, XP-H b16-1 B 2) against a plain dull game look; dark maroon with rose patches and big white patches (one real body so far)
                 else if (slice == 14) look = 21;   // dark olive-charcoal with big golden-tan patches (one real body so far)
                 else if (slice == 15 && detail.SurfacePressure > 0) look = 22;   // dusky blue-grey with salmon patches (one real body so far: Qiedea ER-U d3-6 1)
                 else if (slice == 16 && detail.SurfacePressure > 0) look = 23;   // blue-grey with white frost patches and long dark-rayed craters (one real body: ER-U d3-6 3)
@@ -1313,6 +1313,12 @@ namespace EliteBioRadar
                     look.C0 = rgb(0x04, 0x06, 0x18); look.C1 = rgb(0x0a, 0x12, 0x34); look.C2 = rgb(0x2a, 0x3a, 0x80);
                     look.C3 = rgb(0x6a, 0x80, 0xc8); look.Band4 = rgb(0x02, 0x03, 0x0c); look.Glow = rgb(0x30, 0x40, 0x90);
                     look.BandCount = 12; look.Turb = 0.8; look.StormAmt = 0.45; look.Contrast = 0.55; look.Tilt = 0.04;
+                    if (variantB)   // dark chocolate-brown with fine tan bands and many small white oval storms (real: Qiedea UP-V d3-5 A 8, 162 K; the navy look has no real body yet)
+                    {
+                        look.C0 = rgb(0x1c, 0x12, 0x0c); look.C1 = rgb(0x3e, 0x2a, 0x1a); look.C2 = rgb(0x6e, 0x4e, 0x2c);
+                        look.C3 = rgb(0xd8, 0xd4, 0xcc); look.Band4 = rgb(0x10, 0x08, 0x04); look.Glow = rgb(0x6a, 0x4c, 0x2c);
+                        look.BandCount = 14; look.Turb = 1.0; look.StormAmt = 1.0; look.Contrast = 0.9;
+                    }
                     break;
                 default:
                     var pal = GetPalette(iconCode);
