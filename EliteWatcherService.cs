@@ -139,6 +139,39 @@ namespace EliteBioRadar
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
         public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
         private DateTime _lastModuleAlert = DateTime.MinValue;
+        public event Action<string>? MarketBoughtEvent;   // the detail for the cargo purchase receipt: item|tonnes|price per tonne|total|galactic average per tonne or 0; purchases of one commodity within 1.5 s are one; live only
+        private readonly object _buyGate = new();
+        private string _buyName = "", _buyType = "";
+        private long _buyCount, _buyCost;
+        private System.Threading.Timer? _buyTimer;
+        // Sends the waiting purchase (the caller holds _buyGate). The galactic average comes from the Market.json the game keeps beside the journal.
+        private void FlushMarketBuyLocked()
+        {
+            if (_buyCount <= 0) return;
+            long perTonne = _buyCount > 0 ? (long)Math.Round((double)_buyCost / _buyCount) : 0;
+            long mean = MeanPrice(_buyType);
+            string detail = $"{_buyName}|{_buyCount}|{perTonne}|{_buyCost}|{mean}";
+            _buyCount = 0; _buyCost = 0;
+            MarketBoughtEvent?.Invoke(detail);
+        }
+        private long MeanPrice(string type)
+        {
+            try
+            {
+                var path = Path.Combine(_journalDir, "Market.json");
+                if (!File.Exists(path) || type.Length == 0) return 0;
+                var market = JObject.Parse(File.ReadAllText(path));
+                if (market["Items"] is not JArray items) return 0;
+                foreach (var it in items)
+                {
+                    string n = (it.Value<string>("Name") ?? "").Trim('$', ';');
+                    if (n.EndsWith("_name", StringComparison.OrdinalIgnoreCase)) n = n.Substring(0, n.Length - 5);
+                    if (string.Equals(n, type, StringComparison.OrdinalIgnoreCase)) return it.Value<long?>("MeanPrice") ?? 0;
+                }
+            }
+            catch (Exception ex) { Log.Write($"Market.json mean price unavailable: {ex.Message}"); }
+            return 0;
+        }
         public event Action<string>? BarycentreEvent;   // the detail for the binary pair animation: count|system|body id|eccentricity|semi-major axis m|period s|widest axis m|longest period s; charted together within 1.5 s are one; live only
         private readonly object _baryGate = new();
         private readonly HashSet<string> _baryShown = new();
@@ -4031,6 +4064,24 @@ namespace EliteBioRadar
                 foreach (var e in soldBio) { bv += e.Value<long?>("Value") ?? 0; bb += e.Value<long?>("Bonus") ?? 0; }
                 var first = soldBio[0];
                 OrganicSoldEvent?.Invoke($"{soldBio.Count}|{Clean(first.Value<string>("Species_Localised") ?? first.Value<string>("Genus_Localised") ?? "")}|{bv}|{bb}");
+            }
+            if (!backfill && evt == "MarketBuy")
+            {
+                string buyType = (obj.Value<string>("Type") ?? "").Trim('$', ';');
+                string buyName = Clean(obj.Value<string>("Type_Localised") ?? PrettyJournalName(buyType));
+                long buyCount = obj.Value<long?>("Count") ?? 0, buyCost = obj.Value<long?>("TotalCost") ?? 0;
+                if (buyCount > 0 && buyName.Length > 0)
+                {
+                    lock (_buyGate)
+                    {
+                        // Several purchases of the same commodity in a row (the slider, or buying in steps) are one receipt; a different commodity sends the waiting one first.
+                        if (_buyCount > 0 && _buyName != buyName) FlushMarketBuyLocked();
+                        if (_buyCount == 0) { _buyName = buyName; _buyType = buyType; }
+                        _buyCount += buyCount; _buyCost += buyCost;
+                        if (_buyTimer == null) _buyTimer = new System.Threading.Timer(_ => { lock (_buyGate) FlushMarketBuyLocked(); }, null, 1500, System.Threading.Timeout.Infinite);
+                        else _buyTimer.Change(1500, System.Threading.Timeout.Infinite);
+                    }
+                }
             }
             if (!backfill && evt == "MarketSell" && (obj.Value<long?>("AvgPricePaid") ?? 0) > 0 && (obj.Value<long?>("Count") ?? 0) > 0)
             {

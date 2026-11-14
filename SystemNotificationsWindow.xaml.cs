@@ -69,6 +69,7 @@ namespace EliteBioRadar
                 ["screenshot"] = screenshotVisual,
                 ["suit-loadout"] = suitLoadoutVisual,
                 ["barycentre"] = barycentreVisual,
+                ["market-buy"] = marketBuyVisual,
                 ["approach-settlement"] = settlementVisual,
                 ["synthesis"] = synthesisVisual,
                 ["community-goal"] = communityGoalVisual,
