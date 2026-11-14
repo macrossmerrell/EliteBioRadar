@@ -46,7 +46,6 @@ namespace EliteBioRadar
             _sub = $"-{_total.ToString("N0", inv)} CR  AT {_price.ToString("N0", inv)}/T" + (vs.Length > 0 ? "  " + vs : "");
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         protected override void Render(DrawingContext dc, double w, double h, double t)
         {

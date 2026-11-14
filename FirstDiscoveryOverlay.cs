@@ -261,10 +261,10 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.SupercruiseExit, "", "")));
             svc.Supercharged += (type, boost) => Dispatcher.InvokeAsync(() =>
             {
-                // The ship's current jump range (when the app knows it) lets the plate show what the boosted range becomes.
+                // The ship's current (laden, fuel-adjusted) jump range lets the plate show what the boosted range becomes. MaxJumpRange is a stale unladen
+                // snapshot from the last Loadout, so when the current range is not known yet the line is left out rather than overstated.
                 var inv = System.Globalization.CultureInfo.InvariantCulture;
-                var dest = svc.CurrentDestination;
-                double range = dest == null ? 0 : (dest.CurrentJumpRange > 0 ? dest.CurrentJumpRange : dest.MaxJumpRange);
+                double range = svc.CurrentDestination?.CurrentJumpRange ?? 0;
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Supercharge, "", type + "|" + boost.ToString("0.##", inv) + (range > 0 ? "|" + range.ToString("0.0", inv) : "")));
             });
             svc.RouteChanged += (stage, jumps, ly, classes) => Dispatcher.InvokeAsync(() =>

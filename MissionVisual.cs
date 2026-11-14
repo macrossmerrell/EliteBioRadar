@@ -61,7 +61,6 @@ namespace EliteBioRadar
             if (_name.Length == 0) _name = "Mission";
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
         private static string Credits(double n) => Math.Round(n).ToString("N0", CultureInfo.InvariantCulture) + " CR";
 
         protected override void Render(DrawingContext dc, double w, double h, double t)

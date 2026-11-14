@@ -28,7 +28,6 @@ namespace EliteBioRadar
             _sub = string.Join(" - ", new[] { _eco, _gov }.Where(s => s.Length > 0));
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         private void DrawRow(DrawingContext dc, string label, string value, double y, double start, double t)
         {

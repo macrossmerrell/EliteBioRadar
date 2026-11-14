@@ -30,7 +30,6 @@ namespace EliteBioRadar
         protected override void OnStart(string subject, string detail) { }
 
         private static int Seconds(double t) => (int)Math.Max(0, Math.Ceiling(Countdown * (1 - Phase(t, CountStart, CountLen))));
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         // One band of hazard stripes across the whole window, scrolling left or right. Called inside the scene's scale, with x running a little past the window on both sides.
         private void DrawBand(DrawingContext dc, double left, double right, double y, double t, int dir)

@@ -71,7 +71,6 @@ namespace EliteBioRadar
         }
 
         private static Palette PalOf(Icon i) => i switch { Icon.Bio => BioPal, Icon.Geo => GeoPal, Icon.Human => HumanPal, Icon.Guardian => GuardianPal, Icon.Thargoid => ThargoidPal, Icon.Mining => MiningPal, _ => OtherPal };
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         private static void DrawIcon(DrawingContext dc, Icon icon, Palette pal, double x, double y)
         {

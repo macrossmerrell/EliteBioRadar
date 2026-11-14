@@ -68,7 +68,6 @@ namespace EliteBioRadar
             return (years < 100 ? years.ToString("0.0", CultureInfo.InvariantCulture) : Math.Round(years).ToString("N0", CultureInfo.InvariantCulture)) + " YEARS";
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         // Kepler's equation by a few fixed-point steps, then the position relative to the focus (the barycentre) for an orbit of semi-major axis a.
         private static (double x, double y) Orbit(double m, double e, double a)

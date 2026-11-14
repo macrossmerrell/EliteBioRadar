@@ -45,7 +45,6 @@ namespace EliteBioRadar
             _frame = P(0); _name = P(1).ToUpperInvariant(); _sub = P(2).ToUpperInvariant(); _surface = P(3) == "1";
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         protected override void Render(DrawingContext dc, double w, double h, double t)
         {

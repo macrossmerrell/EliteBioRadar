@@ -49,7 +49,6 @@ namespace EliteBioRadar
             if (_title.Length == 0) _title = _kind switch { Kind.Wanted => "BOUNTY ON YOUR HEAD", Kind.Paid => "FINES PAID", _ => "CRIME COMMITTED" };
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
         private static string Credits(double n) => Math.Round(n).ToString("N0", CultureInfo.InvariantCulture) + " CR";
 
         protected override void Render(DrawingContext dc, double w, double h, double t)

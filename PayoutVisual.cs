@@ -49,7 +49,6 @@ namespace EliteBioRadar
 
         private static string Compact(double n) => n >= 1e6 ? (n / 1e6).ToString("0.#", CultureInfo.InvariantCulture) + "M" : n >= 1e3 ? Math.Round(n / 1e3).ToString("0", CultureInfo.InvariantCulture) + "k" : Math.Round(n).ToString("0", CultureInfo.InvariantCulture);
         private static string Credits(double n) => Math.Round(n).ToString("N0", CultureInfo.InvariantCulture) + " CR";
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         protected override void Render(DrawingContext dc, double w, double h, double t)
         {

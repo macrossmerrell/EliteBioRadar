@@ -84,7 +84,6 @@ namespace EliteBioRadar
             }
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         // A shape drawn on as if by a pen: the first `p` of each figure's length is visible.
         private static Pen DrawOn(double p, double thickness)

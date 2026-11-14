@@ -46,7 +46,6 @@ namespace EliteBioRadar
         protected override double Duration => FadeOutAt + 0.6;
         protected override void OnStart(string subject, string detail) { }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         private static void DrawCracks(DrawingContext dc, (double x, double y)[][] cracks, double cx, double cy, double p, Pen pen)
         {

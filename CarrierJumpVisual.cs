@@ -54,7 +54,6 @@ namespace EliteBioRadar
             else _leftAtCancel = 898;
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
         private static string Clock(double secs) { int s = (int)Math.Max(0, Math.Floor(secs)); return (s / 60).ToString("00", CultureInfo.InvariantCulture) + ":" + (s % 60).ToString("00", CultureInfo.InvariantCulture); }
 
         // An arc of 0..100 % round the clock, clockwise from the top, cached per percent.

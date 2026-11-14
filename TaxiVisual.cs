@@ -49,7 +49,6 @@ namespace EliteBioRadar
             if (_to.Length == 0) _to = _name;
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         private void DrawTicket(DrawingContext dc, double W, double H)
         {

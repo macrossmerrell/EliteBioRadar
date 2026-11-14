@@ -45,7 +45,6 @@ namespace EliteBioRadar
             _title = _kind == "USS" ? "UNIDENTIFIED SIGNAL SOURCE" : "SIGNAL SOURCE FOUND";
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         private static Geometry Wave(double x0, double w, double y, double t, double settle, double amp, double phase)
         {

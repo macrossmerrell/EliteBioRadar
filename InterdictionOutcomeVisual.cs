@@ -32,7 +32,6 @@ namespace EliteBioRadar
             _phase = 0.37 * _outcome; _lastT = 0;
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
         private static double Smooth(double x) => x * x * (3 - 2 * x);
 
         protected override void Render(DrawingContext dc, double w, double h, double t)

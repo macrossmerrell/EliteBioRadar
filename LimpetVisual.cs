@@ -47,7 +47,6 @@ namespace EliteBioRadar
             _title = _result ? "LIMPET REPAIR DONE" : "LIMPET LAUNCHED";
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         private void DrawLimpet(DrawingContext dc, double x, double y, double s, double rot)
         {

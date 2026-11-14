@@ -67,7 +67,6 @@ namespace EliteBioRadar
             if (P(2).Length > 0 && _kind == "INTEL" && P(3).Length > 0) _sub = P(2);
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         private void DrawIcon(DrawingContext dc, double x, double y, double s)
         {

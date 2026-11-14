@@ -58,7 +58,6 @@ namespace EliteBioRadar
             _target = p.Length > 1 && int.TryParse(p[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var g) ? Math.Max(0, g) : 0;
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         protected override void Render(DrawingContext dc, double w, double h, double t)
         {

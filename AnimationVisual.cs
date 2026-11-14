@@ -161,6 +161,8 @@ namespace EliteBioRadar
         protected static Pen FrozenPen(Color c, double w) { var p = new Pen(Frozen(c), w); p.Freeze(); return p; }
 
         protected static double Clamp01(double x) => x < 0 ? 0 : x > 1 ? 1 : x;
+        // The largest font size (up to max) at which the text fits the given width in the monospaced face.
+        protected static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
         protected static double EaseOut(double x) { x = Clamp01(x); return 1 - Math.Pow(1 - x, 3); }
         // Fraction (0..1) of an animation that starts at `start` and lasts `len`.
         protected static double Phase(double t, double start, double len) => Clamp01((t - start) / len);

@@ -38,7 +38,6 @@ namespace EliteBioRadar
             _recall = p.Length > 0 && p[0].Trim().ToUpperInvariant() == "RECALL";
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         protected override void Render(DrawingContext dc, double w, double h, double t)
         {

@@ -42,7 +42,6 @@ namespace EliteBioRadar
             if (_item.Length == 0) _item = "Cargo";
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
         private static string Credits(double n) => Math.Round(Math.Abs(n)).ToString("N0", CultureInfo.InvariantCulture) + " CR";
         private static string Short(double n) => n >= 10000 ? Math.Round(n / 1000).ToString("0", CultureInfo.InvariantCulture) + "K" : Math.Round(n).ToString("0", CultureInfo.InvariantCulture);
 

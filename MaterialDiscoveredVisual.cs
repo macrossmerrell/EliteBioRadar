@@ -47,7 +47,6 @@ namespace EliteBioRadar
             _sub = _number > 0 ? $"{_category}  DISCOVERY No. {_number}" : _category;
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         private void DrawGlyph(DrawingContext dc, double cx, double cy)
         {

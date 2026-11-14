@@ -142,7 +142,9 @@ namespace EliteBioRadar
         public event Action<string>? StorageEvent;   // the detail for the storage board: SHIPS|station|system|here|elsewhere|value|more|rows or MODS|station|system|count|engineered|value|more|rows; live only, once per listing unless it changed
         private readonly Dictionary<string, (string Key, DateTime At)> _storageLast = new();
         private static string Cost(double v) => v.ToString("0", System.Globalization.CultureInfo.InvariantCulture);
-        private void RaiseStorage(string kind, string station, string system, string key, string detail)
+        // The animation details are joined with | ; ~ , so a name carrying one of them would shift every later field: they become spaces.
+        private static string Fd(string? s) => (s ?? "").Replace('|', ' ').Replace(';', ' ').Replace('~', ' ');
+        private void RaiseStorage(string kind, string key, string detail)
         {
             // The game rewrites the listing every time the screen opens: play once, and again only when it changed or ten minutes have passed.
             lock (_storageLast)
@@ -155,25 +157,34 @@ namespace EliteBioRadar
         public event Action<string>? MarketBoughtEvent;   // the detail for the cargo purchase receipt: item|tonnes|price per tonne|total|galactic average per tonne or 0; purchases of one commodity within 1.5 s are one; live only
         private readonly object _buyGate = new();
         private string _buyName = "", _buyType = "";
-        private long _buyCount, _buyCost;
+        private long _buyCount, _buyCost, _buyMarket;
         private System.Threading.Timer? _buyTimer;
-        // Sends the waiting purchase (the caller holds _buyGate). The galactic average comes from the Market.json the game keeps beside the journal.
-        private void FlushMarketBuyLocked()
+        private bool _disposed;
+        // Takes the waiting purchase out of the batch (the caller holds _buyGate); null when nothing is waiting. It is sent after the lock is released (SendMarketBuy).
+        private (string Name, string Type, long Count, long Cost, long Market)? TakeMarketBuyLocked()
         {
-            if (_buyCount <= 0) return;
-            long perTonne = _buyCount > 0 ? (long)Math.Round((double)_buyCost / _buyCount) : 0;
-            long mean = MeanPrice(_buyType);
-            string detail = $"{_buyName}|{_buyCount}|{perTonne}|{_buyCost}|{mean}";
+            if (_buyCount <= 0) return null;
+            var taken = (_buyName, _buyType, _buyCount, _buyCost, _buyMarket);
             _buyCount = 0; _buyCost = 0;
-            MarketBoughtEvent?.Invoke(detail);
+            return taken;
         }
-        private long MeanPrice(string type)
+        // The galactic average comes from the Market.json the game keeps beside the journal, read here (not under the lock, so the journal thread never waits on the disk).
+        private void SendMarketBuy((string Name, string Type, long Count, long Cost, long Market)? p)
+        {
+            if (p is not { } b || _disposed) return;
+            long perTonne = (long)Math.Round((double)b.Cost / b.Count);
+            long mean = MeanPrice(b.Type, b.Market);
+            MarketBoughtEvent?.Invoke($"{Fd(b.Name)}|{b.Count}|{perTonne}|{b.Cost}|{mean}");
+        }
+        private long MeanPrice(string type, long marketId)
         {
             try
             {
                 var path = Path.Combine(_journalDir, "Market.json");
                 if (!File.Exists(path) || type.Length == 0) return 0;
                 var market = JObject.Parse(File.ReadAllText(path));
+                // The file is the last market the game wrote: it must be the market the purchase was made at.
+                if (marketId > 0 && (market.Value<long?>("MarketID") ?? 0) != marketId) return 0;
                 if (market["Items"] is not JArray items) return 0;
                 foreach (var it in items)
                 {
@@ -188,6 +199,7 @@ namespace EliteBioRadar
         public event Action<string>? BarycentreEvent;   // the detail for the binary pair animation: count|system|body id|eccentricity|semi-major axis m|period s|widest axis m|longest period s; charted together within 1.5 s are one; live only
         private readonly object _baryGate = new();
         private readonly HashSet<string> _baryShown = new();
+        private readonly Queue<string> _baryOrder = new();   // oldest first, so the set forgets the oldest pair (not everything at once) when it is full
         private int _baryCount;
         private string _barySystem = "", _baryId = "";
         private double _baryEcc, _barySma, _baryPeriod, _baryMaxSma, _baryMaxPeriod;
@@ -199,7 +211,8 @@ namespace EliteBioRadar
             {
                 if (_baryCount == 0) return;
                 var inv = System.Globalization.CultureInfo.InvariantCulture;
-                detail = $"{_baryCount}|{Clean(_barySystem)}|{_baryId}|{_baryEcc.ToString("0.####", inv)}|{_barySma.ToString("0", inv)}|{_baryPeriod.ToString("0", inv)}|{_baryMaxSma.ToString("0", inv)}|{_baryMaxPeriod.ToString("0", inv)}";
+                if (_disposed) { _baryCount = 0; return; }
+                detail = $"{_baryCount}|{Fd(Clean(_barySystem))}|{_baryId}|{_baryEcc.ToString("0.####", inv)}|{_barySma.ToString("0", inv)}|{_baryPeriod.ToString("0", inv)}|{_baryMaxSma.ToString("0", inv)}|{_baryMaxPeriod.ToString("0", inv)}";
                 _baryCount = 0; _baryMaxSma = 0; _baryMaxPeriod = 0;
             }
             BarycentreEvent?.Invoke(detail);
@@ -4080,30 +4093,30 @@ namespace EliteBioRadar
             }
             if (!backfill && evt == "StoredShips")
             {
-                string stStation = Clean(obj.Value<string>("StationName") ?? ""), stSystem = Clean(obj.Value<string>("StarSystem") ?? "");
+                string stStation = Fd(Clean(obj.Value<string>("StationName") ?? "")), stSystem = Fd(Clean(obj.Value<string>("StarSystem") ?? ""));
                 var here = (obj["ShipsHere"] as JArray)?.ToList() ?? new List<JToken>();
                 var remote = (obj["ShipsRemote"] as JArray)?.OrderBy(s => s.Value<double?>("TransferPrice") ?? 0).ToList() ?? new List<JToken>();
                 double fleet = here.Concat(remote).Sum(s => s.Value<double?>("Value") ?? 0);
-                string ShipLabel(JToken s) => Clean(s.Value<string>("ShipType_Localised") ?? PrettyJournalName(s.Value<string>("ShipType") ?? ""));
+                string ShipLabel(JToken s) => Fd(Clean(s.Value<string>("ShipType_Localised") ?? PrettyJournalName(s.Value<string>("ShipType") ?? "")));
                 var rows = new List<string>();
                 foreach (var s in here.Take(7)) rows.Add($"{ShipLabel(s)}~HERE~0~1~0");
-                foreach (var s in remote) { if (rows.Count >= 7) break; rows.Add($"{ShipLabel(s)}~{Clean(s.Value<string>("StarSystem") ?? "")}~{Cost(s.Value<double?>("TransferPrice") ?? 0)}~0~0"); }
+                foreach (var s in remote) { if (rows.Count >= 7) break; rows.Add($"{ShipLabel(s)}~{Fd(Clean(s.Value<string>("StarSystem") ?? ""))}~{Cost(s.Value<double?>("TransferPrice") ?? 0)}~0~0"); }
                 int more = Math.Max(0, here.Count + remote.Count - rows.Count);
                 if (here.Count + remote.Count > 0)
-                    RaiseStorage("SHIPS", stStation, stSystem, $"{stStation}|{here.Count}|{remote.Count}|{Cost(fleet)}",
+                    RaiseStorage("SHIPS",$"{stStation}|{here.Count}|{remote.Count}|{Cost(fleet)}",
                         $"SHIPS|{stStation}|{stSystem}|{here.Count}|{remote.Count}|{Cost(fleet)}|{more}|{string.Join(";", rows)}");
             }
             if (!backfill && evt == "StoredModules")
             {
-                string mdStation = Clean(obj.Value<string>("StationName") ?? ""), mdSystem = Clean(obj.Value<string>("StarSystem") ?? "");
+                string mdStation = Fd(Clean(obj.Value<string>("StationName") ?? "")), mdSystem = Fd(Clean(obj.Value<string>("StarSystem") ?? ""));
                 var items = (obj["Items"] as JArray)?.ToList() ?? new List<JToken>();
                 int engineered = items.Count(i => i["EngineerModifications"] != null);
                 double worth = items.Sum(i => i.Value<double?>("BuyPrice") ?? 0);
                 // Engineered modules first, then the dearest.
                 var shown = items.OrderByDescending(i => i["EngineerModifications"] != null).ThenByDescending(i => i.Value<double?>("BuyPrice") ?? 0).Take(7).ToList();
-                var rows = shown.Select(i => $"{Clean(i.Value<string>("Name_Localised") ?? PrettyJournalName((i.Value<string>("Name") ?? "").Trim('$', ';').Replace("_name", "")))}~{Clean(i.Value<string>("StarSystem") ?? "")}~{Cost(i.Value<double?>("TransferCost") ?? 0)}~0~{(i["EngineerModifications"] != null ? 1 : 0)}");
+                var rows = shown.Select(i => $"{Fd(Clean(i.Value<string>("Name_Localised") ?? PrettyJournalName((i.Value<string>("Name") ?? "").Trim('$', ';').Replace("_name", ""))))}~{Fd(Clean(i.Value<string>("StarSystem") ?? ""))}~{Cost(i.Value<double?>("TransferCost") ?? 0)}~0~{(i["EngineerModifications"] != null ? 1 : 0)}");
                 if (items.Count > 0)
-                    RaiseStorage("MODS", mdStation, mdSystem, $"{mdStation}|{items.Count}|{engineered}|{Cost(worth)}",
+                    RaiseStorage("MODS",$"{mdStation}|{items.Count}|{engineered}|{Cost(worth)}",
                         $"MODS|{mdStation}|{mdSystem}|{items.Count}|{engineered}|{Cost(worth)}|{Math.Max(0, items.Count - shown.Count)}|{string.Join(";", rows)}");
             }
             if (!backfill && evt == "MarketBuy")
@@ -4113,15 +4126,17 @@ namespace EliteBioRadar
                 long buyCount = obj.Value<long?>("Count") ?? 0, buyCost = obj.Value<long?>("TotalCost") ?? 0;
                 if (buyCount > 0 && buyName.Length > 0)
                 {
+                    (string Name, string Type, long Count, long Cost, long Market)? waiting = null;
                     lock (_buyGate)
                     {
                         // Several purchases of the same commodity in a row (the slider, or buying in steps) are one receipt; a different commodity sends the waiting one first.
-                        if (_buyCount > 0 && _buyName != buyName) FlushMarketBuyLocked();
-                        if (_buyCount == 0) { _buyName = buyName; _buyType = buyType; }
+                        if (_buyCount > 0 && _buyName != buyName) waiting = TakeMarketBuyLocked();
+                        if (_buyCount == 0) { _buyName = buyName; _buyType = buyType; _buyMarket = obj.Value<long?>("MarketID") ?? 0; }
                         _buyCount += buyCount; _buyCost += buyCost;
-                        if (_buyTimer == null) _buyTimer = new System.Threading.Timer(_ => { lock (_buyGate) FlushMarketBuyLocked(); }, null, 1500, System.Threading.Timeout.Infinite);
+                        if (_buyTimer == null) _buyTimer = new System.Threading.Timer(_ => { (string Name, string Type, long Count, long Cost, long Market)? due; lock (_buyGate) due = TakeMarketBuyLocked(); SendMarketBuy(due); }, null, 1500, System.Threading.Timeout.Infinite);
                         else _buyTimer.Change(1500, System.Threading.Timeout.Infinite);
                     }
+                    SendMarketBuy(waiting);
                 }
             }
             if (!backfill && evt == "MarketSell" && (obj.Value<long?>("AvgPricePaid") ?? 0) > 0 && (obj.Value<long?>("Count") ?? 0) > 0)
@@ -4370,9 +4385,11 @@ namespace EliteBioRadar
                 lock (_baryGate)
                 {
                     // The same pair scanned again (the game repeats the line when a system is re-scanned) is not a new find.
-                    if (_baryShown.Count > 500) _baryShown.Clear();
-                    if (bSys.Length > 0 && _baryShown.Add(bSys + "|" + bId))
+                    string baryKey = bSys + "|" + bId;
+                    if (bSys.Length > 0 && _baryShown.Add(baryKey))
                     {
+                        _baryOrder.Enqueue(baryKey);
+                        if (_baryOrder.Count > 500) _baryShown.Remove(_baryOrder.Dequeue());
                         if (_baryCount == 0 || bSma > _baryMaxSma) _baryMaxSma = bSma;
                         if (_baryCount == 0 || bPer > _baryMaxPeriod) _baryMaxPeriod = bPer;
                         if (_baryCount == 0) { _barySystem = bSys; _baryId = bId; _baryEcc = bEcc; _barySma = bSma; _baryPeriod = bPer; }
@@ -6505,6 +6522,9 @@ namespace EliteBioRadar
 
         public void Dispose()
         {
+            _disposed = true;
+            // A pending batch timer would otherwise fire into a service that is gone.
+            _buyTimer?.Dispose(); _baryTimer?.Dispose(); _afmuTimer?.Dispose();
             _cts.Cancel();
             _journalWatcher?.Dispose();
             _statusReady.Dispose();

@@ -34,7 +34,6 @@ namespace EliteBioRadar
             if (_pilot.StartsWith("$")) _pilot = "";
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
         private static double Hit(double t) { double a = 0; foreach (var h in Hits) { double q = t - h; if (q >= 0 && q < 0.35) a = Math.Max(a, 1 - q / 0.35); } return a; }
 
         private void DrawShip(DrawingContext dc, double scale, Pen edge)

@@ -66,7 +66,6 @@ namespace EliteBioRadar
             }
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         private void DrawIcon(DrawingContext dc, double scale)
         {

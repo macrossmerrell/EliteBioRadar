@@ -46,7 +46,6 @@ namespace EliteBioRadar
             _platePen = FrozenPen(Color.FromArgb(153, _col.R, _col.G, _col.B), 1);
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         private static void RR(DrawingContext dc, Brush fill, Pen? pen, double x, double y, double w, double h, double r) => dc.DrawRoundedRectangle(fill, pen, new Rect(x, y, w, h), r, r);
 

@@ -61,7 +61,6 @@ namespace EliteBioRadar
         }
 
         private static Palette PalFor(char k) => k == 'f' ? FuelPal : k == 'r' ? RepairPal : AmmoPal;
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         private static Geometry ArcGeo(double cx, double cy, double r, double a0, double sweep)
         {

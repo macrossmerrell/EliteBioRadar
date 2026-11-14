@@ -74,7 +74,6 @@ namespace EliteBioRadar
             }
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
         private int GradeDots => _grade.StartsWith("HIGH") ? 3 : _grade.StartsWith("MED") ? 2 : _grade.Length > 0 ? 1 : 0;
 
         protected override void Render(DrawingContext dc, double w, double h, double t)

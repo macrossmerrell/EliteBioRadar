@@ -50,7 +50,6 @@ namespace EliteBioRadar
             if (_kind == Kind.Leave && _members.Count == 0) _members.Add("Wing");
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         // One row: a dot, the name and a label at the right.
         private void DrawRow(DrawingContext dc, double x, double y, string name, string label, Palette pal, Brush nameBrush)

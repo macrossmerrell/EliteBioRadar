@@ -41,7 +41,6 @@ namespace EliteBioRadar
             _tonnes = Math.Max(1, I(2, 1)); _used = I(3, -1); _cap = I(4, -1);
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         protected override void Render(DrawingContext dc, double w, double h, double t)
         {

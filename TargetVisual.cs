@@ -44,7 +44,6 @@ namespace EliteBioRadar
             else _sub = (_ship + "  " + _rank).Trim();
         }
 
-        private static double Fit(string text, double max, double width) => Math.Min(max, width / (Math.Max(1, text.Length) * 0.66));
 
         protected override void Render(DrawingContext dc, double w, double h, double t)
         {
