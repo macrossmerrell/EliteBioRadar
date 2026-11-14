@@ -968,6 +968,7 @@ namespace EliteBioRadar
         private bool _routeClearedSinceAnnounce;         // NavRouteClear seen since: the next route read counts as a new plot even to the same system
         private int _routeSeq;                           // bumped by every plot / clear, so a delayed "cancelled" can tell it was overtaken
         private DateTime _routeCompletedAt = DateTime.MinValue;
+        private long _hyperspaceTargetAddr;               // SystemAddress of the hyperspace jump in flight (live): the game writes NavRouteClear during the last jump, ~10 s before the arrival that completes the route
         // stage = "PLOTTED" / "CANCELLED" / "COMPLETE", then the jump count, total light-years and eight star-class letters sampled along the route. Live only.
         public event Action<string, int, double, string>? RouteChanged;
         private bool _routeClearedLive;
@@ -1917,6 +1918,7 @@ namespace EliteBioRadar
         private void OnRouteCleared()
         {
             if (_routeAnnouncedDest == 0 || _routeClearedSinceAnnounce) return;
+            if (_hyperspaceTargetAddr != 0 && _hyperspaceTargetAddr == _routeAnnouncedDest) return;   // the final jump has started: this clear is the route ending, and the arrival will play COMPLETE
             _routeClearedSinceAnnounce = true;
             int seq = ++_routeSeq, jumps = _routeAnnouncedJumps;
             double ly = _routeAnnouncedLy;
@@ -6089,6 +6091,7 @@ namespace EliteBioRadar
                     if (!backfill)
                     {
                         IsChargingJump = false;
+                        _hyperspaceTargetAddr = 0;
                         // Arriving in the last system of the plotted route completes it.
                         if (_routeAnnouncedDest != 0 && (obj.Value<long?>("SystemAddress") ?? 0) == _routeAnnouncedDest)
                         {
@@ -6242,6 +6245,7 @@ namespace EliteBioRadar
                     if (string.Equals(jumpType, "Hyperspace", StringComparison.OrdinalIgnoreCase))
                     {
                         IsChargingJump = true;
+                        if (!backfill) _hyperspaceTargetAddr = obj.Value<long?>("SystemAddress") ?? 0;
                         if (!backfill) { HyperspaceJumpStartedAt = DateTime.UtcNow; HyperspaceJumpStarted?.Invoke(); }
                         FsdTargetedAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
                         if (!backfill) DestinationUpdated?.Invoke(this, EventArgs.Empty);

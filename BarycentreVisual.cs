@@ -10,7 +10,7 @@ namespace EliteBioRadar
     // Detail = "count|system|body id|eccentricity|semi-major axis (m)|period (s)|widest axis (m)|longest period (s)".
     public sealed class BarycentreVisual : AnimationVisual
     {
-        private const double SceneW = 240, SceneH = 150, FadeOutAt = 7.6, CX = 120, CY = 50, A = 38, Q1 = 0.45, Q2 = 0.55;
+        private const double SceneW = 240, SceneH = 150, FadeOutAt = 7.0, CX = 120, CY = 50, A = 38, Q1 = 0.45, Q2 = 0.55;
         private static readonly Color Cyan = Color.FromRgb(127, 224, 255), Orange = Color.FromRgb(255, 176, 96), Blue = Color.FromRgb(140, 200, 255);
         private static readonly Brush Solid = Frozen(Cyan), NameBrush = Frozen(Color.FromRgb(0xe8, 0xf2, 0xff)), Gold = Frozen(Color.FromRgb(255, 216, 144)), PlateBrush = Frozen(Color.FromArgb(209, 5, 10, 20)), WhiteB = Frozen(Colors.White);
         private static readonly Brush OrangeGlow = RadialGlow(Orange, 255), BlueGlow = RadialGlow(Blue, 255);
@@ -99,7 +99,7 @@ namespace EliteBioRadar
             dc.DrawLine(CrossPen, new Point(CX - 3, CY), new Point(CX + 3, CY));
             dc.DrawLine(CrossPen, new Point(CX, CY - 3), new Point(CX, CY + 3));
 
-            double m = Phase(t, 0.4, 3.0) * Math.PI * 2;
+            double m = Math.Max(0, t - 0.4) / 3.0 * Math.PI * 2;   // keeps circling for the whole animation (one lap per 3 s)
             const int trail = 24;
             for (int i = trail; i >= 1; i--)
             {
@@ -116,7 +116,7 @@ namespace EliteBioRadar
             if (_count > 1) DrawText(dc, "+" + (_count - 1) + " MORE", MonoFace, 7, WhiteB, CX, 96, 1, TextAlignment.Center);
             dc.Pop();
 
-            double plateAt = 3.4, pa = Phase(t, plateAt, 0.4);
+            double plateAt = 2.2, pa = Phase(t, plateAt, 0.4);
             if (pa > 0)
             {
                 dc.PushOpacity(pa);

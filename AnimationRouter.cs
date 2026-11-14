@@ -14,7 +14,8 @@ namespace EliteBioRadar
     // Live = a screen driven continuously by the ship's state (the atmosphere scenes) rather than a one-shot played through the router:
     // MainWindow shows it in the windows ticked here for as long as the phase lasts, so it has no Play preview.
     public sealed record AnimationDef(string Id, string Name, string Group, AnimationSurfaces DefaultSurfaces, double BackdropOpacity,
-                                      string PreviewSubject, string PreviewDetail, bool Live = false, string[]? PreviewCycle = null);
+                                      string PreviewSubject, string PreviewDetail, bool Live = false, string[]? PreviewCycle = null,
+                                      bool Ambient = false);   // Ambient = plays beside the queue, underneath whatever else is playing (the fuel scoop runs as long as the scoop works)
 
     public static class AnimationCatalog
     {
@@ -148,7 +149,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef ColonyRange =
             new("colony-range", "Colony range left / entered", "Biology", AnimationSurfaces.Both, 0.85, "", "LEFT|Bacterium Aurasus|150|2", PreviewCycle: new[] { "LEFT|Bacterium Aurasus|150|2", "ENTERED|Bacterium Aurasus|150|2" });
         public static readonly AnimationDef FuelScoop =
-            new("fuel-scoop", "Fuel scooping", "Jump", AnimationSurfaces.Main, 0.92, "Sample Star", "PREVIEW|TYPE=K-Star|~STAR=4500");
+            new("fuel-scoop", "Fuel scooping", "Jump", AnimationSurfaces.Main, 0.92, "Sample Star", "PREVIEW|TYPE=K-Star|~STAR=4500", Ambient: true);
         public static readonly AnimationDef CombatMode =
             new("combat-mode", "Combat mode", "HUD", AnimationSurfaces.Main, 0.85, "", "");
         public static readonly AnimationDef LandingGear =
@@ -271,6 +272,14 @@ namespace EliteBioRadar
             foreach (var kv in _lanes)
             {
                 if ((targets & kv.Key) == 0) continue;
+                if (request.Def.Ambient)
+                {
+                    // Never queued and never holds the lane: it runs underneath, so other animations play over it.
+                    if (!kv.Value.Surface.IsAvailable) continue;
+                    try { kv.Value.Surface.Play(request, () => { }); }
+                    catch (Exception ex) { Log.Write($"Animation '{request.Def.Id}' failed to play on {kv.Key}: {ex.GetType().Name}: {ex.Message}"); }
+                    continue;
+                }
                 kv.Value.Queue.Enqueue(request);
                 Pump(kv.Value);
             }

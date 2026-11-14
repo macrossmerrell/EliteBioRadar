@@ -542,11 +542,15 @@ namespace EliteBioRadar
                 foreach (var def in AnimationCatalog.All)
                     if (!def.Live && !_visuals.ContainsKey(def.Id)) Log.Write($"Animation '{def.Id}' has no visual in the Elite Bio Radar window");
                 foreach (var v in _visuals.Values)
+                {
+                    bool ambient = ReferenceEquals(v, _w.fuelScoopVisual);   // runs on its own layer, apart from the queue
                     v.Finished += () =>
                     {
+                        if (ambient) { _w.fuelScoopVisualLayer.Visibility = Visibility.Collapsed; return; }
                         _w.firstDiscoveryLayer.Visibility = Visibility.Collapsed;
                         var d = _done; _done = null; d?.Invoke();
                     };
+                }
             }
 
             public AnimationSurfaces Kind => AnimationSurfaces.Main;
@@ -554,6 +558,14 @@ namespace EliteBioRadar
 
             public void Play(AnimationRequest request, Action done)
             {
+                if (request.Def.Ambient)
+                {
+                    if (!_visuals.TryGetValue(request.Def.Id, out var av)) return;
+                    av.BackdropOpacity = request.Def.BackdropOpacity;
+                    _w.fuelScoopVisualLayer.Visibility = Visibility.Visible;
+                    av.Start(request.Subject, request.Detail);
+                    return;
+                }
                 _done = done;
                 Log.Write($"Animation '{request.Def.Id}' playing in the Elite Bio Radar window: {request.Subject}");
                 if (!_visuals.TryGetValue(request.Def.Id, out var v)) { Log.Write($"Animation '{request.Def.Id}' has no visual in the Elite Bio Radar window"); _done = null; done(); return; }

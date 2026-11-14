@@ -119,7 +119,7 @@ namespace EliteBioRadar
             foreach (var def in AnimationCatalog.All)
                 if (!def.Live && !_visuals.ContainsKey(def.Id)) Log.Write($"Animation '{def.Id}' has no visual in the System Notifications window");
             foreach (var v in _visuals.Values)
-                v.Finished += () => { var d = _done; _done = null; d?.Invoke(); };
+                v.Finished += () => { if (ReferenceEquals(v, fuelScoopVisual)) return; var d = _done; _done = null; d?.Invoke(); };   // the fuel scoop runs beside the queue
             AnimationRouter.Register(this);
             Closed += (_, _) => { AnimationRouter.Unregister(this); SaveWindowState(); };
             // On a fresh start the window is reopened while the app is at its busiest, and WPF can miss its first frame, leaving the window plain white
@@ -146,6 +146,11 @@ namespace EliteBioRadar
 
         public void Play(AnimationRequest request, Action done)
         {
+            if (request.Def.Ambient)
+            {
+                if (_visuals.TryGetValue(request.Def.Id, out var av)) { av.BackdropOpacity = request.Def.BackdropOpacity; av.Start(request.Subject, request.Detail); }
+                return;
+            }
             _done = done;
             Log.Write($"Animation '{request.Def.Id}' playing in the System Notifications window: {request.Subject}");
             if (!_visuals.TryGetValue(request.Def.Id, out var v)) { Log.Write($"Animation '{request.Def.Id}' has no visual in the System Notifications window"); _done = null; done(); return; }

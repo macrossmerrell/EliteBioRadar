@@ -295,6 +295,11 @@
                 </Border>
             </Grid>
 
+            <!-- Fuel scoop screen: its own layer under the animation overlay, so other animations play over it while the scoop works. -->
+            <Grid x:Name="fuelScoopVisualLayer" Grid.Column="0" Grid.ColumnSpan="3" Panel.ZIndex="19" IsHitTestVisible="False" Visibility="Collapsed">
+                <local:FuelScoopVisual x:Name="fuelScoopVisual"/>
+            </Grid>
+
             <!-- Animation overlay: plays over whichever tab is showing (First Discovery today). See AnimationRouter.cs / FirstDiscoveryOverlay.cs. -->
             <Grid x:Name="firstDiscoveryLayer" Grid.Column="0" Grid.ColumnSpan="3" Panel.ZIndex="20" IsHitTestVisible="False" Visibility="Collapsed">
                 <local:FirstDiscoveryVisual x:Name="firstDiscoveryVisual"/>
@@ -303,7 +308,6 @@
                 <local:FirstFootfallVisual x:Name="firstFootfallVisual"/>
                 <local:SystemArrivalVisual x:Name="arrivalVisual"/>
                 <local:JumpDepartureVisual x:Name="jumpDepartureVisual"/>
-                <local:FuelScoopVisual x:Name="fuelScoopVisual"/>
                 <local:CombatModeVisual x:Name="combatModeVisual"/>
                 <local:AnalysisModeVisual x:Name="analysisModeVisual"/>
                 <local:LandingGearVisual x:Name="landingGearVisual"/>

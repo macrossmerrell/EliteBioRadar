@@ -17,13 +17,13 @@
         <Viewbox x:Name="liveSceneBox" Stretch="Uniform" Visibility="Collapsed" IsHitTestVisible="False">
             <Canvas x:Name="liveSceneCanvas" Background="#080d0d" ClipToBounds="True"/>
         </Viewbox>
+        <local:FuelScoopVisual x:Name="fuelScoopVisual"/>
         <local:FirstDiscoveryVisual x:Name="firstDiscoveryVisual"/>
         <local:LandedVisual x:Name="landedVisual"/>
         <local:LiftoffVisual x:Name="liftoffVisual"/>
         <local:FirstFootfallVisual x:Name="firstFootfallVisual"/>
         <local:SystemArrivalVisual x:Name="arrivalVisual"/>
         <local:JumpDepartureVisual x:Name="jumpDepartureVisual"/>
-        <local:FuelScoopVisual x:Name="fuelScoopVisual"/>
         <local:CombatModeVisual x:Name="combatModeVisual"/>
         <local:AnalysisModeVisual x:Name="analysisModeVisual"/>
         <local:LandingGearVisual x:Name="landingGearVisual"/>
