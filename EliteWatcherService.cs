@@ -152,6 +152,9 @@ namespace EliteBioRadar
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
         public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
         private DateTime _lastModuleAlert = DateTime.MinValue;
+        public event Action<string>? CatchUpEvent;   // the detail for the while-you-were-away log (see CatchUp.cs); live only, once per app start
+        private System.Threading.Timer? _heartbeat;
+        private string? _catchUpPending;   // built at start while the commander is not in the game: shown when they next load in
         public event Action<string>? StorageEvent;   // the detail for the storage board: SHIPS|station|system|here|elsewhere|value|more|rows or MODS|station|system|count|engineered|value|more|rows; live only, once per listing unless it changed
         private readonly Dictionary<string, (string Key, DateTime At)> _storageLast = new();
         private static string Cost(double v) => v.ToString("0", System.Globalization.CultureInfo.InvariantCulture);
@@ -1020,6 +1023,25 @@ namespace EliteBioRadar
         public void Start()
         {
             Log.Write("EliteWatcherService.Start() called");
+
+            // What happened while the app was closed: tallied from the journal since the last heartbeat, then shown (now if the commander is already playing, else when they load in).
+            var catchSince = CatchUp.ReadLastRun();
+            CatchUp.Touch();
+            _heartbeat = new System.Threading.Timer(_ => CatchUp.Touch(), null, 10000, 10000);
+            if (catchSince.HasValue)
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        var r = CatchUp.Build(_journalDir, catchSince.Value);
+                        if (r == null || _disposed) { Log.Write("CatchUp: nothing to show"); return; }
+                        Log.Write($"CatchUp: {r.Events} events since {catchSince.Value:u}, playing={r.Playing}");
+                        if (!r.Playing) { _catchUpPending = r.Detail; return; }
+                        await Task.Delay(5000).ConfigureAwait(false);
+                        if (!_disposed) CatchUpEvent?.Invoke(r.Detail);
+                    }
+                    catch (Exception ex) { Log.Write($"CatchUp failed: {ex.GetType().Name}: {ex.Message}"); }
+                });
 
             // Immediately load the last active body from cache — works even if the game
             // isn't running yet. The ship hasn't moved since last session.
@@ -4535,6 +4557,7 @@ namespace EliteBioRadar
                 _sessionJumps = 0; _sessionCmdr = obj.Value<string>("Commander") ?? _sessionCmdr;
                 if (!backfill)
                 {
+                    if (_catchUpPending is { } pend) { _catchUpPending = null; CatchUpEvent?.Invoke(pend); }
                     string sMode = (obj.Value<string>("GameMode") ?? "").ToUpperInvariant(), sGroup = Clean(obj.Value<string>("Group") ?? "").ToUpperInvariant();
                     string sShip = Clean(ShipDisplayName(obj)).ToUpperInvariant(), sIdent = Clean(obj.Value<string>("ShipIdent") ?? "").ToUpperInvariant();
                     string sCmdr = Clean(obj.Value<string>("Commander") ?? "");
@@ -6563,6 +6586,7 @@ namespace EliteBioRadar
             _disposed = true;
             // A pending batch timer would otherwise fire into a service that is gone.
             _buyTimer?.Dispose(); _baryTimer?.Dispose(); _afmuTimer?.Dispose();
+            _heartbeat?.Dispose(); CatchUp.Touch();
             _cts.Cancel();
             _journalWatcher?.Dispose();
             _statusReady.Dispose();
