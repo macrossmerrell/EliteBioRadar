@@ -68,6 +68,7 @@ namespace EliteBioRadar
                 ["material-discovered"] = materialDiscoveredVisual,
                 ["screenshot"] = screenshotVisual,
                 ["suit-loadout"] = suitLoadoutVisual,
+                ["barycentre"] = barycentreVisual,
                 ["approach-settlement"] = settlementVisual,
                 ["synthesis"] = synthesisVisual,
                 ["community-goal"] = communityGoalVisual,

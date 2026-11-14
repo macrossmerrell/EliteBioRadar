@@ -65,6 +65,7 @@
         <local:MaterialDiscoveredVisual x:Name="materialDiscoveredVisual"/>
         <local:ScreenshotVisual x:Name="screenshotVisual"/>
         <local:SuitLoadoutVisual x:Name="suitLoadoutVisual"/>
+        <local:BarycentreVisual x:Name="barycentreVisual"/>
         <local:SettlementVisual x:Name="settlementVisual"/>
         <local:SynthesisVisual x:Name="synthesisVisual"/>
         <local:CommunityGoalVisual x:Name="communityGoalVisual"/>

@@ -139,6 +139,25 @@ namespace EliteBioRadar
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
         public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
         private DateTime _lastModuleAlert = DateTime.MinValue;
+        public event Action<string>? BarycentreEvent;   // the detail for the binary pair animation: count|system|body id|eccentricity|semi-major axis m|period s|widest axis m|longest period s; charted together within 1.5 s are one; live only
+        private readonly object _baryGate = new();
+        private readonly HashSet<string> _baryShown = new();
+        private int _baryCount;
+        private string _barySystem = "", _baryId = "";
+        private double _baryEcc, _barySma, _baryPeriod, _baryMaxSma, _baryMaxPeriod;
+        private System.Threading.Timer? _baryTimer;
+        private void FlushBarycentre()
+        {
+            string detail;
+            lock (_baryGate)
+            {
+                if (_baryCount == 0) return;
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                detail = $"{_baryCount}|{Clean(_barySystem)}|{_baryId}|{_baryEcc.ToString("0.####", inv)}|{_barySma.ToString("0", inv)}|{_baryPeriod.ToString("0", inv)}|{_baryMaxSma.ToString("0", inv)}|{_baryMaxPeriod.ToString("0", inv)}";
+                _baryCount = 0; _baryMaxSma = 0; _baryMaxPeriod = 0;
+            }
+            BarycentreEvent?.Invoke(detail);
+        }
         public event Action<string>? SuitLoadoutEvent;   // the detail for the suit loadout / consumable animation: KIND|name|second line|primary weapon|sidearm (KIND SW, NEW, DEL, CELL, KIT, USE); live only
         public event Action<string>? ScreenshotEvent;   // the detail for the screenshot animation: frame|body|second line|surface; live only
         private DateTime _lastScreenshotAlert = DateTime.MinValue;
@@ -4249,6 +4268,27 @@ namespace EliteBioRadar
                     _lastTargetKey = tKey; _lastTargetAt = DateTime.UtcNow;
                     var inv = System.Globalization.CultureInfo.InvariantCulture;
                     TargetEvent?.Invoke($"{(obj.Value<string>("LegalStatus") ?? "").ToUpperInvariant()}|{tShip}|{(tPilot.Length > 0 ? tPilot : "UNKNOWN PILOT")}|{Clean(obj.Value<string>("PilotRank") ?? "")}|{Clean(obj.Value<string>("Faction") ?? "")}|{(obj.Value<double?>("ShieldHealth") ?? 100).ToString("0", inv)}|{(obj.Value<double?>("HullHealth") ?? 100).ToString("0", inv)}|{obj.Value<long?>("Bounty") ?? 0}");
+                }
+            }
+            if (!backfill && evt == "ScanBaryCentre")
+            {
+                string bSys = obj.Value<string>("StarSystem") ?? "";
+                string bId = (obj.Value<int?>("BodyID") ?? -1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                double bSma = obj.Value<double?>("SemiMajorAxis") ?? 0, bPer = Math.Abs(obj.Value<double?>("OrbitalPeriod") ?? 0), bEcc = obj.Value<double?>("Eccentricity") ?? 0;
+                lock (_baryGate)
+                {
+                    // The same pair scanned again (the game repeats the line when a system is re-scanned) is not a new find.
+                    if (_baryShown.Count > 500) _baryShown.Clear();
+                    if (bSys.Length > 0 && _baryShown.Add(bSys + "|" + bId))
+                    {
+                        if (_baryCount == 0 || bSma > _baryMaxSma) _baryMaxSma = bSma;
+                        if (_baryCount == 0 || bPer > _baryMaxPeriod) _baryMaxPeriod = bPer;
+                        if (_baryCount == 0) { _barySystem = bSys; _baryId = bId; _baryEcc = bEcc; _barySma = bSma; _baryPeriod = bPer; }
+                        _baryCount++;
+                        // Wait for the rest of a run (several pairs are written one after another), then play once.
+                        if (_baryTimer == null) _baryTimer = new System.Threading.Timer(_ => FlushBarycentre(), null, 1500, System.Threading.Timeout.Infinite);
+                        else _baryTimer.Change(1500, System.Threading.Timeout.Infinite);
+                    }
                 }
             }
             if (!backfill && evt == "MaterialDiscovered")
