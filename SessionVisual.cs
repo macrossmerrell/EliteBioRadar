@@ -66,13 +66,13 @@ namespace EliteBioRadar
             dc.PushTransform(new TranslateTransform(px, py));
             dc.PushTransform(new ScaleTransform(k, k));
 
-            const double cw = 166, ch = 80;
+            const double cw = 166, ch = 88;
             double s = EaseOut(Phase(t, 0.1, 0.55));
             if (s > 0.01)
             {
                 double sc = 0.4 + 0.6 * s;
                 dc.PushOpacity(s);
-                dc.PushTransform(new TranslateTransform(120, 50));
+                dc.PushTransform(new TranslateTransform(120, 54));
                 dc.PushTransform(new ScaleTransform(sc, sc));
                 dc.DrawRectangle(Paper, null, new Rect(-cw / 2, -ch / 2, cw, ch));
                 dc.DrawRectangle(_pal.Solid, null, new Rect(-cw / 2, -ch / 2, cw, 10));
@@ -102,7 +102,7 @@ namespace EliteBioRadar
             if (sp > 0)
             {
                 double sz = 9, sca = 1 + (1 - EaseOut(sp)) * 0.8, wBox = _stamp.Length * (sz * 0.62) + 10;
-                dc.PushTransform(new TranslateTransform(150, 74)); dc.PushTransform(new RotateTransform(-11.5)); dc.PushTransform(new ScaleTransform(sca, sca));
+                dc.PushTransform(new TranslateTransform(120, 89)); dc.PushTransform(new RotateTransform(-6)); dc.PushTransform(new ScaleTransform(sca, sca));
                 dc.PushOpacity(EaseOut(sp));
                 dc.DrawRectangle(StampBack, _pal.StampPen, new Rect(-wBox / 2, -sz * 0.8, wBox, sz * 1.6));
                 DrawSpaced(dc, _stamp, MonoFace, sz, _pal.Solid, 0, -sz * 0.6, 0.05, 1);

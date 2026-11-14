@@ -135,6 +135,19 @@ namespace EliteBioRadar
         private DateTime _carrierDeparture = DateTime.MinValue;
         public event Action<string>? TechBrokerEvent;   // the detail for the tech broker animation ("HUMAN|GUARDIAN", materials spent, item names); the journal's TechnologyBroker; live only
         private readonly Dictionary<string, (string progress, int rank)> _engineerState = new();
+        // The game's own name for the ship or suit a LoadGame names. Some builds leave Ship_Localised as an unresolved string key ($EXPLORATIONSUIT_CLASS1_NAME;): turn that into the suit's name.
+        private static string ShipDisplayName(Newtonsoft.Json.Linq.JObject obj)
+        {
+            string loc = obj.Value<string>("Ship_Localised") ?? "", raw = obj.Value<string>("Ship") ?? "";
+            if (loc.Length > 0 && !loc.StartsWith("$")) return loc;
+            string key = (loc.Length > 0 ? loc : raw).Trim('$', ';').ToLowerInvariant();
+            if (key.EndsWith("_name")) key = key[..^5];
+            if (key.StartsWith("explorationsuit")) return "Artemis Suit";
+            if (key.StartsWith("utilitysuit")) return "Maverick Suit";
+            if (key.StartsWith("tacticalsuit")) return "Dominator Suit";
+            if (key.StartsWith("flightsuit")) return "Flight Suit";
+            return PrettyJournalName(raw.Length > 0 ? raw : key);
+        }
         private static string PrettyJournalName(string s) =>
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
         public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
@@ -1259,6 +1272,7 @@ namespace EliteBioRadar
         }
 
         // Raises a flag's event when it changed since the last read (and may play), logging which way it went; the first read only sets the baseline.
+        private bool _cooldownAtBody;   // the last supercruise exit was at a planet or moon: the FSD cooldown animations stay quiet until the next jump or supercruise
         private static void FlagEdge(ref bool? was, bool now, bool mayPlay, string logOn, string logOff, Action<bool>? fire)
         {
             if (mayPlay && was != null && was != now) { Log.Write(now ? logOn : logOff); fire?.Invoke(now); }
@@ -1396,7 +1410,7 @@ namespace EliteBioRadar
                 FlagEdge(ref _wasSilentRunning, status.SilentRunning, !quiet, "Silent running on", "Silent running off", SilentRunningChanged);
                 FlagEdge(ref _wasSco, status.ScoActive, !quiet && status.Supercruise, "Supercruise overdrive engaged", "Supercruise overdrive disengaged", SupercruiseOverdriveChanged);
                 // The cooldown starts the moment a jump ends, inside the quiet window that jump opens, so the start is not held back by it; only the "ready" end respects it.
-                FlagEdge(ref _wasCooldown, status.FsdCooldown, !status.InSRV && !status.InFighter && !status.OnFoot && (status.FsdCooldown || !quiet), "FSD cooling down", "FSD ready", FsdCooldownChanged);
+                FlagEdge(ref _wasCooldown, status.FsdCooldown, !status.InSRV && !status.InFighter && !status.OnFoot && !_cooldownAtBody && (status.FsdCooldown || !quiet), "FSD cooling down", "FSD ready", FsdCooldownChanged);
                 FlagEdge(ref _wasMassLocked,status.MassLocked, !quiet && !status.InSRV && !status.InFighter && !status.OnFoot && !status.Docked && !status.Landed, "Mass locked", "Mass lock cleared", RaiseMassLock);
                 FlagEdge(ref _wasAssist,status.SupercruiseAssist, !quiet && status.Supercruise, "Supercruise assist engaged", "Supercruise assist disengaged", SupercruiseAssistChanged);
 
@@ -3910,7 +3924,7 @@ namespace EliteBioRadar
                 var sid = obj.Value<long?>("ShipID");
                 if (sid.HasValue) CurrentShipId = sid;
                 // The ship's name for the destroyed / restored plate: the game's own name for it (LoadGame), else the commander's name for it, else the internal id.
-                string label = evt == "LoadGame" ? (obj.Value<string>("Ship_Localised") ?? obj.Value<string>("Ship") ?? "")
+                string label = evt == "LoadGame" ? ShipDisplayName(obj)
                                                  : (obj.Value<string>("ShipName") is { Length: > 0 } custom ? custom : obj.Value<string>("Ship") ?? "");
                 if (label.Length > 0) _shipLabel = label;
                 if (evt == "Loadout" && obj.Value<int?>("CargoCapacity") is int capTons) _cargoCap = capTons;
@@ -3962,6 +3976,9 @@ namespace EliteBioRadar
                 StartHudQuiet(evt);
 
             if (!backfill && evt == "SupercruiseEntry") { Log.Write("Supercruise entered"); SupercruiseEntered?.Invoke(); }
+            if (!backfill && evt is "SupercruiseEntry" or "StartJump" or "FSDJump" or "LoadGame") _cooldownAtBody = false;
+            // Dropping out of supercruise at a planet or moon: the FSD cooling down and ready again are not worth an animation there.
+            if (!backfill && evt == "SupercruiseExit") _cooldownAtBody = string.Equals(obj.Value<string>("BodyType"), "Planet", StringComparison.OrdinalIgnoreCase);
             if (!backfill && evt == "SupercruiseExit") { Log.Write("Supercruise exited"); SupercruiseExited?.Invoke(); }
             if (!backfill && evt == "JetConeBoost")
             {
@@ -4367,7 +4384,7 @@ namespace EliteBioRadar
             // A ship scan builds up in stages (1 pilot, 2 health, 3 legal status and faction): play once, when it is complete, and not again for the same target within 20 seconds.
             if (!backfill && evt == "ShipTargeted" && obj.Value<bool?>("TargetLocked") == true && obj.Value<int?>("ScanStage") == 3)
             {
-                string tShip = Clean(obj.Value<string>("Ship_Localised") ?? PrettyJournalName(obj.Value<string>("Ship") ?? "")).ToUpperInvariant();
+                string tShip = Clean(ShipDisplayName(obj)).ToUpperInvariant();
                 string tPilot = Clean(obj.Value<string>("PilotName_Localised") ?? "").Trim();
                 if (tPilot.StartsWith("unmanned CMDR ", StringComparison.OrdinalIgnoreCase)) tPilot = "CMDR " + tPilot.Substring("unmanned CMDR ".Length);
                 tPilot = tPilot.ToUpperInvariant();
@@ -4506,11 +4523,10 @@ namespace EliteBioRadar
                 if (!backfill)
                 {
                     string sMode = (obj.Value<string>("GameMode") ?? "").ToUpperInvariant(), sGroup = Clean(obj.Value<string>("Group") ?? "").ToUpperInvariant();
-                    string sShip = Clean(obj.Value<string>("Ship_Localised") ?? PrettyJournalName(obj.Value<string>("Ship") ?? "")).ToUpperInvariant(), sIdent = Clean(obj.Value<string>("ShipIdent") ?? "").ToUpperInvariant();
-                    string sModeText = sMode == "GROUP" ? (sGroup.Length > 0 ? sGroup : "PRIVATE GROUP") : sMode;
+                    string sShip = Clean(ShipDisplayName(obj)).ToUpperInvariant(), sIdent = Clean(obj.Value<string>("ShipIdent") ?? "").ToUpperInvariant();
                     string sCmdr = Clean(obj.Value<string>("Commander") ?? "");
                     if (sCmdr.Length > 0)
-                        SessionEvent?.Invoke($"START|CMDR {sCmdr}|{(sShip + " " + sIdent).Trim()}  {sModeText}|{sMode}|{obj.Value<long?>("Credits") ?? 0}|{_sessionRanks[0]}|{_sessionRanks[1]}|{_sessionRanks[2]}|{_sessionRanks[3]}|{sGroup}");
+                        SessionEvent?.Invoke($"START|CMDR {sCmdr}|{(sShip + " " + sIdent).Trim()}{(sMode == "GROUP" && sGroup.Length > 0 ? "  " + sGroup : "")}|{sMode}|{obj.Value<long?>("Credits") ?? 0}|{_sessionRanks[0]}|{_sessionRanks[1]}|{_sessionRanks[2]}|{_sessionRanks[3]}|{sGroup}");
                 }
             }
             if (!backfill && evt == "Shutdown" && _sessionStart > DateTime.MinValue)
