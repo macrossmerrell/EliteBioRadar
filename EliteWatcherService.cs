@@ -1273,6 +1273,19 @@ namespace EliteBioRadar
 
         // Raises a flag's event when it changed since the last read (and may play), logging which way it went; the first read only sets the baseline.
         private bool _cooldownAtBody;   // the last supercruise exit was at a planet or moon: the FSD cooldown animations stay quiet until the next jump or supercruise
+        // Leaving the SRV, the game clears drive assist, the handbrake and the turret view in Status.json a moment BEFORE it writes the Disembark / DockSRV journal line that opens the quiet window,
+        // so their "off" edge would play as the commander steps out. An off edge therefore waits 0.8 s; by then the journal line has arrived and the edge is swallowed.
+        private readonly Dictionary<string, DateTime> _srvOffSince = new();
+        private void SrvFlagEdge(string key, ref bool? was, bool now, bool mayPlay, string logOn, string logOff, Action<bool>? fire)
+        {
+            if (was != null && was != now && !now)
+            {
+                if (!_srvOffSince.TryGetValue(key, out var since)) { _srvOffSince[key] = DateTime.UtcNow; return; }
+                if ((DateTime.UtcNow - since).TotalSeconds < 0.8) return;
+            }
+            _srvOffSince.Remove(key);
+            FlagEdge(ref was, now, mayPlay, logOn, logOff, fire);
+        }
         private static void FlagEdge(ref bool? was, bool now, bool mayPlay, string logOn, string logOff, Action<bool>? fire)
         {
             if (mayPlay && was != null && was != now) { Log.Write(now ? logOn : logOff); fire?.Invoke(now); }
@@ -1404,9 +1417,9 @@ namespace EliteBioRadar
                 // Flag edges: the first read only sets the baseline, which follows the flag everywhere. The SRV flags only play while in the SRV.
                 // Shields (bit 3), SRV drive assist (15), SRV handbrake (12), SRV turret (13, set = in the turret view), silent running (10).
                 FlagEdge(ref _wasShields, status.ShieldsUp, !quiet, "Shields up", "Shields down", ShieldsChanged);
-                FlagEdge(ref _wasDriveAssist, status.SrvDriveAssist, !quiet && status.InSRV, "Drive assist on", "Drive assist off", DriveAssistChanged);
-                FlagEdge(ref _wasHandbrake, status.SrvHandbrake, !quiet && status.InSRV, "Handbrake on", "Handbrake off", HandbrakeChanged);
-                FlagEdge(ref _wasTurretDeployed, status.SrvTurretView,!quiet && status.InSRV, "Turret deployed", "Turret retracted", TurretChanged);
+                SrvFlagEdge("assist", ref _wasDriveAssist, status.SrvDriveAssist, !quiet && status.InSRV, "Drive assist on", "Drive assist off", DriveAssistChanged);
+                SrvFlagEdge("brake", ref _wasHandbrake, status.SrvHandbrake, !quiet && status.InSRV, "Handbrake on", "Handbrake off", HandbrakeChanged);
+                SrvFlagEdge("turret", ref _wasTurretDeployed, status.SrvTurretView,!quiet && status.InSRV, "Turret deployed", "Turret retracted", TurretChanged);
                 FlagEdge(ref _wasSilentRunning, status.SilentRunning, !quiet, "Silent running on", "Silent running off", SilentRunningChanged);
                 FlagEdge(ref _wasSco, status.ScoActive, !quiet && status.Supercruise, "Supercruise overdrive engaged", "Supercruise overdrive disengaged", SupercruiseOverdriveChanged);
                 // The cooldown starts the moment a jump ends, inside the quiet window that jump opens, so the start is not held back by it; only the "ready" end respects it.
@@ -5612,8 +5625,13 @@ namespace EliteBioRadar
                     // recognised as done when older journals are processed for dot reconstruction.
                     if (useLat == 0 && useLon == 0 && scanNum != 4)
                     {
-                        Log.Write($"ScanOrganic: no position for {genus}, skipping");
-                        break;
+                        // A replay has no spot for a scan the app did not see live (ScanOrganic carries none): it still counts toward the genus, as a record with no position and no radar dot.
+                        if (!backfill || string.IsNullOrEmpty(CurrentBody))
+                        {
+                            Log.Write($"ScanOrganic: no position for {genus}, skipping");
+                            break;
+                        }
+                        Log.Write($"ScanOrganic: no position for {genus} scan={scanNum}: counted without a dot");
                     }
 
                     // For live scans, also require the status flag confirms we have lat/long
@@ -5778,7 +5796,7 @@ namespace EliteBioRadar
                         {
                             // Third sample location — add orange dot immediately
                             // Analyse event (fired seconds later) will grey everything out
-                            if (useLat != 0 || useLon != 0)
+                            if (useLat != 0 || useLon != 0 || backfill)   // a replay with no spot still counts the scan (no dot is drawn for it)
                             {
                                 var org = new ScannedOrganism
                                 {

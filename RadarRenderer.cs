@@ -172,6 +172,7 @@ namespace EliteBioRadar
                                   double cx, double cy, double r,
                                   double pixelsPerMetre, string? activeGenus)
         {
+            if (!org.HasPosition) return;   // counted from the journal with no known spot: no dot
             double dist    = EliteWatcherService.DistanceMeters(
                 status.Latitude, status.Longitude, org.Latitude, org.Longitude, status.PlanetRadius);
             double bearing = EliteWatcherService.BearingDeg(

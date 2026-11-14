@@ -533,7 +533,7 @@ namespace EliteBioRadar
                 lock (organisms)
                 {
                     // Only scale to active (incomplete) dots — ignore completed grey ones
-                    var activeDots = organisms.Where(o => !o.IsComplete).ToList();
+                    var activeDots = organisms.Where(o => !o.IsComplete && o.HasPosition).ToList();
                     if (activeDots.Count > 0)
                     {
                         var furthest = activeDots
@@ -580,7 +580,7 @@ namespace EliteBioRadar
                 {
                     foreach (var o in organisms)
                     {
-                        if (o.IsComplete) continue;
+                        if (o.IsComplete || !o.HasPosition) continue;
                         var d = EliteWatcherService.DistanceMeters(
                             status.Latitude, status.Longitude,
                             o.Latitude, o.Longitude, status.PlanetRadius);
@@ -3679,7 +3679,7 @@ namespace EliteBioRadar
             {
                 double minD = double.MaxValue;
                 lock (organisms)
-                    foreach (var o in organisms.Where(o => !o.IsComplete))
+                    foreach (var o in organisms.Where(o => !o.IsComplete && o.HasPosition))
                     {
                         var d = EliteWatcherService.DistanceMeters(
                             status.Latitude, status.Longitude,
