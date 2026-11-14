@@ -39,7 +39,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef SupercruiseExit =
             new("supercruise-exit", "Exiting supercruise", "Jump", AnimationSurfaces.Both, 0.85, "", "PREVIEW");
         public static readonly AnimationDef Supercharge =
-            new("supercharge", "FSD supercharge (neutron star / white dwarf)", "Jump", AnimationSurfaces.Both, 0.85, "", "NEUTRON|4", PreviewCycle: new[] { "NEUTRON|4", "WHITE DWARF|1.5" });
+            new("supercharge", "FSD supercharge (neutron star / white dwarf)", "Jump", AnimationSurfaces.Both, 0.85, "", "NEUTRON|4|62", PreviewCycle: new[] { "NEUTRON|4|62", "WHITE DWARF|1.5|62", "NEUTRON|4" });
         public static readonly AnimationDef Route =
             new("route", "Route plotted / cancelled / complete", "Jump", AnimationSurfaces.Both, 0.85, "", "PLOTTED|12|184|KMFKMAFK", PreviewCycle: new[] { "PLOTTED|12|184|KMFKMAFK", "CANCELLED|12|184|KMFKMAFK", "COMPLETE|12|184|KMFKMAFK" });
         public static readonly AnimationDef FssComplete =

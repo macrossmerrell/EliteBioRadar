@@ -260,7 +260,13 @@ namespace EliteBioRadar
             svc.SupercruiseExited += () => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.SupercruiseExit, "", "")));
             svc.Supercharged += (type, boost) => Dispatcher.InvokeAsync(() =>
-                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Supercharge, "", type + "|" + boost.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))));
+            {
+                // The ship's current jump range (when the app knows it) lets the plate show what the boosted range becomes.
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                var dest = svc.CurrentDestination;
+                double range = dest == null ? 0 : (dest.CurrentJumpRange > 0 ? dest.CurrentJumpRange : dest.MaxJumpRange);
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Supercharge, "", type + "|" + boost.ToString("0.##", inv) + (range > 0 ? "|" + range.ToString("0.0", inv) : "")));
+            });
             svc.RouteChanged += (stage, jumps, ly, classes) => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Route, "", $"{stage}|{jumps}|{ly.ToString("0", System.Globalization.CultureInfo.InvariantCulture)}|{classes}")));
             svc.FssCompleted += (system, count) => Dispatcher.InvokeAsync(() =>
