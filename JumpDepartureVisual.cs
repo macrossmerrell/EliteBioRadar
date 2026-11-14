@@ -277,24 +277,17 @@ namespace EliteBioRadar
                 if (!jumping && locked && t < ChargeStartsAt + 0.8 && (t < ChargeStartsAt || (int)(t * 4) % 2 == 0))
                     DrawText(dc, "TARGET LOCKED", MonoBold, 11, GreenBrush, cx, cy - 36, env);
 
-                // Once the target is centred: its name and class on a dark plate under the status text, and the destination card on the right.
+                // Once the target is centred: its name on a dark plate under the status text, and the destination card on the right.
                 if (!jumping && _subject.Length > 0)
                 {
                     double pa = Smooth(1.6, LockSeconds, t) * env;
                     if (pa > 0.01)
                     {
-                        string cls = ClassText;
-                        double nameW = TextWidth(_subject, 12), classW = cls.Length > 0 ? TextWidth(cls, 12) + (_scoop ? 12 : 0) : 0, plateW = Math.Max(Math.Max(nameW, classW) + 16, 80), plateH = cls.Length > 0 ? 29 : 17, py = cy + 54;
+                        double nameW = TextWidth(_subject, 12), plateW = Math.Max(nameW + 16, 80), plateH = 17, py = cy + 54;
                         dc.PushOpacity(pa);
                         dc.DrawRoundedRectangle(PlateBrush, null, new Rect(cx - plateW / 2, py, plateW, plateH), 2, 2);
                         dc.Pop();
                         DrawText(dc, _subject, MonoBold, 12, WhiteBrush, cx, py + 1, pa);
-                        if (cls.Length > 0)
-                        {
-                            double left = cx - classW / 2;
-                            DrawText(dc, cls, MonoBold, 12, OrangeBrush, left, py + 15, pa, TextAlignment.Left);
-                            if (_scoop) DrawDrop(dc, left + TextWidth(cls, 12) + 4, py + 17, 11, CyanBrush, pa);
-                        }
                     }
 
                     double ca = Smooth(LockSeconds, LockSeconds + 0.7, t) * env;

@@ -27,7 +27,9 @@ namespace EliteBioRadar
         private string _name = "", _sub = "", _title = "", _stamp = "";
         private readonly int[] _ranks = { -1, -1, -1, -1 };
 
-        protected override double Duration => FadeOutAt + 0.6;
+        // Everything is drawn on a stretched clock so the whole card plays at half speed (twice as long to read).
+        private const double Slow = 2.0;
+        protected override double Duration => (FadeOutAt + 0.6) * Slow;
 
         protected override void OnStart(string subject, string detail)
         {
@@ -53,7 +55,8 @@ namespace EliteBioRadar
 
         protected override void Render(DrawingContext dc, double w, double h, double t)
         {
-            var (fadeOut, env, u, W, H) = LayoutScene(w, h, t, FadeOutAt);
+            var (fadeOut, env, u, W, H) = LayoutScene(w, h, t, FadeOutAt * Slow);
+            t /= Slow;
             if (env <= 0) return;
             double a = Clamp01(t / 0.3) * fadeOut, k = Math.Min(1.25, (W - 40) / SceneW), px = (W - SceneW * k) / 2, py = (H - SceneH * k) / 2;
 

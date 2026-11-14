@@ -10,7 +10,7 @@ namespace EliteBioRadar
     // Detail = "count|system|body id|eccentricity|semi-major axis (m)|period (s)|widest axis (m)|longest period (s)".
     public sealed class BarycentreVisual : AnimationVisual
     {
-        private const double SceneW = 240, SceneH = 150, FadeOutAt = 4.8, CX = 120, CY = 50, A = 38, Q1 = 0.45, Q2 = 0.55;
+        private const double SceneW = 240, SceneH = 150, FadeOutAt = 7.6, CX = 120, CY = 50, A = 38, Q1 = 0.45, Q2 = 0.55;
         private static readonly Color Cyan = Color.FromRgb(127, 224, 255), Orange = Color.FromRgb(255, 176, 96), Blue = Color.FromRgb(140, 200, 255);
         private static readonly Brush Solid = Frozen(Cyan), NameBrush = Frozen(Color.FromRgb(0xe8, 0xf2, 0xff)), Gold = Frozen(Color.FromRgb(255, 216, 144)), PlateBrush = Frozen(Color.FromArgb(209, 5, 10, 20)), WhiteB = Frozen(Colors.White);
         private static readonly Brush OrangeGlow = RadialGlow(Orange, 255), BlueGlow = RadialGlow(Blue, 255);
