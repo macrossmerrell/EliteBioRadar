@@ -336,6 +336,8 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.CommunityGoal, "", detail)));
             svc.SettlementEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Settlement, "", detail)));
+            svc.StorageEvent += detail => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Storage, "", detail)));
             svc.MarketBoughtEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.MarketBuy, "", detail)));
             svc.BarycentreEvent += detail => Dispatcher.InvokeAsync(() =>
@@ -491,6 +493,7 @@ namespace EliteBioRadar
                     ["suit-loadout"] = _w.suitLoadoutVisual,
                     ["barycentre"] = _w.barycentreVisual,
                     ["market-buy"] = _w.marketBuyVisual,
+                    ["storage"] = _w.storageVisual,
                     ["approach-settlement"] = _w.settlementVisual,
                     ["synthesis"] = _w.synthesisVisual,
                     ["community-goal"] = _w.communityGoalVisual,

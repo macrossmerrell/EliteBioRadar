@@ -67,6 +67,7 @@
         <local:SuitLoadoutVisual x:Name="suitLoadoutVisual"/>
         <local:BarycentreVisual x:Name="barycentreVisual"/>
         <local:MarketBuyVisual x:Name="marketBuyVisual"/>
+        <local:StorageVisual x:Name="storageVisual"/>
         <local:SettlementVisual x:Name="settlementVisual"/>
         <local:SynthesisVisual x:Name="synthesisVisual"/>
         <local:CommunityGoalVisual x:Name="communityGoalVisual"/>

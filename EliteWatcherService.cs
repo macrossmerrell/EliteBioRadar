@@ -139,6 +139,19 @@ namespace EliteBioRadar
             System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace((s ?? "").Replace('_', ' '), "(?<=[a-z0-9])(?=[A-Z])", " "), "(?<=[A-Z])(?=[A-Z][a-z])", " ").Trim();
         public event Action<string>? ModuleEvent;   // the detail for the module animation (ModuleBuy / Sell / Store / Retrieve / MassModuleStore): KIND|item|line; live only
         private DateTime _lastModuleAlert = DateTime.MinValue;
+        public event Action<string>? StorageEvent;   // the detail for the storage board: SHIPS|station|system|here|elsewhere|value|more|rows or MODS|station|system|count|engineered|value|more|rows; live only, once per listing unless it changed
+        private readonly Dictionary<string, (string Key, DateTime At)> _storageLast = new();
+        private static string Cost(double v) => v.ToString("0", System.Globalization.CultureInfo.InvariantCulture);
+        private void RaiseStorage(string kind, string station, string system, string key, string detail)
+        {
+            // The game rewrites the listing every time the screen opens: play once, and again only when it changed or ten minutes have passed.
+            lock (_storageLast)
+            {
+                if (_storageLast.TryGetValue(kind, out var last) && last.Key == key && (DateTime.UtcNow - last.At).TotalMinutes < 10) return;
+                _storageLast[kind] = (key, DateTime.UtcNow);
+            }
+            StorageEvent?.Invoke(detail);
+        }
         public event Action<string>? MarketBoughtEvent;   // the detail for the cargo purchase receipt: item|tonnes|price per tonne|total|galactic average per tonne or 0; purchases of one commodity within 1.5 s are one; live only
         private readonly object _buyGate = new();
         private string _buyName = "", _buyType = "";
@@ -4064,6 +4077,34 @@ namespace EliteBioRadar
                 foreach (var e in soldBio) { bv += e.Value<long?>("Value") ?? 0; bb += e.Value<long?>("Bonus") ?? 0; }
                 var first = soldBio[0];
                 OrganicSoldEvent?.Invoke($"{soldBio.Count}|{Clean(first.Value<string>("Species_Localised") ?? first.Value<string>("Genus_Localised") ?? "")}|{bv}|{bb}");
+            }
+            if (!backfill && evt == "StoredShips")
+            {
+                string stStation = Clean(obj.Value<string>("StationName") ?? ""), stSystem = Clean(obj.Value<string>("StarSystem") ?? "");
+                var here = (obj["ShipsHere"] as JArray)?.ToList() ?? new List<JToken>();
+                var remote = (obj["ShipsRemote"] as JArray)?.OrderBy(s => s.Value<double?>("TransferPrice") ?? 0).ToList() ?? new List<JToken>();
+                double fleet = here.Concat(remote).Sum(s => s.Value<double?>("Value") ?? 0);
+                string ShipLabel(JToken s) => Clean(s.Value<string>("ShipType_Localised") ?? PrettyJournalName(s.Value<string>("ShipType") ?? ""));
+                var rows = new List<string>();
+                foreach (var s in here.Take(7)) rows.Add($"{ShipLabel(s)}~HERE~0~1~0");
+                foreach (var s in remote) { if (rows.Count >= 7) break; rows.Add($"{ShipLabel(s)}~{Clean(s.Value<string>("StarSystem") ?? "")}~{Cost(s.Value<double?>("TransferPrice") ?? 0)}~0~0"); }
+                int more = Math.Max(0, here.Count + remote.Count - rows.Count);
+                if (here.Count + remote.Count > 0)
+                    RaiseStorage("SHIPS", stStation, stSystem, $"{stStation}|{here.Count}|{remote.Count}|{Cost(fleet)}",
+                        $"SHIPS|{stStation}|{stSystem}|{here.Count}|{remote.Count}|{Cost(fleet)}|{more}|{string.Join(";", rows)}");
+            }
+            if (!backfill && evt == "StoredModules")
+            {
+                string mdStation = Clean(obj.Value<string>("StationName") ?? ""), mdSystem = Clean(obj.Value<string>("StarSystem") ?? "");
+                var items = (obj["Items"] as JArray)?.ToList() ?? new List<JToken>();
+                int engineered = items.Count(i => i["EngineerModifications"] != null);
+                double worth = items.Sum(i => i.Value<double?>("BuyPrice") ?? 0);
+                // Engineered modules first, then the dearest.
+                var shown = items.OrderByDescending(i => i["EngineerModifications"] != null).ThenByDescending(i => i.Value<double?>("BuyPrice") ?? 0).Take(7).ToList();
+                var rows = shown.Select(i => $"{Clean(i.Value<string>("Name_Localised") ?? PrettyJournalName((i.Value<string>("Name") ?? "").Trim('$', ';').Replace("_name", "")))}~{Clean(i.Value<string>("StarSystem") ?? "")}~{Cost(i.Value<double?>("TransferCost") ?? 0)}~0~{(i["EngineerModifications"] != null ? 1 : 0)}");
+                if (items.Count > 0)
+                    RaiseStorage("MODS", mdStation, mdSystem, $"{mdStation}|{items.Count}|{engineered}|{Cost(worth)}",
+                        $"MODS|{mdStation}|{mdSystem}|{items.Count}|{engineered}|{Cost(worth)}|{Math.Max(0, items.Count - shown.Count)}|{string.Join(";", rows)}");
             }
             if (!backfill && evt == "MarketBuy")
             {
