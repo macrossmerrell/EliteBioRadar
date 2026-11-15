@@ -1323,6 +1323,7 @@ namespace EliteBioRadar
 
         // Raises a flag's event when it changed since the last read (and may play), logging which way it went; the first read only sets the baseline.
         private bool _cooldownAtBody;   // the last supercruise exit was at a planet or moon: the FSD cooldown animations stay quiet until the next jump or supercruise
+        private bool _cooldownAfterJump;   // a hyperspace jump was started and no supercruise entry or exit since: the FSD "cooling" animation stays quiet (the "ready" one still plays)
         // Leaving the SRV, the game clears drive assist, the handbrake and the turret view in Status.json a moment BEFORE it writes the Disembark / DockSRV journal line that opens the quiet window,
         // so their "off" edge would play as the commander steps out. An off edge therefore waits 0.8 s; by then the journal line has arrived and the edge is swallowed.
         private readonly Dictionary<string, DateTime> _srvOffSince = new();
@@ -1473,7 +1474,7 @@ namespace EliteBioRadar
                 FlagEdge(ref _wasSilentRunning, status.SilentRunning, !quiet, "Silent running on", "Silent running off", SilentRunningChanged);
                 FlagEdge(ref _wasSco, status.ScoActive, !quiet && status.Supercruise, "Supercruise overdrive engaged", "Supercruise overdrive disengaged", SupercruiseOverdriveChanged);
                 // The cooldown starts the moment a jump ends, inside the quiet window that jump opens, so the start is not held back by it; only the "ready" end respects it.
-                FlagEdge(ref _wasCooldown, status.FsdCooldown, !status.InSRV && !status.InFighter && !status.OnFoot && !_cooldownAtBody && (status.FsdCooldown || !quiet), "FSD cooling down", "FSD ready", FsdCooldownChanged);
+                FlagEdge(ref _wasCooldown, status.FsdCooldown, !status.InSRV && !status.InFighter && !status.OnFoot && !_cooldownAtBody && !(status.FsdCooldown && _cooldownAfterJump) && (status.FsdCooldown || !quiet), "FSD cooling down", "FSD ready", FsdCooldownChanged);
                 FlagEdge(ref _wasMassLocked,status.MassLocked, !quiet && !status.InSRV && !status.InFighter && !status.OnFoot && !status.Docked && !status.Landed, "Mass locked", "Mass lock cleared", RaiseMassLock);
                 FlagEdge(ref _wasAssist,status.SupercruiseAssist, !quiet && status.Supercruise, "Supercruise assist engaged", "Supercruise assist disengaged", SupercruiseAssistChanged);
 
@@ -4041,6 +4042,8 @@ namespace EliteBioRadar
 
             if (!backfill && evt == "SupercruiseEntry") { Log.Write("Supercruise entered"); SupercruiseEntered?.Invoke(); }
             if (!backfill && evt is "SupercruiseEntry" or "StartJump" or "FSDJump" or "LoadGame") _cooldownAtBody = false;
+            if (!backfill && evt == "StartJump") _cooldownAfterJump = string.Equals(obj.Value<string>("JumpType"), "Hyperspace", StringComparison.OrdinalIgnoreCase);
+            if (!backfill && evt is "SupercruiseEntry" or "SupercruiseExit" or "LoadGame") _cooldownAfterJump = false;
             // Dropping out of supercruise at a planet or moon: the FSD cooling down and ready again are not worth an animation there.
             if (!backfill && evt == "SupercruiseExit") _cooldownAtBody = string.Equals(obj.Value<string>("BodyType"), "Planet", StringComparison.OrdinalIgnoreCase);
             if (!backfill && evt == "SupercruiseExit") { Log.Write("Supercruise exited"); SupercruiseExited?.Invoke(); }

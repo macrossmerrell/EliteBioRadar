@@ -25,8 +25,11 @@ namespace EliteBioRadar
         private List<BodyScanDetail> _detailBodies = new();
 
         // Makes a card, moon row or minor row open the panel for its body.
+        private readonly Dictionary<string, FrameworkElement> _detailCards = new(StringComparer.OrdinalIgnoreCase);
+
         private T MakeDetailClickable<T>(T element, BodyScanDetail b) where T : FrameworkElement
         {
+            _detailCards[b.BodyName] = element;
             element.Cursor = Cursors.Hand;
             element.MouseLeftButtonUp += (_, e) =>
             {
@@ -53,6 +56,7 @@ namespace EliteBioRadar
             BuildDetailContent(b);
             if (detailSide.Width < 1 || double.IsNaN(detailSide.Width))
             {
+                KeepCardVisible(b.BodyName);
                 // On a narrow window, grow it by the panel's width so the card list keeps its room; shrunk back on close.
                 _detailExtendedWindow = false;
                 if (WindowState == WindowState.Normal && ActualWidth < 980)
@@ -62,6 +66,16 @@ namespace EliteBioRadar
                 }
                 detailSide.BeginAnimation(WidthProperty, new DoubleAnimation(0, DetailPanelWidth, TimeSpan.FromMilliseconds(220)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
             }
+        }
+
+        // Opening the panel narrows the card list and reflows it, which can push the clicked card out of view: bring it back once the layout has settled (and again after the slide).
+        private void KeepCardVisible(string bodyName)
+        {
+            void Go() { if (_detailCards.TryGetValue(bodyName, out var el) && el.IsLoaded && string.Equals(_detailBodyName, bodyName, StringComparison.OrdinalIgnoreCase)) el.BringIntoView(); }
+            Dispatcher.BeginInvoke(new Action(Go), System.Windows.Threading.DispatcherPriority.Loaded);
+            var t = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+            t.Tick += (_, __) => { t.Stop(); Go(); };
+            t.Start();
         }
 
         // The open body panel follows the in-game target: when a new planet or moon is targeted, the panel switches to it. Only while the panel is open (it is
