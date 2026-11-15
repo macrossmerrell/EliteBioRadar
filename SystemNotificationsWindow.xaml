@@ -68,6 +68,7 @@
         <local:BarycentreVisual x:Name="barycentreVisual"/>
         <local:MarketBuyVisual x:Name="marketBuyVisual"/>
         <local:StorageVisual x:Name="storageVisual"/>
+        <local:PlanetTargetVisual x:Name="planetTargetVisual"/>
         <local:CatchUpVisual x:Name="catchUpVisual"/>
         <local:SettlementVisual x:Name="settlementVisual"/>
         <local:SynthesisVisual x:Name="synthesisVisual"/>

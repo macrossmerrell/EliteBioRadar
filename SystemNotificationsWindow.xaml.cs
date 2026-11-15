@@ -71,6 +71,7 @@ namespace EliteBioRadar
                 ["barycentre"] = barycentreVisual,
                 ["market-buy"] = marketBuyVisual,
                 ["storage"] = storageVisual,
+                ["planet-target"] = planetTargetVisual,
                 ["catch-up"] = catchUpVisual,
                 ["approach-settlement"] = settlementVisual,
                 ["synthesis"] = synthesisVisual,

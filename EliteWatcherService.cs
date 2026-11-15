@@ -170,6 +170,34 @@ namespace EliteBioRadar
             }
             StorageEvent?.Invoke(detail);
         }
+        public event Action<string>? PlanetTargetEvent;   // the detail for the planet scan readout: name|class|gravity g|temperature K|pressure atm|atmosphere|mapped|bio|geo|landable|first discovery; a scanned planet held as the target for 1.5 s, once per body per 10 minutes; live only
+        private string _planetTargetRaisedFor = "";
+        private DateTime _planetTargetRaisedAt = DateTime.MinValue;
+        private void SchedulePlanetTarget(string body, int bio, int geo)
+        {
+            System.Threading.Tasks.Task.Run(async () =>
+            {
+                await System.Threading.Tasks.Task.Delay(1500);
+                try
+                {
+                    if (!string.Equals(TargetedBody, body, StringComparison.OrdinalIgnoreCase)) return;   // moved on to another target
+                    if (_lastLoadGameAt != default && (DateTime.UtcNow - _lastLoadGameAt).TotalSeconds < 120) return;   // the game re-announcing the target after loading
+                    if (string.Equals(CurrentBody, body, StringComparison.OrdinalIgnoreCase)) return;   // already there
+                    var d = GetBodyDetail(body);
+                    if (d == null || d.IsStar || d.IsBelt || string.IsNullOrEmpty(d.PlanetClass)) return;
+                    bio = Math.Max(bio, d.BioSignalCount); geo = Math.Max(geo, d.GeoSignalCount);
+                    bool first = d.WasDiscovered == false;
+                    if (bio == 0 && geo == 0 && !d.Landable && !first) return;   // nothing worth a readout
+                    if (string.Equals(_planetTargetRaisedFor, body, StringComparison.OrdinalIgnoreCase) && (DateTime.UtcNow - _planetTargetRaisedAt).TotalMinutes < 10) return;
+                    _planetTargetRaisedFor = body; _planetTargetRaisedAt = DateTime.UtcNow;
+                    var inv = System.Globalization.CultureInfo.InvariantCulture;
+                    string atmos = string.IsNullOrEmpty(d.AtmosphereType) || d.AtmosphereType == "None" ? "" : d.AtmosphereType;
+                    PlanetTargetEvent?.Invoke(string.Join("|", Fd(d.BodyName), Fd(d.PlanetClass), (d.SurfaceGravity / 9.80665).ToString("0.00", inv), Math.Round(d.SurfaceTemperature).ToString("0", inv),
+                        (d.SurfacePressure / 101325.0).ToString("0.000", inv), Fd(atmos), (d.IsMapped || d.WasMapped == true) ? "1" : "0", bio, geo, d.Landable ? "1" : "0", first ? "1" : "0"));
+                }
+                catch (Exception ex) { Log.Write($"PlanetTarget error: {ex.Message}"); }
+            });
+        }
         public event Action<string>? MarketBoughtEvent;   // the detail for the cargo purchase receipt: item|tonnes|price per tonne|total|galactic average per tonne or 0; purchases of one commodity within 1.5 s are one; live only
         private readonly object _buyGate = new();
         private string _buyName = "", _buyType = "";
@@ -1709,8 +1737,9 @@ namespace EliteBioRadar
 
                         bool bioChanged = bioCount != TargetedBodyBioCount;
                         TargetedBodyBioCount = bioCount;
+                        if (nameChanged) SchedulePlanetTarget(destName, bioCount, geoCount);
 
-                        if (nameChanged || (bioChanged && bioCount > 0) || (nameChanged && geoCount > 0))
+                        if (nameChanged ||(bioChanged && bioCount > 0) || (nameChanged && geoCount > 0))
                         {
                             Log.Write($"Targeting: {destName} bio={TargetedBodyBioCount} geo={geoCount}");
                             if (string.IsNullOrEmpty(CurrentBody) && (bioCount > 0 || geoCount > 0))
