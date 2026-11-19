@@ -1323,6 +1323,7 @@ namespace EliteBioRadar
 
         // Raises a flag's event when it changed since the last read (and may play), logging which way it went; the first read only sets the baseline.
         private bool _cooldownAtBody;   // the last supercruise exit was at a planet or moon: the FSD cooldown animations stay quiet until the next jump or supercruise
+        private readonly DateTime _appStartedAt = DateTime.UtcNow;
         private bool _cooldownAfterJump;   // a hyperspace jump was started and no supercruise entry or exit since: the FSD "cooling" animation stays quiet (the "ready" one still plays)
         // Leaving the SRV, the game clears drive assist, the handbrake and the turret view in Status.json a moment BEFORE it writes the Disembark / DockSRV journal line that opens the quiet window,
         // so their "off" edge would play as the commander steps out. An off edge therefore waits 0.8 s; by then the journal line has arrived and the edge is swallowed.
@@ -1516,15 +1517,18 @@ namespace EliteBioRadar
                     // Too hot / too cold (Flags2 bits 9 and 11 / 8 and 10): plays when the level rises (1 = hot / cold, 2 = very hot / very cold), at most once every 15 s unless it escalates.
                     // The first read on foot only sets the baseline.
                     int heat = status.HeatTier, cold = status.ColdTier;
+                    // Stepping out of the ship into cold or heat that is already there is a rise from nothing (the baseline is 0); only an app started while already on foot takes the current level as its baseline.
+                    bool liveStart = (DateTime.UtcNow - _appStartedAt).TotalSeconds > 15;
+                    _heatTierPrev ??= liveStart ? 0 : heat; _coldTierPrev ??= liveStart ? 0 : cold;
                     if (!quiet && _heatTierPrev != null && heat > _heatTierPrev && ((DateTime.UtcNow - _lastHeatBanner).TotalSeconds >= 15 || heat > _heatTierFired))
                     { _lastHeatBanner = DateTime.UtcNow; _heatTierFired = heat; Log.Write($"Suit too hot: level {heat}, {status.SuitTemperatureK:0} K"); ThermalWarning?.Invoke(true, heat, status.SuitTemperatureK); }
                     if (!quiet && _coldTierPrev != null && cold > _coldTierPrev && ((DateTime.UtcNow - _lastColdBanner).TotalSeconds >= 15 || cold > _coldTierFired))
                     { _lastColdBanner = DateTime.UtcNow; _coldTierFired = cold; Log.Write($"Suit too cold: level {cold}, {status.SuitTemperatureK:0} K"); ThermalWarning?.Invoke(false, cold, status.SuitTemperatureK); }
                     if (heat == 0 && (DateTime.UtcNow - _lastHeatBanner).TotalSeconds >= 15) _heatTierFired = 0;
                     if (cold == 0 && (DateTime.UtcNow - _lastColdBanner).TotalSeconds >= 15) _coldTierFired = 0;
-                    _heatTierPrev = heat; _coldTierPrev = cold;
+                    if (!quiet) { _heatTierPrev = heat; _coldTierPrev = cold; }   // held through the quiet window after disembarking, so a level already there plays when it ends
                 }
-                else { _wasLowO2 = null; _wasLowHealth = null; _heatTierPrev = null; _coldTierPrev = null; }
+                else { _wasLowO2 = null; _wasLowHealth = null; _heatTierPrev = null; _coldTierPrev = null; _heatTierFired = 0; _coldTierFired = 0; }
 
                 // Colony range: the ring around every unfinished sample (the species' range, drawn on the radar). Walking out of all of them means the next sample can be taken ("cleared"); walking back
                 // in means too close. Taking a sample puts the commander at the new dot's centre, which is not announced (the sample animation covers it): a new dot in the list, or a body change,
