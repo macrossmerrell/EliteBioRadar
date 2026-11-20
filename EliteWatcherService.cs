@@ -1323,6 +1323,7 @@ namespace EliteBioRadar
 
         // Raises a flag's event when it changed since the last read (and may play), logging which way it went; the first read only sets the baseline.
         private bool _cooldownAtBody;   // the last supercruise exit was at a planet or moon: the FSD cooldown animations stay quiet until the next jump or supercruise
+        private string _jumpStarSystem = "", _jumpStarClass = "";   // the destination's star class from the journal's StartJump: the FSDJump line itself carries no class
         private readonly DateTime _appStartedAt = DateTime.UtcNow;
         private bool _cooldownAfterJump;   // a hyperspace jump was started and no supercruise entry or exit since: the FSD "cooling" animation stays quiet (the "ready" one still plays)
         // Leaving the SRV, the game clears drive assist, the handbrake and the turret view in Status.json a moment BEFORE it writes the Disembark / DockSRV journal line that opens the quiet window,
@@ -4047,6 +4048,7 @@ namespace EliteBioRadar
             if (!backfill && evt == "SupercruiseEntry") { Log.Write("Supercruise entered"); SupercruiseEntered?.Invoke(); }
             if (!backfill && evt is "SupercruiseEntry" or "StartJump" or "FSDJump" or "LoadGame") _cooldownAtBody = false;
             if (!backfill && evt == "StartJump") _cooldownAfterJump = string.Equals(obj.Value<string>("JumpType"), "Hyperspace", StringComparison.OrdinalIgnoreCase);
+            if (!backfill && evt == "StartJump" && string.Equals(obj.Value<string>("JumpType"), "Hyperspace", StringComparison.OrdinalIgnoreCase)) { _jumpStarSystem = obj.Value<string>("StarSystem") ?? ""; _jumpStarClass = obj.Value<string>("StarClass") ?? ""; }
             if (!backfill && evt is "SupercruiseEntry" or "SupercruiseExit" or "LoadGame") _cooldownAfterJump = false;
             // Dropping out of supercruise at a planet or moon: the FSD cooling down and ready again are not worth an animation there.
             if (!backfill && evt == "SupercruiseExit") _cooldownAtBody = string.Equals(obj.Value<string>("BodyType"), "Planet", StringComparison.OrdinalIgnoreCase);
@@ -6211,7 +6213,9 @@ namespace EliteBioRadar
                             SystemArrivedAt = obj.Value<DateTime?>("timestamp") ?? DateTime.UtcNow;
                             Log.Write($"FSDJump arrival: '{newSystem}' arrivedAt={SystemArrivedAt:O} fsdTargetedAt={FsdTargetedAt:O} nextSystem='{CurrentDestination?.NextSystem}'");
                             // The Arrival moment (system name, star class). Raised before the arrival star's scan, so a First Discovery screen queues behind it.
-                            SystemArrived?.Invoke(newSystem, obj.Value<string>("StarClass") ?? "");
+                            string arrivalClass = obj.Value<string>("StarClass") ?? "";
+                            if (arrivalClass.Length == 0 && string.Equals(_jumpStarSystem, newSystem, StringComparison.OrdinalIgnoreCase)) arrivalClass = _jumpStarClass;
+                            SystemArrived?.Invoke(newSystem, arrivalClass);
                             // SystemMiningPlanets was missing from this clear — Bio/Geo sidebar
                             // sections correctly emptied on a jump, but Mining Sites kept
                             // showing the previous system's list until BackfillSystemPlanets
