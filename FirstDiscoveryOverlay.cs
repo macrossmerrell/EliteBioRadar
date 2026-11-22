@@ -13,9 +13,10 @@ namespace EliteBioRadar
     // frame from one clock, so the title's letter-spacing animation (which a TextBlock cannot do) stays in step with the rest.
     public sealed class FirstDiscoveryVisual : AnimationVisual
     {
-        // The build-up runs 20% slower than first drawn (Slow), then holds for four more seconds before the final fade.
+        // The build-up runs 20% slower than first drawn (Slow), then holds for a further 1.5 seconds before the final fade
+        // (the title is fully in by ~2.8 s, so this ends the whole thing about 2.5 s sooner than the old 4 s hold; the build-up speed is unchanged).
         private const double Slow = 1.2;
-        private const double FadeOutAt = 3.3 * Slow + 4.0;           // seconds
+        private const double FadeOutAt = 3.3 * Slow + 1.5;           // seconds
         protected override double Duration => FadeOutAt + 0.6 * Slow;      // seconds, including the final fade
 
         private static readonly Brush Backdrop   = Frozen(Color.FromRgb(0x08, 0x0d, 0x0d));
