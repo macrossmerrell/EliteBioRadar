@@ -328,6 +328,7 @@
         <local:SignalSourceVisual x:Name="signalSourceVisual"/>
         <local:NavBeaconVisual x:Name="navBeaconVisual"/>
         <local:ShipCallVisual x:Name="shipCallVisual"/>
+        <local:ShipLandedVisual x:Name="shipLandedVisual"/>
         <local:SearchRescueVisual x:Name="searchRescueVisual"/>
         <local:VoucherVisual x:Name="voucherVisual"/>
         <local:SelfDestructVisual x:Name="selfDestructVisual"/>

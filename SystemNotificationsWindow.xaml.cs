@@ -47,6 +47,7 @@ namespace EliteBioRadar
                 ["signal-source"] = signalSourceVisual,
                 ["nav-beacon"] = navBeaconVisual,
                 ["ship-call"] = shipCallVisual,
+                ["ship-landed"] = shipLandedVisual,
                 ["search-rescue"] = searchRescueVisual,
                 ["voucher"] = voucherVisual,
                 ["self-destruct"] = selfDestructVisual,

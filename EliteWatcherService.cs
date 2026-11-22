@@ -118,6 +118,8 @@ namespace EliteBioRadar
         public event Action<string>? VoucherEvent;   // the detail for the vouchers redeemed animation (RedeemVoucher): type|amount|faction;faction; live only
         public event Action<string>? SearchRescueEvent;   // the detail for the search and rescue animation (SearchAndRescue): RESCUE|RECOVER|count|item|reward; live only
         public event Action<string>? ShipCallEvent;   // the detail for the ship dismissed / recalled animation (Liftoff / Touchdown with PlayerControlled false): DISMISS or RECALL; live only
+        public event Action<string>? ShipLandedEvent;   // the unmanned ship has touched down after a recall (Touchdown with PlayerControlled false): ON or OFF = the ship's shields as last seen while flying it; live only
+        private bool _shipShieldsUp = true;   // the ship's shields as last seen while the player was in it (Status.json describes the SRV or suit once away from the ship)
         public event Action<string>? NavBeaconEvent;   // the detail for the nav beacon animation (NavBeaconScan): bodyCount|system; live only
         public event Action<string>? SignalSourceEvent;   // the detail for the signal source animation (FSSSignalDiscovered batched, and USSDrop): KIND|NAME|DETAIL|MORE|THREAT; live only
         private readonly List<(string kind, string name, string detail, int threat)> _signalBatch = new();
@@ -1469,6 +1471,7 @@ namespace EliteBioRadar
 
                 // Flag edges: the first read only sets the baseline, which follows the flag everywhere. The SRV flags only play while in the SRV.
                 // Shields (bit 3), SRV drive assist (15), SRV handbrake (12), SRV turret (13, set = in the turret view), silent running (10).
+                if (!status.InSRV && !status.OnFoot && !status.InFighter && status.Flags != 0) _shipShieldsUp = status.ShieldsUp;
                 FlagEdge(ref _wasShields, status.ShieldsUp, !quiet, "Shields up", "Shields down", ShieldsChanged);
                 SrvFlagEdge("assist", ref _wasDriveAssist, status.SrvDriveAssist, !quiet && status.InSRV, "Drive assist on", "Drive assist off", DriveAssistChanged);
                 SrvFlagEdge("brake", ref _wasHandbrake, status.SrvHandbrake, !quiet && status.InSRV, "Handbrake on", "Handbrake off", HandbrakeChanged);
@@ -4284,10 +4287,12 @@ namespace EliteBioRadar
                 MiningEvent?.Invoke($"PROSPECT|{grade}|{string.Join(";", mats)}");
             }
             // The ship dismissed from, or recalled to, an SRV: the journal reuses Liftoff / Touchdown with PlayerControlled false (not a taxi, not a crew member flying).
+            if (evt == "ShieldState" && obj["ShieldsUp"] != null) _shipShieldsUp = obj.Value<bool>("ShieldsUp");
             if (!backfill && (evt == "Liftoff" || evt == "Touchdown") && obj.Value<bool?>("PlayerControlled") == false && obj.Value<bool?>("Taxi") != true && obj.Value<bool?>("Multicrew") != true)
             {
                 // The recall normally announced itself when the gear went down; the Touchdown only plays it if that was missed.
                 if (evt == "Touchdown") { if ((DateTime.UtcNow - _recallAnnouncedAt).TotalSeconds > 120) { _recallAnnouncedAt = DateTime.UtcNow; ShipCallEvent?.Invoke("RECALL"); } }
+                if (evt == "Touchdown") ShipLandedEvent?.Invoke(_shipShieldsUp ? "ON" : "OFF");
                 else ShipCallEvent?.Invoke("DISMISS");
             }
             if (!backfill && evt == "SearchAndRescue" && (obj.Value<int?>("Count") ?? 0) > 0)

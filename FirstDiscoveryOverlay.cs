@@ -390,6 +390,8 @@ namespace EliteBioRadar
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.SearchRescue, "", detail)));
             svc.ShipCallEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.ShipCall, "", detail)));
+            svc.ShipLandedEvent += detail => Dispatcher.InvokeAsync(() =>
+                AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.ShipLanded, "", detail)));
             svc.NavBeaconEvent += detail => Dispatcher.InvokeAsync(() =>
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.NavBeacon, "", detail)));
             svc.SignalSourceEvent += detail => Dispatcher.InvokeAsync(() =>
@@ -476,6 +478,7 @@ namespace EliteBioRadar
                     ["signal-source"] = _w.signalSourceVisual,
                     ["nav-beacon"] = _w.navBeaconVisual,
                     ["ship-call"] = _w.shipCallVisual,
+                    ["ship-landed"] = _w.shipLandedVisual,
                     ["search-rescue"] = _w.searchRescueVisual,
                     ["voucher"] = _w.voucherVisual,
                     ["self-destruct"] = _w.selfDestructVisual,
