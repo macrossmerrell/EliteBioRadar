@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace EliteBioRadar
 {
@@ -15,7 +16,8 @@ namespace EliteBioRadar
     // MainWindow shows it in the windows ticked here for as long as the phase lasts, so it has no Play preview.
     public sealed record AnimationDef(string Id, string Name, string Group, AnimationSurfaces DefaultSurfaces, double BackdropOpacity,
                                       string PreviewSubject, string PreviewDetail, bool Live = false, string[]? PreviewCycle = null,
-                                      bool Ambient = false);   // Ambient = plays beside the queue, underneath whatever else is playing (the fuel scoop runs as long as the scoop works)
+                                      bool Ambient = false, bool OnTop = false);   // Ambient = plays beside the queue, underneath whatever else is playing (the fuel scoop runs as long as the scoop works)
+    // OnTop = plays at once over whatever is playing (the hyperspace jump and the arrival); the queue waits behind it and is dropped when the drive fires (the system was left)
 
     public static class AnimationCatalog
     {
@@ -30,7 +32,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef FirstFootfall =
             new("first-footfall", "First footfall on a world", "Surface", AnimationSurfaces.Main, 1.0, "Qiedea EI-O c8-1 A 1", "~STAR=3800|~FLUX=0.8|~GROUND=8A7A6A");
         public static readonly AnimationDef HyperspaceJump =
-            new("hyperspace-jump", "Hyperspace jump (departure)", "Jump", AnimationSurfaces.Main, 0.92, "HIP 66074", "PREVIEW|K|18.4|3|12|1");
+            new("hyperspace-jump", "Hyperspace jump (departure)", "Jump", AnimationSurfaces.Main, 0.92, "HIP 66074", "PREVIEW|K|18.4|3|12|1", OnTop: true);
         public static readonly AnimationDef Supercruise =
             new("supercruise", "Entering supercruise", "Jump", AnimationSurfaces.Both, 0.85, "", "PREVIEW");
         public static readonly AnimationDef SupercruiseOverdrive =
@@ -211,7 +213,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef AnalysisMode =
             new("analysis-mode", "Analysis mode", "HUD", AnimationSurfaces.Main, 0.85, "", "");
         public static readonly AnimationDef Arrival =
-            new("arrival", "Arrival in a system", "Jump", AnimationSurfaces.Main, 1.0, "Sample System", "TYPE=K-Star|~STAR=4500");
+            new("arrival", "Arrival in a system", "Jump", AnimationSurfaces.Main, 1.0, "Sample System", "TYPE=K-Star|~STAR=4500", OnTop: true);
         public static readonly AnimationDef DockingRequest =
             new("docking-request", "Docking requested / granted / denied / undocked", "Docking", AnimationSurfaces.Both, 0.85, "Jameson Memorial", "REQUESTED", PreviewCycle: new[] { "REQUESTED", "GRANTED|17", "DENIED|NO SPACE", "UNDOCKED" });
         public static readonly AnimationDef CarrierJump =
@@ -259,6 +261,7 @@ namespace EliteBioRadar
             public IAnimationSurface Surface = null!;
             public readonly Queue<AnimationRequest> Queue = new();
             public bool Busy;
+            public int TopBusy;   // on-top animations playing: the queue waits for them
         }
 
         private static readonly Dictionary<AnimationSurfaces, Lane> _lanes = new();
@@ -284,14 +287,34 @@ namespace EliteBioRadar
                     catch (Exception ex) { Log.Write($"Animation '{request.Def.Id}' failed to play on {kv.Key}: {ex.GetType().Name}: {ex.Message}"); }
                     continue;
                 }
+                if (request.Def.OnTop)
+                {
+                    if (!kv.Value.Surface.IsAvailable) continue;
+                    var lane = kv.Value;
+                    lane.TopBusy++;
+                    try { lane.Surface.Play(request, () => { lane.TopBusy = Math.Max(0, lane.TopBusy - 1); Pump(lane); }); }
+                    catch (Exception ex) { Log.Write($"Animation '{request.Def.Id}' failed to play on {kv.Key}: {ex.GetType().Name}: {ex.Message}"); lane.TopBusy = Math.Max(0, lane.TopBusy - 1); }
+                    continue;
+                }
                 kv.Value.Queue.Enqueue(request);
                 Pump(kv.Value);
             }
         }
 
+        // The hyperspace drive has fired: the system is being left, so what is still waiting to play is about the one behind.
+        public static void FlushQueued()
+        {
+            foreach (var lane in _lanes.Values)
+            {
+                if (lane.Queue.Count == 0) continue;
+                Log.Write($"Animation queue cleared on {lane.Surface.Kind}: {string.Join(", ", lane.Queue.Select(r => r.Def.Id))} (the system was left)");
+                lane.Queue.Clear();
+            }
+        }
+
         private static void Pump(Lane lane)
         {
-            if (lane.Busy) return;
+            if (lane.Busy || lane.TopBusy > 0) return;
             while (lane.Queue.Count > 0)
             {
                 var req = lane.Queue.Dequeue();

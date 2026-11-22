@@ -203,7 +203,7 @@ namespace EliteBioRadar
                 JumpDepartureState.ChargeStart = DateTime.UtcNow;
                 AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.HyperspaceJump, next, JumpDepartureDetail(svc.CurrentDestination)));
             });
-            svc.HyperspaceJumpStarted += () => Dispatcher.InvokeAsync(() => JumpDepartureState.DriveFiredAt = DateTime.UtcNow);
+            svc.HyperspaceJumpStarted += () => Dispatcher.InvokeAsync(() => { JumpDepartureState.DriveFiredAt = DateTime.UtcNow; AnimationRouter.FlushQueued(); });
             svc.JumpChargeCancelled += () => Dispatcher.InvokeAsync(JumpDepartureState.RequestEnd);
             svc.SystemArrived +=(system, starClass) => Dispatcher.InvokeAsync(() =>
             {
@@ -235,6 +235,7 @@ namespace EliteBioRadar
             {
                 var now = DateTime.UtcNow;
                 bool charging = SupercruiseState.ChargeStart > SupercruiseState.LastEnd && SupercruiseState.ChargeStart > SupercruiseState.EnteredAt && (now - SupercruiseState.ChargeStart).TotalSeconds < 120;
+                if (SupercruiseState.DriveFiredAt > SupercruiseState.ChargeStart && SupercruiseState.EnteredAt < SupercruiseState.DriveFiredAt) SupercruiseState.CountdownSeconds = Math.Clamp((now - SupercruiseState.DriveFiredAt).TotalSeconds, 2, 10);   // measured, to pace the next ring
                 SupercruiseState.EnteredAt = now;
                 if (!charging) AnimationRouter.Raise(new AnimationRequest(AnimationCatalog.Supercruise, "", "ENTRY"));   // no charge was seen (the app started mid-charge): just the engage
             });
@@ -553,6 +554,7 @@ namespace EliteBioRadar
                     v.Finished += () =>
                     {
                         if (ambient) { _w.fuelScoopVisualLayer.Visibility = Visibility.Collapsed; return; }
+                        if (_topDone.Remove(v, out var td)) { System.Windows.Controls.Panel.SetZIndex(v, 0); if (_done == null) _w.firstDiscoveryLayer.Visibility = Visibility.Collapsed; td(); return; }
                         _w.firstDiscoveryLayer.Visibility = Visibility.Collapsed;
                         var d = _done; _done = null; d?.Invoke();
                     };
@@ -562,8 +564,21 @@ namespace EliteBioRadar
             public AnimationSurfaces Kind => AnimationSurfaces.Main;
             public bool IsAvailable => _w.IsVisible && _w.WindowState != WindowState.Minimized;
 
+            private readonly Dictionary<AnimationVisual, Action> _topDone = new();
+
             public void Play(AnimationRequest request, Action done)
             {
+                if (request.Def.OnTop && _visuals.TryGetValue(request.Def.Id, out var tv))
+                {
+                    // Plays on top of whatever is playing, apart from the queue's own callback.
+                    _topDone[tv] = done;
+                    System.Windows.Controls.Panel.SetZIndex(tv, 100);
+                    Log.Write($"Animation '{request.Def.Id}' playing on top in the Elite Bio Radar window: {request.Subject}");
+                    tv.BackdropOpacity = request.Def.BackdropOpacity;
+                    _w.firstDiscoveryLayer.Visibility = Visibility.Visible;
+                    tv.Start(request.Subject, request.Detail);
+                    return;
+                }
                 if (request.Def.Ambient)
                 {
                     if (!_visuals.TryGetValue(request.Def.Id, out var av)) return;

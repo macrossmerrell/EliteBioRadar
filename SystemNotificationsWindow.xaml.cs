@@ -121,7 +121,7 @@ namespace EliteBioRadar
             foreach (var def in AnimationCatalog.All)
                 if (!def.Live && !_visuals.ContainsKey(def.Id)) Log.Write($"Animation '{def.Id}' has no visual in the System Notifications window");
             foreach (var v in _visuals.Values)
-                v.Finished += () => { if (ReferenceEquals(v, fuelScoopVisual)) return; var d = _done; _done = null; d?.Invoke(); };   // the fuel scoop runs beside the queue
+                v.Finished += () => { if (_topDone.Remove(v, out var td)) { System.Windows.Controls.Panel.SetZIndex(v, 0); td(); return; } if (ReferenceEquals(v, fuelScoopVisual)) return; var d = _done; _done = null; d?.Invoke(); };   // the fuel scoop runs beside the queue
             AnimationRouter.Register(this);
             Closed += (_, _) => { AnimationRouter.Unregister(this); SaveWindowState(); };
             // On a fresh start the window is reopened while the app is at its busiest, and WPF can miss its first frame, leaving the window plain white
@@ -146,8 +146,20 @@ namespace EliteBioRadar
         public AnimationSurfaces Kind => AnimationSurfaces.Notifications;
         public bool IsAvailable => IsVisible && WindowState != WindowState.Minimized;
 
+        private readonly Dictionary<AnimationVisual, Action> _topDone = new();
+
         public void Play(AnimationRequest request, Action done)
         {
+            if (request.Def.OnTop && _visuals.TryGetValue(request.Def.Id, out var tv))
+            {
+                // Plays on top of whatever is playing, apart from the queue's own callback.
+                _topDone[tv] = done;
+                System.Windows.Controls.Panel.SetZIndex(tv, 100);
+                Log.Write($"Animation '{request.Def.Id}' playing on top in the System Notifications window: {request.Subject}");
+                tv.BackdropOpacity = request.Def.BackdropOpacity;
+                tv.Start(request.Subject, request.Detail);
+                return;
+            }
             if (request.Def.Ambient)
             {
                 if (_visuals.TryGetValue(request.Def.Id, out var av)) { av.BackdropOpacity = request.Def.BackdropOpacity; av.Start(request.Subject, request.Detail); }

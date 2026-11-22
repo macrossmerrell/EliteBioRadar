@@ -13,6 +13,7 @@ namespace EliteBioRadar
         public static DateTime LastEnd = DateTime.MinValue;       // when the charge was last cancelled
         public static DateTime DriveFiredAt = DateTime.MinValue;  // the journal's StartJump: the spool-up is done and the game's countdown to the entry begins (after ChargeStart)
         public static double ChargeSeconds = 4.5;                 // how long the spool-up (charge start to StartJump) took last time: paces the ring until the next one is measured
+        public static double CountdownSeconds = 5.0;              // how long the game's countdown (StartJump to SupercruiseEntry) took last time: the ring closes onto the ship over it
         public static event Action? EndRequested;                 // the charge was cancelled
         public static void RequestEnd() { LastEnd = DateTime.UtcNow; EndRequested?.Invoke(); }
     }
@@ -35,7 +36,6 @@ namespace EliteBioRadar
         // Where each streak sits: its angle, its distance from the centre when it starts, its length factor and its starting phase (all fixed, so it is the same every time).
         private static readonly double[] Angle = StarValues(Streaks, 0, 2 * Math.PI), Start = StarValues(Streaks, 1, 1), Length = StarValues(Streaks, 2, 1), Offset = StarValues(Streaks, 3, 1);
 
-        private const double ShrinkSeconds = 0.9;
         private static readonly Brush[] CyanFade = AlphaBrushes(Cyan);
         private static readonly Pen[] ShrinkPen = { FrozenPen(Cyan, 3), FrozenPen(Cyan, 2.4), FrozenPen(Cyan, 1.8) };
         // The glow that builds behind the ship while the entry counts down: white at the heart, cyan, fading to nothing.
@@ -149,11 +149,13 @@ namespace EliteBioRadar
             if (!fired) dc.DrawGeometry(null, ArcPen, Arc((int)Math.Round(frac * 100)));
             else if (!entered)
             {
-                double sh = Phase(tf, 0, ShrinkSeconds);
-                if (sh < 1) { double s = sh * sh * sh * 0.7 + sh * sh * 0.3, r = 31 * (1 - s); dc.DrawEllipse(null, ShrinkPen[Math.Min(2, (int)(s * 3))], new Point(0, 0), r, r); }
-                if (tf >= ShrinkSeconds - 0.1)
+                // The ring closes onto the ship at an even pace over the game's own countdown, so it reaches the ship as the countdown ends and the drive engages.
+                double cd = _preview ? PreviewCountdownSeconds : Math.Clamp(SupercruiseState.CountdownSeconds, 2, 10);
+                double sh = Phase(tf, 0, cd);
+                if (sh < 1) { double s = sh, r = 31 * (1 - s); dc.DrawEllipse(null, ShrinkPen[Math.Min(2, (int)(s * 3))], new Point(0, 0), r, r); }
+                if (tf >= cd * 0.5)
                 {
-                    double b = Phase(tf, ShrinkSeconds - 0.1, 3.0), pu = 0.5 + 0.5 * Math.Sin(tf * (5 + b * 6)), lr = 18 + b * 22 + pu * 3;
+                    double b = Phase(tf, cd * 0.5, cd * 0.5 + 0.5), pu = 0.5 + 0.5 * Math.Sin(tf * (5 + b * 6)), lr = 18 + b * 22 + pu * 3;
                     dc.PushOpacity(Clamp01(0.25 + b * 0.55));
                     dc.DrawEllipse(LeakGlow, null, new Point(0, 0), lr, lr);
                     dc.Pop();
