@@ -35,6 +35,7 @@ float  LandAmt      : register(c21);  // 0..1 continent coverage over an ocean (
 float4 LandCol0     : register(c22);  // lowland (green)
 float4 LandCol1     : register(c23);  // coast / dry highland (tan)
 float  GlintAmt     : register(c24);  // 0..1 sun glint on the ocean
+float  CloudScale   : register(c25);  // 1 = normal; above 1 = bigger, softer cloud masses (water worlds)
 
 static const float PI  = 3.14159265;
 static const float TAU = 6.28318531;
@@ -123,9 +124,10 @@ float4 main(float2 uv : TEXCOORD0) : COLOR0
     float wind = Time * 0.020 + 0.09 * sin(lat * 4.0 + Seed * 3.0) * sin(Time * 0.05);
     float lonC = lon - wind;
     float2 pc  = float2(lonC / PI, lat / PI * 2.0);
-    float2 warp = Tex(pc * 0.8 + Seed * 0.07).xy - 0.5;
-    float streakA = Tex(float2(pc.x * 3.2 + warp.x * 0.50, pc.y * 3.5 + warp.y * 0.45) + 0.50).x;
-    float puff    = Tex(float2(pc.x * 4.0, pc.y * 4.5) + warp * 0.7 + 0.20).y;
+    float2 pcB = pc / max(CloudScale, 0.5);
+    float2 warp = Tex(pcB * 0.8 + Seed * 0.07).xy - 0.5;
+    float streakA = Tex(float2(pcB.x * 3.2 + warp.x * 0.50, pcB.y * 3.5 + warp.y * 0.45) + 0.50).x;
+    float puff    = Tex(float2(pcB.x * 4.0, pcB.y * 4.5) + warp * 0.7 + 0.20).y;
     float cloud   = smoothstep(0.50, 0.88, streakA * 0.40 + puff * 0.60);
     // Heavier haze = smoother flow, fewer distinct puffs.
     cloud *= CloudAmt * (1.0 - 0.55 * HazeAmt) * (1.0 - polar);

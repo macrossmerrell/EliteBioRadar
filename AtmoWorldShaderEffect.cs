@@ -10,7 +10,7 @@ namespace EliteBioRadar
     public sealed class AtmoWorldLook
     {
         public Color Surf0, Surf1, Haze, Cloud, Cap, Glow;
-        public double HazeAmt, SurfContrast, CycloneAmt, CloudAmt, CapAmt, Tilt, Pitch, Seed, CrackAmt, FleckAmt, HotAmt, LandAmt, GlintAmt;
+        public double HazeAmt, SurfContrast, CycloneAmt, CloudAmt, CapAmt, Tilt, Pitch, Seed, CrackAmt, FleckAmt, HotAmt, LandAmt, GlintAmt, CloudScale;   // CloudScale 0 = the default 1 (above 1 = bigger, softer cloud masses);
         public Color Land0, Land1;
         public Vector3D LightDir = new Vector3D(-0.55, 0.55, 0.63);   // view space; more frontal = less terminator
     }
@@ -59,6 +59,7 @@ namespace EliteBioRadar
         public static readonly DependencyProperty Land0Property        = Reg("LandCol0", 22, new Point4D(0.3, 0.35, 0.2, 1));
         public static readonly DependencyProperty Land1Property        = Reg("LandCol1", 23, new Point4D(0.6, 0.45, 0.25, 1));
         public static readonly DependencyProperty GlintAmtProperty     = Reg("GlintAmt", 24, 0.0);
+        public static readonly DependencyProperty CloudScaleProperty   = Reg("CloudScale", 25, 1.0);
 
         public AtmoWorldShaderEffect()
         {
@@ -72,7 +73,7 @@ namespace EliteBioRadar
                 HazeColProperty, CloudColProperty, CapColProperty, GlowColProperty, HazeAmtProperty,
                 SurfContrastProperty, CycloneAmtProperty, CloudAmtProperty, CapAmtProperty, TiltProperty,
                 PitchProperty, LightDirProperty, CrackAmtProperty, FleckAmtProperty, HotAmtProperty,
-                LandAmtProperty, Land0Property, Land1Property, GlintAmtProperty,
+                LandAmtProperty, Land0Property, Land1Property, GlintAmtProperty, CloudScaleProperty,
             })
                 UpdateShaderValue(p);
         }
@@ -105,6 +106,7 @@ namespace EliteBioRadar
             e.SetValue(Land0Property, C(look.Land0));
             e.SetValue(Land1Property, C(look.Land1));
             e.SetValue(GlintAmtProperty, look.GlintAmt);
+            e.SetValue(CloudScaleProperty, look.CloudScale > 0 ? look.CloudScale : 1.0);
             return e;
         }
     }

@@ -878,6 +878,7 @@ namespace EliteBioRadar
             else if (water)
             {
                 s0 = rgb(20, 34, 50); s1 = rgb(58, 86, 110); contrast = 0.5;   // deep ocean blue, slightly lighter in places
+                if (detail.SurfaceTemperature >= 290) { s0 = rgb(40, 38, 26); s1 = rgb(86, 80, 52); contrast = 0.45; }   // the warm one (Qiedea ER-U d3-6 8, 300 K) was a dark brown-olive ocean, the 275 K and 274 K ones blue; one data point for the brown
             }
             else if (elw)
             {
@@ -1192,6 +1193,7 @@ namespace EliteBioRadar
                 // Caps grow steeply with cold: the 223 K world had large caps at both poles, the 251 K one (Qiedea JC-U d3-1 B 4) showed none from the front.
                 double wcold = detail.SurfaceTemperature > 0 ? 0.55 * Math.Clamp((265.0 - detail.SurfaceTemperature) / 45.0, 0.0, 1.3) : 0.2;
                 atmoLook.Cap = rgb(226, 232, 236); atmoLook.CapAmt = Math.Clamp(wcold, 0.30, 0.72);   // floor 0.30: UU-H b16-3 2 (274 K) had pale cloud caps at both poles
+                atmoLook.CloudScale = 2.2;   // big soft cloud masses, as in the game (Qiedea UU-H b16-3 2), not small streaks
                 atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.40, 0.38, 0.84);
             }
             else if (elw)
