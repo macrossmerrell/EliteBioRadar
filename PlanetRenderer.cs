@@ -518,7 +518,7 @@ namespace EliteBioRadar
 
         // Parametric icy look: base tone x accent colour x accent form x crater density, all from the name hash. Weights follow the 21 icy moons of QB-C b17-0
         // (near-white 6, pale grey 6, mid grey 3, charcoal 1, dark red-brown 1, dark teal 1, plus mixes): a guess at the real spread, not a measured one.
-        private static void ApplyParametricIcyLook(LandableWorldLook l, int hash, string? bodyName = null)
+        private static void ApplyParametricIcyLook(LandableWorldLook l, int hash, string? bodyName = null, bool coldWhite = false)
         {
             Color rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
             uint m = (uint)hash * 2654435761u; m ^= m >> 15; m *= 2246822519u; m ^= m >> 13;
@@ -537,6 +537,22 @@ namespace EliteBioRadar
             {
                 uint m2 = (uint)hash * 0x9E3779B1u; m2 ^= m2 >> 16; m2 *= 0x85EBCA6Bu; m2 ^= m2 >> 13;
                 int nr = (int)(m2 % 100);
+                if (coldWhite)
+                {
+                    // Icy bodies of 40-125 K were white or grey-white in game every time (Qiedea YT-D b17-0 6, SS-F b16-0 4, QJ-F a38-0 3 with brown veins, KG-O c9-0 C 9 with blue crevasse patches and a rayed crater).
+                    l.SpecAmt = 0.4; l.RayAmt = ((hash >> 20) & 1) == 1 ? 0.8 : 0.05; l.CraterAmt = 0.15;
+                    if (((hash >> 19) & 1) == 0)
+                    {
+                        l.Light = rgb(236, 235, 232); l.Dark = rgb(204, 205, 204); l.Bright = rgb(214, 220, 224); l.BrightAmt = 0.4; l.Accent = rgb(108, 72, 64); l.RustAmt = 0.55;
+                        l.Ice = rgb(104, 68, 60); l.LineAmt = 1.0; l.LineFine = 1.0; l.Contrast = 0.4;
+                    }
+                    else
+                    {
+                        l.Light = rgb(184, 184, 190); l.Dark = rgb(150, 152, 160); l.Bright = rgb(78, 126, 162); l.BrightAmt = 0.55; l.Accent = rgb(70, 100, 130); l.RustAmt = 0.45;
+                        l.Ice = rgb(70, 110, 150); l.LineAmt = 0.9; l.LineFine = 1.0; l.Contrast = 0.45;
+                    }
+                    return;
+                }
                 if (nr < 19 && !IcyRightKeep.Contains(bodyName ?? ""))
                 {
                     l.SpecAmt = 0.4; l.RayAmt = 0.05;
@@ -648,6 +664,12 @@ namespace EliteBioRadar
             // The tuned real looks (7-13) and the very cold light-grey look keep their picks; everything else (the old guessed looks 0-6) is now generated from the name hash,
             // because the 21 icy moons of Qiedea QB-C b17-0 (one star, 47-117 K) were all different combinations of base tone, accent colour, accent form and crater density.
             bool coldKeep = look == 2 && temp > 0 && temp < 35;
+            // Half of the icy bodies of 40-125 K draw the white family, whatever look the hash had picked (the salmon and maroon picks kept missing there).
+            if (temp >= 40 && temp <= 125 && ((hash >> 5) % 10) < 5 && !IcyKeepLook.Contains(detail.BodyName ?? "") && !IcyRightKeep.Contains(detail.BodyName ?? "") && !IcyConfirmedLegacy.Contains(detail.BodyName ?? ""))
+            {
+                ApplyParametricIcyLook(l, hash, detail.BodyName, true);
+                return l;
+            }
             if (look <= 6 && !coldKeep && !IcyConfirmedLegacy.Contains(detail.BodyName ?? ""))
             {
                 ApplyParametricIcyLook(l, hash, detail.BodyName);
@@ -1089,8 +1111,12 @@ namespace EliteBioRadar
             {
                 // Four dark-cyclone looks, picked by the name: navy-teal (Qiedea JC-U d3-1 B 3), warm charcoal-brown (KC-U d3-1 3, DJ-M c9-1 5), dark olive-brown
                 // with a blue-white rim (BA-P c6-0 1, a K0 star) and dark plum with a lilac rim (BA-P c6-0 4).
-                switch ((hash >> 9) % 4)
+                // Argon-rich atmospheres: dark mauve-brown ground with white cyclones and a pale lilac-white rim (real: Qiedea KG-O c9-0 C 1, 133 K, 34 kPa argon; C 3, 19.5 kPa argon, was marked right and keeps its pick).
+                bool argonDark = detail.BodyName != "Qiedea KG-O c9-0 C 3" && ((detail.AtmosphereType ?? "").Contains("Argon", StringComparison.OrdinalIgnoreCase) || detail.AtmosphereComposition.Any(g => g.Percent >= 50 && g.Name.Contains("Argon", StringComparison.OrdinalIgnoreCase)));
+                int dcv = argonDark ? 4 : (hash >> 9) % 4;
+                switch (dcv)
                 {
+                    case 4: atmoLook.Surf0 = rgb(46, 34, 38); atmoLook.Surf1 = rgb(100, 78, 80); atmoLook.Haze = rgb(150, 136, 154); atmoLook.Glow = rgb(170, 160, 200); atmoLook.Cloud = rgb(236, 238, 246); atmoLook.CloudAmt = 0.6; break;
                     case 0: atmoLook.Haze = rgb(96, 128, 150); atmoLook.Glow = rgb(92, 168, 186); break;
                     case 1: atmoLook.Surf0 = rgb(34, 28, 30); atmoLook.Surf1 = rgb(72, 66, 70); break;
                     case 2: atmoLook.Surf0 = rgb(40, 31, 16); atmoLook.Surf1 = rgb(98, 78, 44); break;
