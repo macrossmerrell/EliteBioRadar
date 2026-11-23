@@ -1325,6 +1325,10 @@ namespace EliteBioRadar
                     {   // dark olive / taupe
                         look.C0 = rgb(0x3b, 0x2e, 0x24); look.C1 = rgb(0x7a, 0x6c, 0x58); look.C2 = rgb(0xb5, 0xa8, 0x8e);
                         look.C3 = rgb(0xd8, 0xcf, 0xb8); look.Band4 = rgb(0x1e, 0x16, 0x10); look.Glow = rgb(0xc8, 0xb8, 0x98);
+                        if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 140 && detail.BodyName != "Qiedea ER-U d3-7 6")
+                        {   // the cold ones were a dark grey-tan with little colour (real: Qiedea UP-V d3-5 BC 1, 103 K)
+                            look.C0 = rgb(0x3c, 0x38, 0x32); look.C1 = rgb(0x6e, 0x68, 0x5e); look.C2 = rgb(0xa0, 0x98, 0x8a); look.C3 = rgb(0xbe, 0xb8, 0xaa); look.Band4 = rgb(0x26, 0x22, 0x1e); look.Glow = rgb(0xb0, 0xa8, 0x98);
+                        }
                         look.BandCount = 11; look.Turb = 1.1; look.StormAmt = 0.9; look.Contrast = 1.0;
                     }
                     else
@@ -1332,6 +1336,10 @@ namespace EliteBioRadar
                         look.C0 = rgb(0x9a, 0x80, 0x62); look.C1 = rgb(0xc8, 0xbb, 0xa6); look.C2 = rgb(0xee, 0xee, 0xec);
                         look.C3 = rgb(0xdd, 0xd6, 0xc8); look.Band4 = rgb(0x7a, 0x62, 0x48); look.Glow = rgb(0xe8, 0xe4, 0xdc);
                         look.BandCount = 11; look.Turb = 0.9; look.StormAmt = 0.55; look.Contrast = 0.85;
+                        if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 140 && detail.BodyName != "Qiedea ER-U d3-7 6")
+                        {   // the cold ones were a pale grey-beige, not warm cream, with brown ovals (real: Qiedea AL-W d2-5 5, 123 K)
+                            look.C0 = rgb(0x88, 0x7e, 0x70); look.C1 = rgb(0xb4, 0xac, 0xa0); look.C2 = rgb(0xe0, 0xde, 0xd8); look.C3 = rgb(0xcc, 0xc8, 0xbe); look.Band4 = rgb(0x6c, 0x60, 0x52); look.Glow = rgb(0xdc, 0xd8, 0xd0);
+                        }
                     }
                     break;
                 case "GG2":
