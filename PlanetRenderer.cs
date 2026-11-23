@@ -233,6 +233,7 @@ namespace EliteBioRadar
             "Qiedea ER-U d3-7 1", "Qiedea ES-P c7-2 AB 5", "Qiedea IY-N c8-1 A 1 a", "Qiedea IY-N c8-1 A 2", "Qiedea HD-O c8-2 3", "Qiedea WY-D b17-0 AB 4", "Qiedea UP-V d3-0 C 4", "Qiedea UP-V d3-0 C 12",
             "Qiedea UP-V d3-31 B 7", "Qiedea UP-V d3-31 B 4", "Qiedea UP-V d3-3 2", "Qiedea NK-R c7-4 2", "Qiedea NK-R c7-4 1", "Qiedea NK-R c7-4 3", "Qiedea UP-V d3-5 B 3", "Qiedea UP-V d3-5 B 2",
             "Qiedea UP-V d3-5 C 8", "Qiedea UP-V d3-5 C 2", "Qiedea XP-H b16-1 B 5", "Qiedea TA-G b17-3 A 2", "Qiedea KG-O c9-0 A 5", "Qiedea KG-O c9-0 A 4", "Qiedea KG-O c9-0 C 3",
+            "Qiedea TA-U d4-50 AB 1", "Qiedea TA-U d4-50 AB 2", "Qiedea TA-U d4-50 AB 3", "Qiedea TA-U d4-50 D 7",
         };
 
         private static LandableWorldLook GetLandableWorldLookCore(BodyScanDetail detail, string iconCode, double starK)
@@ -302,9 +303,9 @@ namespace EliteBioRadar
             // Airless bodies of 700-1130 K: Qiedea UU-H b16-3 1 (814 K, minor metallic magma volcanism) was a Mars-like rust-orange with dark charcoal patches and hardly a crater, so two in five of them draw that.
             if (detail.SurfacePressure <= 0 && !redLit && temp >= 700 && temp < 1130 && !HmcRightKeep.Contains(detail.BodyName ?? "") && ((uint)pickHash >> 14) % 10 < 4) look = 29;
             if (detail.SurfacePressure <= 0 && temp > 0 && temp < 700 && !HmcRightKeep.Contains(detail.BodyName ?? "")
-                && (look == 5 || look == 9 || look == 10 || look == 13 || look == 14 || look == 19 || look == 20 || look == 21 || look == 28 || look == 7)
-                && (((uint)pickHash >> 12) % 10) < 6)
-                look = new[] { 8, 8, 26, 15, 18 }[((uint)pickHash >> 8) % 5];
+                && look != 8 && look != 29 && look != 28 && look != 26 && look != 15 && look != 18 && look != 27 && look != 25
+                && (((uint)pickHash >> 12) % 10) < 7)
+                look = new[] { 29, 8, 29, 28, 8 }[((uint)pickHash >> 8) % 5];   // 2026-11-23 Qiedea TA-U d4-50: seven of eight airless D bodies (314-542 K) were rust-brown to orange, blotchy, fine-grained, few craters - the grey remap targets were wrong
 
             var l = new LandableWorldLook
             {
@@ -814,7 +815,9 @@ namespace EliteBioRadar
                 }
                 else if (pr <= 0 && tp >= 300 && tp <= 600)
                 {
-                    if ((detail.Volcanism ?? "").Contains("magma", StringComparison.OrdinalIgnoreCase) && ((hash >> 10) % 10) < 5) look = 14;
+                    bool rockyMagma = (detail.Volcanism ?? "").Contains("rocky magma", StringComparison.OrdinalIgnoreCase);   // the sulphur-yellow one had rocky magma; TA-U d4-50 D 7 a (minor metallic magma, 346 K) was very dark brown-grey with fine rust patches
+                    if (rockyMagma && ((hash >> 10) % 10) < 5) look = 14;
+                    else if ((detail.Volcanism ?? "").Contains("metallic magma", StringComparison.OrdinalIgnoreCase)) look = 15;
                     else if ((look == 1 || look == 3 || look == 5 || look == 2) && ((hash >> 8) % 10) < 5) look = 15;
                 }
             }
@@ -921,7 +924,7 @@ namespace EliteBioRadar
             else if (water)
             {
                 s0 = rgb(20, 34, 50); s1 = rgb(58, 86, 110); contrast = 0.5;   // deep ocean blue, slightly lighter in places
-                if (detail.SurfaceTemperature >= 290) { s0 = rgb(40, 38, 26); s1 = rgb(86, 80, 52); contrast = 0.45; }   // the warm one (Qiedea ER-U d3-6 8, 300 K) was a dark brown-olive ocean, the 275 K and 274 K ones blue; one data point for the brown
+                if (detail.SurfaceTemperature >= 290 && detail.SurfaceTemperature < 330) { s0 = rgb(40, 38, 26); s1 = rgb(86, 80, 52); contrast = 0.45; }   // the warm one (Qiedea ER-U d3-6 8, 300 K) was a dark brown-olive ocean, the 275 K and 274 K ones blue; one data point for the brown; TA-U d4-50 AB 5 (343 K, 79 kPa nitrogen) was a dark navy ocean, so the brown stops at 330 K
             }
             else if (elw)
             {
@@ -983,7 +986,8 @@ namespace EliteBioRadar
                 // that methane tints the surface that way, to be confirmed with more methane bodies.
                 // Two real methane bodies, two looks: PW-N d6-2 8 was olive-green under a teal haze, Qiedea JC-U d3-1 A 10 (hot thick methane-rich, 11.5 MPa, 577 K)
                 // a pale blue-grey veil with pink and blue patches and a pale cap. The body name picks.
-                if ((detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase)) { int mv = (hash >> 6) % 3; denseVariant = mv == 0 ? 3 : mv == 1 ? 6 : 9; if (detail.SurfaceTemperature >= 550) denseVariant = 6; }   // hot thick methane (577 K, 627 K: JC-U d3-1 A 10, UP-V d3-0 AB 1) was a smooth pale blue-grey shell both times   // 9: khaki land under a beige haze with dark navy basins (real: Qiedea MX-T d3-0 7, 19.9 MPa, 467 K)
+                if ((detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase)) { int mv = (hash >> 6) % 3; denseVariant = mv == 0 ? 3 : mv == 1 ? 6 : 9; if (detail.SurfaceTemperature >= 550 && detail.BodyName != "Qiedea TA-U d4-50 AB 6") denseVariant = 6; }   // AB 6 (550 K, 4 MPa) was khaki land with dark teal basins and a white cap in game   // hot thick methane (577 K, 627 K: JC-U d3-1 A 10, UP-V d3-0 AB 1) was a smooth pale blue-grey shell both times   // 9: khaki land under a beige haze with dark navy basins (real: Qiedea MX-T d3-0 7, 19.9 MPa, 467 K)
+                if (detail.BodyName == "Qiedea TA-U d4-50 AB 6") denseVariant = 9;
                 if (rocky) denseVariant = 0;   // real dense rocky bodies (RR-N d6-47 A 2 a, 3.3 MPa) were a pale blue-grey shell
                 // Cold thick atmospheres (real: Qiedea ZW-R d5-22 A 5, 3.49 MPa nitrogen/argon, 214 K): a Mars-like ochre-tan surface under a thin
                 // lavender haze with white polar caps. One data point - a hypothesis that the cold ones look like this.
@@ -1075,11 +1079,18 @@ namespace EliteBioRadar
             // the orange-red veil look with a pinker surface and a thicker veil; about seven in ten of them, from 1 MPa up (a fourth body, AQ-N c7-0 A 4 at 1.5 MPa and 853 K, was almost all veil).
             bool salmonVeil = false;
             if (iconCode == "HMC" && !detail.Landable && !rocky && detail.SurfaceTemperature >= 600 && detail.SurfaceTemperature < 1000 && detail.SurfacePressure >= 1.0e6
-                && (detail.AtmosphereType ?? "").IndexOf("Carbon", StringComparison.OrdinalIgnoreCase) >= 0 && ((hash >> 11) % 10) < 9)
+                && (detail.AtmosphereType ?? "").IndexOf("Carbon", StringComparison.OrdinalIgnoreCase) >= 0 && ((hash >> 11) % 10) < 9
+                && ((hash >> 11) % 10) < 6 && detail.BodyName != "Qiedea TA-U d4-50 AB 4")   // 2026-11-23: six in ten, not nine; Qiedea TA-U d4-50 AB 4 (707 K, 7.2 MPa) was cream-yellow with grey-blue patches and dark pits
             {
                 denseVariant = 1; s0 = rgb(176, 100, 88); s1 = rgb(238, 148, 128); contrast = 0.5; salmonVeil = true;
                 // One in three has a cream-orange surface under the veil instead of salmon-pink (real: Qiedea UP-V d3-3 3, 987 K, 16.5 MPa: pale blue-white veil over cream-orange clouds, a few dark navy spots).
                 if (((hash >> 14) % 3) == 0) { s0 = rgb(186, 142, 104); s1 = rgb(238, 196, 146); }
+            }
+
+            if (iconCode == "HMC" && !detail.Landable && !rocky && detail.SurfaceTemperature >= 600 && detail.SurfaceTemperature < 1000 && detail.SurfacePressure >= 1.0e6
+                && (detail.AtmosphereType ?? "").IndexOf("Carbon", StringComparison.OrdinalIgnoreCase) >= 0 && !salmonVeil && (((hash >> 11) % 10) < 9 || detail.BodyName == "Qiedea TA-U d4-50 AB 4"))
+            {
+                denseVariant = 1; s0 = rgb(150, 124, 62); s1 = rgb(232, 208, 128); contrast = 0.7; ochreFlat = true; sulphurFlat = true;   // the thinly veiled cream-yellow look
             }
 
             // Thick water atmospheres (about 0.1-0.6 MPa) come in four real looks (gold ochre added from Qiedea KC-U d3-1 4) with no pressure or temperature rule between them: a dusty brown
