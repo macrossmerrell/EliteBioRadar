@@ -299,7 +299,9 @@ namespace EliteBioRadar
             if (redLit) look = 18;
             // Airless bodies were dull in game (Qiedea KG-O c9-0 A 2, 3, 6, 7 at 355-665 K: very dark rust-brown, or grey-taupe with rust flecks; earlier UP-V d3-5 C 5, C 6 and XP-H b16-1 B 2 the same),
             // while the bright and saturated looks (salmon, rust red, rose with white patches, sandy cream, olive with yellow) kept being drawn for them. Six in ten of those picks move to a dull look.
-            if (detail.SurfacePressure <= 0 && temp > 0 && temp < 1130 && !HmcRightKeep.Contains(detail.BodyName ?? "")
+            // Airless bodies of 700-1130 K: Qiedea UU-H b16-3 1 (814 K, minor metallic magma volcanism) was a Mars-like rust-orange with dark charcoal patches and hardly a crater, so two in five of them draw that.
+            if (detail.SurfacePressure <= 0 && !redLit && temp >= 700 && temp < 1130 && !HmcRightKeep.Contains(detail.BodyName ?? "") && ((uint)pickHash >> 14) % 10 < 4) look = 29;
+            if (detail.SurfacePressure <= 0 && temp > 0 && temp < 700 && !HmcRightKeep.Contains(detail.BodyName ?? "")
                 && (look == 5 || look == 9 || look == 10 || look == 13 || look == 14 || look == 19 || look == 20 || look == 21 || look == 28 || look == 7)
                 && (((uint)pickHash >> 12) % 10) < 6)
                 look = new[] { 8, 8, 26, 15, 18 }[((uint)pickHash >> 8) % 5];
@@ -381,6 +383,9 @@ namespace EliteBioRadar
                     { l.Light = rgb(140, 124, 112); l.Dark = rgb(92, 84, 76); l.Accent = rgb(104, 92, 82); l.Bright = rgb(158, 140, 126);
                       l.Contrast = 0.7; l.RustAmt = 0.2; l.BrightAmt = 0.3; l.CraterAmt = 0.5; l.RayAmt = -0.9; }
                     l.NoFrost = true; break;
+                case 29: // Mars-like rust-orange with dark charcoal patches and almost no craters (real: Qiedea UU-H b16-3 1, 814 K, airless)
+                    l.Light = rgb(176, 92, 60); l.Dark = rgb(120, 64, 48); l.Accent = rgb(62, 52, 50); l.Bright = rgb(196, 116, 84);
+                    l.Contrast = 0.8; l.RustAmt = 0.55; l.BrightAmt = 0.25; l.CraterAmt = 0.1; l.RayAmt = 0.1; l.NoFrost = true; break;
                 case 28: // dark brick red with ragged grey-tan patches and few craters (real: Qiedea UP-V d3-0 C 5, 475 K, airless; UG-P c8-4 A 2, 201 K, thin atmosphere: rust-red and tan patchwork)
                     l.Light = rgb(132, 62, 52); l.Dark = rgb(84, 42, 40); l.Accent = rgb(150, 128, 112); l.Bright = rgb(176, 156, 136);
                     l.Contrast = 0.9; l.RustAmt = 0.5; l.BrightAmt = 0.6; l.CraterAmt = 0.25; l.RayAmt = -0.8; l.NoFrost = true; break;
@@ -472,6 +477,20 @@ namespace EliteBioRadar
             {
                 l.Light = rgb(118, 98, 92); l.Dark = rgb(76, 62, 58); l.Accent = rgb(112, 84, 70); l.Bright = rgb(196, 158, 132);
                 l.Contrast = 0.8; l.RustAmt = 0.55; l.BrightAmt = 0.45; l.CraterAmt = 0.6; l.RayAmt = 0.4;
+            }
+            // 2026-11-23, from the verdict log. Small metal-rich bodies were lumpy grey-tan, not brick red (Qiedea UP-V d3-0 C 1, 246 km; EB-X e1-0 3 a, 187 km, blue-grey), while the brick-red matches
+            // were 550 km and up. Some mid-size ones were grey-brown (Qiedea IY-N c8-1 A 1, plain; EI-O c8-1 A 1, with ragged brick-red blotches and no craters), so two in five of those draw that.
+            bool mrMatched = detail.BodyName is "Qiedea ZW-R d5-22 B 1" or "Qiedea TU-M c8-0 A 1" or "Qiedea ST-P c6-0 B 1" or "Qiedea MH-V d2-2 1" or "Qiedea MH-V d2-2 2";
+            double radKm = detail.Radius / 1000.0;
+            if (!mrMatched && starK < StarTintMinK && radKm > 0 && radKm < 350)
+            {
+                l.Light = rgb(142, 132, 118); l.Dark = rgb(96, 88, 78); l.Accent = rgb(112, 100, 86); l.Bright = rgb(172, 162, 148);
+                l.Contrast = 0.6; l.RustAmt = 0.15; l.BrightAmt = 0.2; l.CraterAmt = 0.8; l.RayAmt = 0.9;
+            }
+            else if (!mrMatched && starK < 6500 && radKm >= 900 && radKm <= 3000 && ((hash >> 13) % 10) < 4)
+            {
+                l.Light = rgb(114, 102, 94); l.Dark = rgb(72, 64, 60); l.Accent = rgb(142, 66, 54); l.Bright = rgb(150, 80, 64);
+                l.Contrast = 0.7; l.RustAmt = 0.65; l.BrightAmt = 0.3; l.CraterAmt = 0.05; l.RayAmt = 0.0;
             }
             if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 250)
                 l.IceAmt = 0.08 + 0.22 * (((hash >> 9) % 100) / 100.0);   // small polar patches only (the first version gave a big cap: Qiedea TU-M c8-0 C 5 a has none)
@@ -702,6 +721,8 @@ namespace EliteBioRadar
             };
             int rk = (hash >> 4) % 5;
             if (((hash >> 14) % 6) == 0) rk = 5;   // about one in six: the dark rust-brown with small teal patches and a white cap (one real body so far)
+            // 2026-11-23: two landable rocky ice bodies were dark chocolate rust-brown with pinkish-tan patches and frost only at a pole (Qiedea UP-V d3-3 5 a, 158 K; ES-P c7-2 AB 4 a, 116 K), where the app drew grey-white frosted ones; half of them take the dark chocolate look.
+            if (((hash >> 8) % 10) < 5) rk = 1;
             switch (rk)
             {
                 case 0: // sandy orange-tan with grey-brown patches, fine white speckles and a large polar cap (real: FX-S d4-0 7)
