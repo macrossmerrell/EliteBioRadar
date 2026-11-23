@@ -135,7 +135,7 @@ namespace EliteBioRadar
         // Rings are tinted from A stars up: the rocky rings of Qiedea JC-U d3-1 A 3 (A5 star) read cream-white and tan in game, lighter than their class colours.
         public const double RingTintMinK = 8000;   // an A9 (7712 K, Qiedea OS-T d3-2) had plain brown-tan rings
         // The coolest stars (L dwarfs, about 1500 K): the body is lit almost purely red and reads monochrome red-pink (real: Qiedea TU-M c8-0 B 1, an L6 star at 1521 K, 6 ls away).
-        public const double LowStarTintMaxK = 2100;   // was 2400 (1800 before that): the L1 dwarfs of Qiedea DL-N c7-0 (1866 K) and ES-P c7-2 (1879 K) tint their bodies pink-red, but the very cool M dwarfs of YT-D b17-0 (2262 K) and SS-F b16-0 (2233 K) lit white icy bodies plain white in game
+        public const double LowStarTintMaxK = 1950;   // 2026-11-23: was 2100; Qiedea QJ-F a38-0 3 (M9, 2008 K) was plain white snow in game, while the L1 dwarfs at 1866 and 1879 K did tint pink-red. Before that 2400 (1800 before that): the L1 dwarfs of Qiedea DL-N c7-0 (1866 K) and ES-P c7-2 (1879 K) tint their bodies pink-red, but the very cool M dwarfs of YT-D b17-0 (2262 K) and SS-F b16-0 (2233 K) lit white icy bodies plain white in game
 
         public static (double r, double g, double b) StarLightTint(double kelvin)
         {
@@ -227,6 +227,14 @@ namespace EliteBioRadar
             return StableHash($"{stem}|{d.ParentBodyID}|{d.PairBarycenterID}");
         }
 
+        // High-metal bodies marked RIGHT in the verdict log (2026-11-23): the airless-dulling rule below never moves their look.
+        private static readonly HashSet<string> HmcRightKeep = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Qiedea ER-U d3-7 1", "Qiedea ES-P c7-2 AB 5", "Qiedea IY-N c8-1 A 1 a", "Qiedea IY-N c8-1 A 2", "Qiedea HD-O c8-2 3", "Qiedea WY-D b17-0 AB 4", "Qiedea UP-V d3-0 C 4", "Qiedea UP-V d3-0 C 12",
+            "Qiedea UP-V d3-31 B 7", "Qiedea UP-V d3-31 B 4", "Qiedea UP-V d3-3 2", "Qiedea NK-R c7-4 2", "Qiedea NK-R c7-4 1", "Qiedea NK-R c7-4 3", "Qiedea UP-V d3-5 B 3", "Qiedea UP-V d3-5 B 2",
+            "Qiedea UP-V d3-5 C 8", "Qiedea UP-V d3-5 C 2", "Qiedea XP-H b16-1 B 5", "Qiedea TA-G b17-3 A 2", "Qiedea KG-O c9-0 A 5", "Qiedea KG-O c9-0 A 4", "Qiedea KG-O c9-0 C 3",
+        };
+
         private static LandableWorldLook GetLandableWorldLookCore(BodyScanDetail detail, string iconCode, double starK)
         {
             int hash = StableHash(detail.BodyName);
@@ -289,6 +297,12 @@ namespace EliteBioRadar
             // Around an L dwarf the body reads monochrome red (see LowStarTintMaxK): start from the flat neutral grey-brown and let the tint colour it.
             bool redLit = starK > 0 && starK < LowStarTintMaxK;
             if (redLit) look = 18;
+            // Airless bodies were dull in game (Qiedea KG-O c9-0 A 2, 3, 6, 7 at 355-665 K: very dark rust-brown, or grey-taupe with rust flecks; earlier UP-V d3-5 C 5, C 6 and XP-H b16-1 B 2 the same),
+            // while the bright and saturated looks (salmon, rust red, rose with white patches, sandy cream, olive with yellow) kept being drawn for them. Six in ten of those picks move to a dull look.
+            if (detail.SurfacePressure <= 0 && temp > 0 && temp < 1130 && !HmcRightKeep.Contains(detail.BodyName ?? "")
+                && (look == 5 || look == 9 || look == 10 || look == 13 || look == 14 || look == 19 || look == 20 || look == 21 || look == 28 || look == 7)
+                && (((uint)pickHash >> 12) % 10) < 6)
+                look = new[] { 8, 8, 26, 15, 18 }[((uint)pickHash >> 8) % 5];
 
             var l = new LandableWorldLook
             {
@@ -476,9 +490,16 @@ namespace EliteBioRadar
         private static readonly HashSet<string> IcyKeepLook = new HashSet<string> { "Qiedea PN-E b17-1 2", "Qiedea AL-W d2-5 6", "Qiedea IY-N c8-1 AB 1 a", "Qiedea GN-P c7-0 A 1", "Qiedea GN-P c7-0 B 8", "Qiedea GN-P c7-0 B 1" };
         private static readonly HashSet<string> IcyConfirmedLegacy = new HashSet<string> { "Qiedea GN-P c7-0 B 8", "Qiedea GN-P c7-0 B 1" };
 
+        // Icy bodies marked RIGHT on a parametric look (verdict log, 2026-11-23): the three newer tones below never replace theirs.
+        private static readonly HashSet<string> IcyRightKeep = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Qiedea ZK-H b16-0 4", "Qiedea BW-F b17-0 8 a", "Qiedea XP-H b16-1 A 3 a", "Qiedea TA-G b17-2 B 3", "Qiedea TA-G b17-2 B 4", "Qiedea TA-G b17-3 B 2", "Qiedea TA-G b17-3 B 5",
+            "Qiedea TA-G b17-3 B 4", "Qiedea MR-K a35-0 7", "Qiedea OX-I a36-0 1", "Qiedea QD-H a37-0 5", "Qiedea XV-B a40-1 7",
+        };
+
         // Parametric icy look: base tone x accent colour x accent form x crater density, all from the name hash. Weights follow the 21 icy moons of QB-C b17-0
         // (near-white 6, pale grey 6, mid grey 3, charcoal 1, dark red-brown 1, dark teal 1, plus mixes): a guess at the real spread, not a measured one.
-        private static void ApplyParametricIcyLook(LandableWorldLook l, int hash)
+        private static void ApplyParametricIcyLook(LandableWorldLook l, int hash, string? bodyName = null)
         {
             Color rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
             uint m = (uint)hash * 2654435761u; m ^= m >> 15; m *= 2246822519u; m ^= m >> 13;
@@ -492,6 +513,32 @@ namespace EliteBioRadar
                               rgb(208, 166, 130), rgb(152, 142, 132), rgb(146, 156, 168), rgb(226, 232, 232), rgb(104, 112, 118) };
             Color[] dark = { rgb(214, 213, 210), rgb(170, 172, 172), rgb(120, 122, 122), rgb(70, 70, 70), rgb(70, 48, 46), rgb(54, 60, 60),
                              rgb(152, 118, 94), rgb(112, 106, 100), rgb(102, 112, 126), rgb(186, 200, 204), rgb(62, 70, 76) };
+            // Three looks added 2026-11-23 from the wrong marks of Qiedea QJ-F a38-0 3, XV-B a40-1 5 and WV-B a40-1 4 (about 19% of icy bodies between them). Drawn through the same
+            // organic shader layers as the other tones (ragged patches, wandering fine cracks), not with hard shapes.
+            {
+                uint m2 = (uint)hash * 0x9E3779B1u; m2 ^= m2 >> 16; m2 *= 0x85EBCA6Bu; m2 ^= m2 >> 13;
+                int nr = (int)(m2 % 100);
+                if (nr < 19 && !IcyRightKeep.Contains(bodyName ?? ""))
+                {
+                    l.SpecAmt = 0.4; l.RayAmt = 0.05;
+                    if (nr < 8)   // white snow with dark brown ragged veins (real: QJ-F a38-0 3, 47 K)
+                    {
+                        l.Light = rgb(236, 235, 232); l.Dark = rgb(204, 205, 204); l.Bright = rgb(214, 220, 224); l.BrightAmt = 0.4; l.Accent = rgb(108, 72, 64); l.RustAmt = 0.55;
+                        l.Ice = rgb(104, 68, 60); l.LineAmt = 1.0; l.LineFine = 1.0; l.Contrast = 0.4; l.CraterAmt = 0.1;
+                    }
+                    else if (nr < 13)   // purple with black cracks (real: XV-B a40-1 5, 20 K)
+                    {
+                        l.Light = rgb(104, 76, 98); l.Dark = rgb(68, 46, 64); l.Bright = rgb(130, 98, 124); l.BrightAmt = 0.5; l.Accent = rgb(26, 14, 20); l.RustAmt = 0.5;
+                        l.Ice = rgb(18, 8, 12); l.LineAmt = 1.0; l.LineFine = 1.0; l.Contrast = 0.7; l.CraterAmt = 0.1; l.SpecAmt = 0.35;
+                    }
+                    else   // red-brown with pale rose patches and rayed craters (real: WV-B a40-1 4, 21 K)
+                    {
+                        l.Light = rgb(160, 94, 90); l.Dark = rgb(108, 62, 60); l.Bright = rgb(198, 144, 138); l.BrightAmt = 0.7; l.Accent = rgb(82, 44, 42); l.RustAmt = 0.5;
+                        l.Contrast = 0.8; l.CraterAmt = 0.6; l.RayAmt = 0.9; l.Ice = rgb(48, 48, 50);
+                    }
+                    return;
+                }
+            }
             l.Light = light[tone]; l.Dark = dark[tone];
             l.Accent = rgb(56, 54, 54); l.Ice = rgb(48, 48, 50); l.Bright = rgb(240, 240, 238);
             l.Contrast = tone <= 1 ? 0.30 + 0.15 * Roll(3, 100) / 100.0 : tone == 2 ? 0.55 : 0.80;
@@ -584,7 +631,7 @@ namespace EliteBioRadar
             bool coldKeep = look == 2 && temp > 0 && temp < 35;
             if (look <= 6 && !coldKeep && !IcyConfirmedLegacy.Contains(detail.BodyName ?? ""))
             {
-                ApplyParametricIcyLook(l, hash);
+                ApplyParametricIcyLook(l, hash, detail.BodyName);
                 return l;
             }
             switch (look)
@@ -710,6 +757,24 @@ namespace EliteBioRadar
             if (((hash >> 16) % 8) == 0) look = ((hash >> 12) & 1) == 1 ? 9 : 7;   // about 1 in 8, half of them the grey-white-patched look 9 (real: Qiedea HD-O c8-2 2 a drew look 7 and was pale in game); look 7 is: very dark with dull red patches and small yellow flecks (one real body: Qiedea KD-P c7-1 1 c)
             if (detail.SurfacePressure > 0 && ((hash >> 20) % 20) < 2) look = 6;   // about one in ten of the thin-atmosphere ones: the very dark blue-grey (AB 6 f a was a match; AB 9 g and MH-V d2-2 6 d were not, so the share came down from a quarter)
             else if (detail.SurfacePressure > 0 && ((hash >> 20) % 20) < 10) look = new[] { 1, 3, 5 }[(hash >> 24) % 3];   // about 40% of the thin-atmosphere ones take a warm orange-tan look: nearly all of them did in game (Qiedea II-P c7-1 1 c and 1 d, MH-V d2-2 6 c and 6 d, AB 6 a, YK-M c8-0 1 d)
+            // 2026-11-23, from the verdict log: cold thin-atmosphere rocky bodies (156-175 K, 0.4-6 kPa: UP-V d3-0 C 10 f, C 10 g, C 11 b, UP-V d3-5 A 6 a, A 6 b, XP-H b16-1 B 4 a) were warm rust-orange or brick red with
+            // maroon patches, hardly any craters and pale frost, or pale grey-white and smooth, where the app drew grey-blue or tan-orange cratered ones. Airless rocky bodies at 410-515 K were bright sulphur-yellow
+            // or very dark grey-brown with olive patches, not the tan-orange crumpled look.
+            bool rockyKeep = detail.BodyName is "Qiedea AL-W d2-5 3 a" or "Qiedea KP-R c7-7 5 a";
+            if (!rockyKeep)
+            {
+                double tp = detail.SurfaceTemperature, pr = detail.SurfacePressure;
+                if (tp > 0 && tp < 200 && pr > 0 && pr < 10000)
+                {
+                    int cr = (hash >> 6) % 10;
+                    look = cr < 3 ? 10 : cr < 7 ? 12 : cr < 9 ? 13 : 11;
+                }
+                else if (pr <= 0 && tp >= 300 && tp <= 600)
+                {
+                    if ((detail.Volcanism ?? "").Contains("magma", StringComparison.OrdinalIgnoreCase) && ((hash >> 10) % 10) < 5) look = 14;
+                    else if ((look == 1 || look == 3 || look == 5 || look == 2) && ((hash >> 8) % 10) < 5) look = 15;
+                }
+            }
             switch (look)
             {
                 case 0: // pale grey, pink-brown patches, frost (cold bodies)
@@ -730,6 +795,18 @@ namespace EliteBioRadar
                 case 8: // bright ochre-yellow ground with brown flecks and a few white frost patches (real: Qiedea AL-W d2-5 3 a, SO2 0.3 kPa, 232 K, F7 star)
                     l.Light = rgb(206, 160, 90); l.Dark = rgb(150, 110, 62); l.Accent = rgb(120, 70, 56); l.Bright = rgb(236, 232, 224);
                     l.Contrast = 0.6; l.RustAmt = 0.5; l.BrightAmt = 0.45; l.CraterAmt = 0.3; l.RayAmt = 0.0; l.IceAmt = 0.3; break;
+                case 12: // warm rust-orange with maroon patches, a big rayed crater and pale frost at the limb, almost no other craters (real: UP-V d3-5 A 6 a, XP-H b16-1 B 4 a, 156-175 K)
+                    l.Light = rgb(186, 108, 70); l.Dark = rgb(130, 76, 56); l.Accent = rgb(122, 58, 58); l.Bright = rgb(222, 176, 128);
+                    l.Contrast = 0.8; l.RustAmt = 0.6; l.BrightAmt = 0.5; l.CraterAmt = 0.1; l.RayAmt = 0.5; l.IceAmt = 0.25; break;
+                case 13: // pale grey-white, smooth, with faint tan patches (real: UP-V d3-5 A 6 b, 158 K, 0.6 kPa)
+                    l.Light = rgb(200, 198, 194); l.Dark = rgb(172, 168, 164); l.Accent = rgb(170, 140, 108); l.Bright = rgb(226, 214, 190);
+                    l.Contrast = 0.4; l.RustAmt = 0.3; l.BrightAmt = 0.4; l.CraterAmt = 0.15; l.RayAmt = 0.0; break;
+                case 14: // bright sulphur-yellow with brown blotches and small pits (real: UP-V d3-5 B 2 a, 410 K, airless, major rocky magma volcanism)
+                    l.Light = rgb(206, 186, 74); l.Dark = rgb(150, 126, 52); l.Accent = rgb(108, 74, 42); l.Bright = rgb(232, 218, 120);
+                    l.Contrast = 0.7; l.RustAmt = 0.55; l.BrightAmt = 0.4; l.CraterAmt = 0.35; l.RayAmt = 0.0; break;
+                case 15: // very dark grey-brown with olive-green patches, small craters, dim (real: UP-V d3-31 B 2 a, 515 K, airless)
+                    l.Light = rgb(72, 70, 62); l.Dark = rgb(46, 46, 40); l.Accent = rgb(86, 92, 62); l.Bright = rgb(112, 116, 84);
+                    l.Contrast = 0.6; l.RustAmt = 0.25; l.BrightAmt = 0.5; l.CraterAmt = 0.45; l.RayAmt = 0.0; break;
                 case 10: // deep brick red with ragged tan-gold patches and a few pale patches, almost no craters (real: Qiedea UP-V d3-0 C 10 f, 174 K, 1.6 kPa)
                     l.Light = rgb(146, 66, 54); l.Dark = rgb(98, 48, 44); l.Accent = rgb(190, 148, 92); l.Bright = rgb(226, 186, 112);
                     l.Contrast = 0.9; l.RustAmt = 0.5; l.BrightAmt = 0.7; l.CraterAmt = 0.15; l.RayAmt = 0.0; break;
@@ -823,6 +900,7 @@ namespace EliteBioRadar
                 bool methane = (detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase);
                 Color lowS0 = methane ? rgb(216, 210, 192) : rgb(204, 222, 216);
                 Color lowS1 = methane ? rgb(248, 244, 232) : rgb(240, 248, 244);
+                if ((detail.AtmosphereType ?? "").Contains("Argon", StringComparison.OrdinalIgnoreCase) || detail.AtmosphereComposition.Any(g => g.Percent >= 50 && g.Name.Contains("Argon", StringComparison.OrdinalIgnoreCase))) { lowS0 = rgb(224, 218, 200); lowS1 = rgb(246, 242, 230); }   // cream-ivory under argon (real: Qiedea UU-H b16-3 3, 99% argon, 28 kPa)
                 Color Blend(Color a, Color b, double t) => Color.FromRgb(
                     (byte)(a.R + (b.R - a.R) * t), (byte)(a.G + (b.G - a.G) * t), (byte)(a.B + (b.B - a.B) * t));
                 s0 = Blend(lowS0, s0, haze);
@@ -854,7 +932,7 @@ namespace EliteBioRadar
                 // Very dense and cold (under 300 K): dark navy basins on cream land under a huge ice cap (real: Qiedea AQ-N c7-0 A 7, 31 MPa of argon-rich nitrogen, 254 K) or on red-orange land with almost no cap (its barycentre partner A 6, 11 MPa, 244 K); both of the two seen, so three in four.
                 if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 300 && detail.SurfacePressure >= 5.0e6 && ((hash >> 13) % 4) != 3) denseVariant = 9;
                 // Cold and dense but under 5 MPa: a smooth pale lilac-grey veil over the whole disc about six times in ten (real: Qiedea QY-P c6-0 B 2, argon-rich 1.26 MPa, 173 K).
-                else if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 300 && ((hash >> 13) % 10) < 6) denseVariant = 6;
+                else if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 300 && (detail.SurfaceTemperature < 200 || ((hash >> 13) % 10) < 6)) denseVariant = 6;   // under 200 K always the veil: Qiedea KG-O c9-0 C 2 (128 K, 1.9 MPa nitrogen) was a smooth pale blue-grey haze with no caps, where the ochre-tan Mars look came from bodies of 214 K and up
                 // Extremely hot bodies (real: RR-N d6-47 A 1, 2,154 K) are near-black with glowing red lava patches.
                 bool veryHot = detail.SurfaceTemperature >= 1500;
                 // Methane-rich: one real example (PW-N d6-2 8, 2.9 MPa, 372 K) was olive-green under a teal haze - a guess
@@ -865,7 +943,7 @@ namespace EliteBioRadar
                 if (rocky) denseVariant = 0;   // real dense rocky bodies (RR-N d6-47 A 2 a, 3.3 MPa) were a pale blue-grey shell
                 // Cold thick atmospheres (real: Qiedea ZW-R d5-22 A 5, 3.49 MPa nitrogen/argon, 214 K): a Mars-like ochre-tan surface under a thin
                 // lavender haze with white polar caps. One data point - a hypothesis that the cold ones look like this.
-                if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 300 && !rocky && (detail.AtmosphereType ?? "").IndexOf("Methane", StringComparison.OrdinalIgnoreCase) < 0
+                if (detail.SurfaceTemperature >= 200 && detail.SurfaceTemperature < 300 && !rocky && (detail.AtmosphereType ?? "").IndexOf("Methane", StringComparison.OrdinalIgnoreCase) < 0
                     && (detail.AtmosphereType ?? "").IndexOf("Water", StringComparison.OrdinalIgnoreCase) < 0) denseVariant = 7;
                 // Water atmospheres (steam): pale blue-grey, as steam clouds are. One real body so far - Qiedea ZW-R d5-22 A 3,
                 // hot thick water, 951 kPa, 659 K: a pale blue-grey veil with faint brown showing through - a hypothesis for the rest.
@@ -1110,10 +1188,10 @@ namespace EliteBioRadar
                 atmoLook.Haze = rgb(70, 100, 126); atmoLook.Glow = rgb(120, 170, 205);
                 atmoLook.Cloud = rgb(226, 234, 242);
                 atmoLook.HazeAmt = Math.Min(haze, 0.25);
-                atmoLook.CycloneAmt = 0.85; atmoLook.CloudAmt = 0.70; atmoLook.CrackAmt = 0.0;
+                atmoLook.CycloneAmt = 0.85; atmoLook.CloudAmt = 0.85; atmoLook.CrackAmt = 0.0;   // cloud 0.70 -> 0.85: Qiedea UU-H b16-3 2 had big puffy white cloud masses
                 // Caps grow steeply with cold: the 223 K world had large caps at both poles, the 251 K one (Qiedea JC-U d3-1 B 4) showed none from the front.
                 double wcold = detail.SurfaceTemperature > 0 ? 0.55 * Math.Clamp((265.0 - detail.SurfaceTemperature) / 45.0, 0.0, 1.3) : 0.2;
-                atmoLook.Cap = rgb(226, 232, 236); atmoLook.CapAmt = Math.Clamp(wcold, 0.0, 0.72);
+                atmoLook.Cap = rgb(226, 232, 236); atmoLook.CapAmt = Math.Clamp(wcold, 0.30, 0.72);   // floor 0.30: UU-H b16-3 2 (274 K) had pale cloud caps at both poles
                 atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.40, 0.38, 0.84);
             }
             else if (elw)
@@ -1229,7 +1307,13 @@ namespace EliteBioRadar
             switch (iconCode)
             {
                 case "GG1":
-                    if (((hash >> 12) % 3) == 0)
+                    if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 60)
+                    {   // very cold Class I: lilac-purple with fine pale streaky bands (real: Qiedea WA-G b17-1 1, 36 K)
+                        look.C0 = rgb(0x60, 0x50, 0x80); look.C1 = rgb(0x80, 0x6c, 0xa0); look.C2 = rgb(0xb0, 0x9c, 0xc4);
+                        look.C3 = rgb(0xd0, 0xbe, 0xd8); look.Band4 = rgb(0x4c, 0x3e, 0x6c); look.Glow = rgb(0xa8, 0x98, 0xc0);
+                        look.BandCount = 16; look.Turb = 0.5; look.StormAmt = 0.1; look.Contrast = 0.55;
+                    }
+                    else                     if (((hash >> 12) % 3) == 0)
                     {   // dark red-brown belts between cream zones, many tiny oval storms (real: RR-N d6-47 B 5)
                         look.C0 = rgb(0x2a, 0x0f, 0x08); look.C1 = rgb(0x5a, 0x24, 0x12); look.C2 = rgb(0xb8, 0xb0, 0xa2);
                         look.C3 = rgb(0xdc, 0xd6, 0xc8); look.Band4 = rgb(0x18, 0x08, 0x04); look.Glow = rgb(0xc4, 0xb8, 0xa4);
@@ -1262,6 +1346,12 @@ namespace EliteBioRadar
                         look.C0 = rgb(0x14, 0x1c, 0x6a); look.C1 = rgb(0x1c, 0x28, 0x86); look.C2 = rgb(0x26, 0x36, 0xa2);
                         look.C3 = rgb(0x18, 0x34, 0xb4); look.Band4 = rgb(0x0e, 0x14, 0x52); look.Glow = rgb(0x5a, 0x7a, 0xd0);
                         look.Contrast = 0.35;
+                    }
+                    if (detail.SurfaceTemperature >= 600)
+                    {   // a hot Class III as a mottled red-mauve ball with pale blotches, no banding (real: Qiedea KP-R c7-7 5, 662 K; the 492 K one was navy)
+                        look.C0 = rgb(0x5c, 0x2e, 0x34); look.C1 = rgb(0x8c, 0x4e, 0x50); look.C2 = rgb(0xb0, 0x82, 0x80);
+                        look.C3 = rgb(0xc6, 0xa0, 0x9c); look.Band4 = rgb(0x42, 0x20, 0x24); look.Glow = rgb(0xa8, 0x70, 0x70);
+                        look.BandCount = 6; look.Turb = 2.4; look.StormAmt = 0.0; look.Contrast = 0.9;
                     }
                     break;
                 case "GG4":
@@ -1531,7 +1621,7 @@ namespace EliteBioRadar
                     // True proportions for every ringed giant: the rings' inner and outer edges sit at their real multiples of the planet's radius (the drawn sphere is 0.85 R), so a narrow
                     // ring looks narrow and a wide one wide. (Before, every ring system was stretched to fill the same 1.4 R .. scene-edge span, so they all looked alike.)
                     double lo = real.Min(r => r.InnerRad / detail.Radius), hi = real.Max(r => r.OuterRad / detail.Radius);
-                    R = Math.Max(Math.Min(width, height) * 0.155, Math.Min(R, Math.Min(width, height) * 0.46 / (0.85 * hi)));
+                    R = Math.Max(Math.Min(width, height) * 0.075, Math.Min(R, Math.Min(width, height) * 0.46 / (0.85 * hi)));   // floor was 0.155; Qiedea KP-R c7-7 5's rings run out to 6.9 planet radii, which the old floor squeezed to about 3.6
                     double s = 0.85 * R;
                     minPx = Math.Max(lo * s, 1.08 * s);
                     maxPx = Math.Min(hi * s, Math.Min(width, height) * 0.46);
@@ -2463,7 +2553,7 @@ namespace EliteBioRadar
             if (hasRings && detail!.Radius > 0)
             {
                 double hi = detail.Rings.Where(r => r.OuterRad > 0 && r.InnerRad > 0).Max(r => r.OuterRad / detail.Radius);
-                R = Math.Max(Math.Min(width, height) * 0.155, Math.Min(R, Math.Min(width, height) * 0.46 / hi));
+                R = Math.Max(Math.Min(width, height) * 0.075, Math.Min(R, Math.Min(width, height) * 0.46 / hi));
             }
             return (cx, cy, R);
         }
