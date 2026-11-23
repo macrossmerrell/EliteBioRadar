@@ -435,7 +435,7 @@ namespace EliteBioRadar
         public event Action<string, double>? Supercharged;   // the journal's JetConeBoost: star type ("NEUTRON" / "WHITE DWARF") and the BoostValue; live only
         public event Action? SupercruiseExited;  // the journal's SupercruiseExit (dropped back to normal space); live only
         public event Action? SupercruiseEntered;  // the journal's SupercruiseEntry; live only
-        public event Action<bool>? SupercruiseOverdriveChanged;   // (on) supercruise overdrive engaged or disengaged; live only
+        public event Action<bool>? SupercruiseOverdriveChanged;   // (on) supercruise overcharge engaged or disengaged; live only
         private bool? _wasSco;
         public event Action<bool>? SupercruiseAssistChanged;   // (on) supercruise assist engaged or disengaged; live only
         private bool? _wasAssist;
@@ -1477,7 +1477,7 @@ namespace EliteBioRadar
                 SrvFlagEdge("brake", ref _wasHandbrake, status.SrvHandbrake, !quiet && status.InSRV, "Handbrake on", "Handbrake off", HandbrakeChanged);
                 SrvFlagEdge("turret", ref _wasTurretDeployed, status.SrvTurretView,!quiet && status.InSRV, "Turret deployed", "Turret retracted", TurretChanged);
                 FlagEdge(ref _wasSilentRunning, status.SilentRunning, !quiet, "Silent running on", "Silent running off", SilentRunningChanged);
-                FlagEdge(ref _wasSco, status.ScoActive, !quiet && status.Supercruise, "Supercruise overdrive engaged", "Supercruise overdrive disengaged", SupercruiseOverdriveChanged);
+                FlagEdge(ref _wasSco, status.ScoActive, !quiet && status.Supercruise, "Supercruise overcharge engaged", "Supercruise overcharge disengaged", SupercruiseOverdriveChanged);
                 // The cooldown starts the moment a jump ends, inside the quiet window that jump opens, so the start is not held back by it; only the "ready" end respects it.
                 FlagEdge(ref _wasCooldown, status.FsdCooldown, !status.InSRV && !status.InFighter && !status.OnFoot && !_cooldownAtBody && !(status.FsdCooldown && _cooldownAfterJump) && (status.FsdCooldown || !quiet), "FSD cooling down", "FSD ready", FsdCooldownChanged);
                 FlagEdge(ref _wasMassLocked,status.MassLocked, !quiet && !status.InSRV && !status.InFighter && !status.OnFoot && !status.Docked && !status.Landed, "Mass locked", "Mass lock cleared", RaiseMassLock);

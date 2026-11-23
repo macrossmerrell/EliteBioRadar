@@ -36,7 +36,7 @@ namespace EliteBioRadar
         public static readonly AnimationDef Supercruise =
             new("supercruise", "Entering supercruise", "Jump", AnimationSurfaces.Both, 0.85, "", "PREVIEW");
         public static readonly AnimationDef SupercruiseOverdrive =
-            new("supercruise-overdrive", "Supercruise overdrive engaged / disengaged", "Jump", AnimationSurfaces.Both, 0.85, "", "ON", PreviewCycle: new[] { "ON", "OFF" });
+            new("supercruise-overdrive", "Supercruise overcharge engaged / disengaged", "Jump", AnimationSurfaces.Both, 0.85, "", "ON", PreviewCycle: new[] { "ON", "OFF" });
         public static readonly AnimationDef SupercruiseAssist =
             new("supercruise-assist", "Supercruise assist engaged / disengaged", "Jump", AnimationSurfaces.Both, 0.85, "", "ON", PreviewCycle: new[] { "ON", "OFF" });
         public static readonly AnimationDef SupercruiseExit =

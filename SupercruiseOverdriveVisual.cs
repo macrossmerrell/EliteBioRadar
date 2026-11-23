@@ -4,7 +4,7 @@ using System.Windows.Media;
 
 namespace EliteBioRadar
 {
-    // Supercruise overdrive switching, on the supercruise look: the ship from behind with the stars streaming away from it. ON: the stars stretch into long streaks and shift from cyan to
+    // Supercruise overcharge switching, on the supercruise look: the ship from behind with the stars streaming away from it. ON: the stars stretch into long streaks and shift from cyan to
     // violet, a ring pulses out, the engines flare, and the three engines flare together.
     // OFF: a ring draws back in to the ship, the streaks shorten and go back to cyan and the engines settle. About 3.6 seconds. Detail = "ON" or "OFF".
     public sealed class SupercruiseOverdriveVisual : AnimationVisual
@@ -17,7 +17,7 @@ namespace EliteBioRadar
         private static readonly Brush CyanBrush = Frozen(Cyan), VioletBrush = Frozen(Violet), MutedBrush = Frozen(Color.FromRgb(0x88, 0x99, 0xaa));
         private static readonly Brush PlateBrush = Frozen(Color.FromArgb(204, 5, 10, 20)), HullBrush = Frozen(Color.FromRgb(0x2a, 0x3a, 0x46)), CoreBrush = Frozen(Color.FromRgb(255, 248, 235));
         private static readonly Pen CyanPlateEdge = FrozenPen(Color.FromArgb(140, Cyan.R, Cyan.G, Cyan.B), 1), VioletPlateEdge = FrozenPen(Color.FromArgb(140, Violet.R, Violet.G, Violet.B), 1);
-        // Everything that changes colour with the overdrive comes in nine levels, from cyan (0) to violet (8).
+        // Everything that changes colour with the overcharge comes in nine levels, from cyan (0) to violet (8).
         private static readonly Pen[] HullEdge = MakeEdges(0.87), WhiteStreak = AlphaPens(Lavender, 1.6), RingOut = AlphaPens(Violet, 1.8), RingIn = AlphaPens(Cyan, 1.8);
         private static readonly Brush[] HullGlow = MakeGlows(i => Mix(Cyan, Violet, i / 8.0), 77, 140), NozzleGlow = MakeGlows(i => Mix(Amber, Lavender, i / 8.0), 110, 190);
         // The ship seen from behind (the same drawing as the supercruise screen's).
@@ -74,7 +74,7 @@ namespace EliteBioRadar
             var (fadeOut, env, u, W, H) = LayoutScene(w, h, t, FadeOutAt);
             if (env <= 0) return;
             double a = Clamp01(t / 0.2) * fadeOut, k = Math.Min(1.25, (W - 40) / SceneW), px = (W - SceneW * k) / 2, py = (H - SceneH * k) / 2;
-            double p = EaseOut(Phase(t, 0.2, 1.5)), L = _on ? p : 1 - p;   // 0 = plain supercruise, 1 = overdrive
+            double p = EaseOut(Phase(t, 0.2, 1.5)), L = _on ? p : 1 - p;   // 0 = plain supercruise, 1 = overcharge
             int lv = (int)Math.Round(L * 8);
             double accel = 0.55 + 0.45 * L, stretch = 1 + 2.2 * L;
             _flow += Math.Clamp(t - _lastT, 0, 0.1) * (0.25 + 1.5 * accel);
@@ -86,7 +86,7 @@ namespace EliteBioRadar
             dc.PushTransform(new TranslateTransform(px, py));
             dc.PushTransform(new ScaleTransform(k, k));
 
-            // The stars: longer the further into overdrive, from cyan towards violet.
+            // The stars: longer the further into overcharge, from cyan towards violet.
             for (int i = 0; i < Streaks; i++)
             {
                 double z = (_flow + Offset[i]) % 1.0, z2 = z * z;
@@ -96,7 +96,7 @@ namespace EliteBioRadar
                 dc.DrawLine(i % 4 == 0 ? WhiteStreak[al] : ColourStreak[lv][al], new Point(CentreX + cs * d0, CentreY + sn * d0), new Point(CentreX + cs * d1, CentreY + sn * d1));
             }
 
-            // The ring: out from the ship as the overdrive engages (violet), drawn back in to it as it lets go (cyan).
+            // The ring: out from the ship as the overcharge engages (violet), drawn back in to it as it lets go (cyan).
             if (_on)
             {
                 double rp = Phase(t, 0.3, 0.9);
@@ -127,7 +127,7 @@ namespace EliteBioRadar
             dc.Pop(); dc.Pop();
 
             dc.DrawRoundedRectangle(PlateBrush, _on ? VioletPlateEdge : CyanPlateEdge, new Rect(26, 106, 188, 40), 6, 6);
-            DrawSpaced(dc, "OVERDRIVE", MonoFace, 13, _on ? VioletBrush : CyanBrush, SceneW / 2, 112, 0.1, Phase(t, 0.1, 0.3));
+            DrawSpaced(dc, "OVERCHARGE", MonoFace, 13, _on ? VioletBrush : CyanBrush, SceneW / 2, 112, 0.1, Phase(t, 0.1, 0.3));
             DrawSpaced(dc, _on ? "ENGAGED" : "DISENGAGED", MonoFace, 11, MutedBrush, SceneW / 2, 128, 0.1, Phase(t, 1.0, 0.4));
 
             dc.Pop(); dc.Pop();

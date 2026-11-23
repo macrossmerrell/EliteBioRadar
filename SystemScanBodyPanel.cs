@@ -78,6 +78,17 @@ namespace EliteBioRadar
             t.Start();
         }
 
+        // Brings the card (or moon row) of a body into view, once the layout has settled; a body this window does not list is ignored. Tried again shortly after,
+        // since a rescan can rebuild the cards and the panel's slide reflows the list.
+        private void ScrollToBody(string bodyName)
+        {
+            void Go() { if (_detailCards.TryGetValue(bodyName, out var el) && el.IsLoaded && string.Equals(_lastTargetedBody, bodyName, StringComparison.OrdinalIgnoreCase)) el.BringIntoView(); }
+            Dispatcher.BeginInvoke(new Action(Go), System.Windows.Threading.DispatcherPriority.Loaded);
+            var t = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
+            t.Tick += (_, __) => { t.Stop(); Go(); };
+            t.Start();
+        }
+
         // The open body panel follows the in-game target: when a new planet or moon is targeted, the panel switches to it. Only while the panel is open (it is
         // not opened by targeting), and only for bodies this window lists.
         private string _lastTargetedBody = "";
@@ -86,7 +97,10 @@ namespace EliteBioRadar
             string target = _watcher.TargetedBody ?? "";
             if (string.Equals(target, _lastTargetedBody, StringComparison.OrdinalIgnoreCase)) return;
             _lastTargetedBody = target;
-            if (string.IsNullOrEmpty(target) || string.IsNullOrEmpty(_detailBodyName)) return;
+            if (string.IsNullOrEmpty(target)) return;
+            // Scroll the list to the targeted body whether or not the side panel is open (a card scrolled out of view, or one the panel's narrower list pushed down).
+            ScrollToBody(target);
+            if (string.IsNullOrEmpty(_detailBodyName)) return;
             if (string.Equals(target, _detailBodyName, StringComparison.OrdinalIgnoreCase)) return;
             var b = _detailBodies.FirstOrDefault(x => !x.IsStar && !x.IsBelt && string.Equals(x.BodyName, target, StringComparison.OrdinalIgnoreCase));
             if (b != null) ShowBodyDetail(b);
