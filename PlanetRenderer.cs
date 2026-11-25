@@ -201,6 +201,7 @@ namespace EliteBioRadar
 
         private static void ApplyStarTint(LandableWorldLook l, double starK)
         {
+            if (l.Pretinted) return;
             if (starK < StarTintMinK && !(starK > 0 && starK < LowStarTintMaxK)) return;
             var k = StarLightTint(starK);
             l.Light = Tinted(l.Light, k); l.Dark = Tinted(l.Dark, k); l.Accent = Tinted(l.Accent, k); l.Bright = Tinted(l.Bright, k); l.Ice = Tinted(l.Ice, k);
@@ -519,9 +520,18 @@ namespace EliteBioRadar
 
         // Parametric icy look: base tone x accent colour x accent form x crater density, all from the name hash. Weights follow the 21 icy moons of QB-C b17-0
         // (near-white 6, pale grey 6, mid grey 3, charcoal 1, dark red-brown 1, dark teal 1, plus mixes): a guess at the real spread, not a measured one.
-        private static void ApplyParametricIcyLook(LandableWorldLook l, int hash, string? bodyName = null, bool coldWhite = false)
+        // Dim mauve-purple ice with black cracks: the look of icy bodies lit by a Y dwarf (real: Qiedea XV-B a40-1 5, Y 461 K; AI-Y a41-2 4, Y 576 K). The colours are as seen in game, so no star tint on top.
+        private static void SetRedLitPurple(LandableWorldLook l)
         {
             Color rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
+            l.Light = rgb(100, 70, 92); l.Dark = rgb(66, 44, 60); l.Bright = rgb(122, 90, 114); l.BrightAmt = 0.4; l.Accent = rgb(24, 14, 20); l.RustAmt = 0.55;
+            l.Ice = rgb(16, 8, 12); l.LineAmt = 1.0; l.LineFine = 1.0; l.Contrast = 0.7; l.CraterAmt = 0.1; l.RayAmt = 0.05; l.SpecAmt = 0.3; l.Pretinted = true;
+        }
+
+        private static void ApplyParametricIcyLook(LandableWorldLook l, int hash, string? bodyName = null, bool coldWhite = false, double starK = 0)
+        {
+            Color rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
+            bool redLit = starK > 0 && starK < LowStarTintMaxK;
             uint m = (uint)hash * 2654435761u; m ^= m >> 15; m *= 2246822519u; m ^= m >> 13;
             int Roll(int shift, int n) => (int)((m >> shift) % (uint)n);
             int Pick(int roll, params int[] w) { int t = 0; for (int i = 0; i < w.Length; i++) { t += w[i]; if (roll < t) return i; } return w.Length - 1; }
@@ -562,15 +572,19 @@ namespace EliteBioRadar
                         l.Light = rgb(236, 235, 232); l.Dark = rgb(204, 205, 204); l.Bright = rgb(214, 220, 224); l.BrightAmt = 0.4; l.Accent = rgb(108, 72, 64); l.RustAmt = 0.55;
                         l.Ice = rgb(104, 68, 60); l.LineAmt = 1.0; l.LineFine = 1.0; l.Contrast = 0.4; l.CraterAmt = 0.1;
                     }
-                    else if (nr < 13)   // purple with black cracks (real: XV-B a40-1 5, 20 K)
+                    // 2026-11-25: the purple and red-brown tones came from bodies lit by a Y dwarf (XV-B a40-1, 461 K) and an L dwarf (WV-B a40-1, 1472 K). Under an ordinary star
+                    // (Qiedea SA-U d4-21 5 a, G star, 83 K) the purple pick was wrong: that body was neutral grey with dark charcoal patches and a rayed crater, so that is what they draw there.
+                    else if (!redLit)
                     {
-                        l.Light = rgb(104, 76, 98); l.Dark = rgb(68, 46, 64); l.Bright = rgb(130, 98, 124); l.BrightAmt = 0.5; l.Accent = rgb(26, 14, 20); l.RustAmt = 0.5;
-                        l.Ice = rgb(18, 8, 12); l.LineAmt = 1.0; l.LineFine = 1.0; l.Contrast = 0.7; l.CraterAmt = 0.1; l.SpecAmt = 0.35;
+                        l.Light = rgb(172, 172, 172); l.Dark = rgb(124, 124, 124); l.Bright = rgb(222, 224, 224); l.BrightAmt = 0.5; l.Accent = rgb(58, 58, 58); l.RustAmt = 0.6;
+                        l.Ice = rgb(48, 48, 50); l.Contrast = 0.75; l.CraterAmt = 0.3; l.RayAmt = 0.7; l.SpecAmt = 0.3;
                     }
-                    else   // red-brown with pale rose patches and rayed craters (real: WV-B a40-1 4, 21 K)
+                    else if (nr < 13 && starK < 1300)   // purple with black cracks (real: XV-B a40-1 5, 20 K, Y dwarf); L dwarfs light ice pink, so they take the red-brown below
+                        SetRedLitPurple(l);
+                    else   // red-brown with pale rose patches and rayed craters (real: WV-B a40-1 4, 21 K): game colours, so no tint on top
                     {
                         l.Light = rgb(160, 94, 90); l.Dark = rgb(108, 62, 60); l.Bright = rgb(198, 144, 138); l.BrightAmt = 0.7; l.Accent = rgb(82, 44, 42); l.RustAmt = 0.5;
-                        l.Contrast = 0.8; l.CraterAmt = 0.6; l.RayAmt = 0.9; l.Ice = rgb(48, 48, 50);
+                        l.Contrast = 0.8; l.CraterAmt = 0.6; l.RayAmt = 0.9; l.Ice = rgb(48, 48, 50); l.Pretinted = true;
                     }
                     return;
                 }
@@ -662,18 +676,26 @@ namespace EliteBioRadar
             // Ice lit by an L dwarf (real: Qiedea ES-P c7-2 C 2, 3, 4 and 6 a, 79-94 K round a 1,879 K L1 star): four of the five airless ones were pale pink with dark maroon patches,
             // which is the white-ice-with-salmon-patches look seen through the red light, so three in four take it. (The fifth, C 1, was Metal-rich.)
             if (starK > 0 && starK < LowStarTintMaxK && ((hash >> 6) % 4) != 0) look = 9;
+            bool icyRedLit = starK > 0 && starK < LowStarTintMaxK;
+            // The other one in four round a Y or T dwarf (under 1300 K; L dwarfs light their ice pink): dim mauve-purple with black cracks (real: Qiedea AI-Y a41-2 4, XV-B a40-1 5;
+            // AI-Y a41-2 3 beside it was pink and right, and keeps its look).
+            if (icyRedLit && starK < 1300 && detail.BodyName != "Qiedea AI-Y a41-2 3" && (((hash >> 6) % 4) == 0 || detail.BodyName == "Qiedea AI-Y a41-2 4") && !IcyKeepLook.Contains(detail.BodyName ?? "") && !IcyRightKeep.Contains(detail.BodyName ?? "") && !IcyConfirmedLegacy.Contains(detail.BodyName ?? ""))
+            {
+                SetRedLitPurple(l);
+                return l;
+            }
             // The tuned real looks (7-13) and the very cold light-grey look keep their picks; everything else (the old guessed looks 0-6) is now generated from the name hash,
             // because the 21 icy moons of Qiedea QB-C b17-0 (one star, 47-117 K) were all different combinations of base tone, accent colour, accent form and crater density.
             bool coldKeep = look == 2 && temp > 0 && temp < 35;
             // Half of the icy bodies of 40-125 K draw the white family, whatever look the hash had picked (the salmon and maroon picks kept missing there).
             if (temp >= 40 && temp <= 125 && ((hash >> 5) % 10) < 5 && !IcyKeepLook.Contains(detail.BodyName ?? "") && !IcyRightKeep.Contains(detail.BodyName ?? "") && !IcyConfirmedLegacy.Contains(detail.BodyName ?? ""))
             {
-                ApplyParametricIcyLook(l, hash, detail.BodyName, true);
+                ApplyParametricIcyLook(l, hash, detail.BodyName, true, starK);
                 return l;
             }
             if (look <= 6 && !coldKeep && !IcyConfirmedLegacy.Contains(detail.BodyName ?? ""))
             {
-                ApplyParametricIcyLook(l, hash, detail.BodyName);
+                ApplyParametricIcyLook(l, hash, detail.BodyName, false, starK);
                 return l;
             }
             switch (look)
@@ -805,6 +827,7 @@ namespace EliteBioRadar
             // maroon patches, hardly any craters and pale frost, or pale grey-white and smooth, where the app drew grey-blue or tan-orange cratered ones. Airless rocky bodies at 410-515 K were bright sulphur-yellow
             // or very dark grey-brown with olive patches, not the tan-orange crumpled look.
             bool rockyKeep = detail.BodyName is "Qiedea AL-W d2-5 3 a" or "Qiedea KP-R c7-7 5 a";
+            bool slateCap = false;   // moved to the dark slate look by the cold thin-atmosphere rule below: those carry a white cap
             if (!rockyKeep)
             {
                 double tp = detail.SurfaceTemperature, pr = detail.SurfacePressure;
@@ -812,6 +835,10 @@ namespace EliteBioRadar
                 {
                     int cr = (hash >> 6) % 10;
                     look = cr < 3 ? 10 : cr < 7 ? 12 : cr < 9 ? 13 : 11;
+                    // 2026-11-25: Qiedea NM-M c10-6 A 2 e (166 K, 2.7 kPa CO2) was the very dark slate blue-grey look 6 with a white polar cap (as AB 6 f a was), where the app drew brick red;
+                    // half of the brick-red share goes to it. (Its partner A 2 d, 173 K, drew the rust-orange look 12 and was right.)
+                    if (look == 10 && (((hash >> 15) & 1) == 0 || detail.BodyName == "Qiedea NM-M c10-6 A 2 e") && detail.BodyName != "Qiedea XP-H b16-1 B 4 a") { look = 6; slateCap = true; }   // XP-H B 4 a was rust-orange (look 12's reference)
+                    if (detail.BodyName == "Qiedea XP-H b16-1 B 4 a") look = 12;
                 }
                 else if (pr <= 0 && tp >= 300 && tp <= 600)
                 {
@@ -874,6 +901,7 @@ namespace EliteBioRadar
             }
             double temp = detail.SurfaceTemperature;
             if (temp > 0 && temp < 160) l.IceAmt = 0.10 + 0.20 * (((hash >> 9) % 100) / 100.0);   // frost cap on the coldest ones
+            if (slateCap) l.IceAmt = Math.Max(l.IceAmt, 0.3);   // the dark slate ones carry a clear white cap (NM-M c10-6 A 2 e, 166 K)
             return l;
         }
 
@@ -904,6 +932,10 @@ namespace EliteBioRadar
             bool orangeFlat = false;   // hot thick CO2 of 1000 K and up: smooth orange-red with hardly any veil
             bool waterOrange = false;   // thick-water rust-orange look: keeps its cyclones and a thinner veil (Qiedea KC-U d3-1 2)
             bool darkCyclone = false;   // the very dark navy cyclone look (real: five mid-pressure bodies, plus Qiedea JC-U d3-1 B 3): navy ground, teal-green limb
+            bool rockyMars = false;   // cold rocky body with a moderate atmosphere: ochre-tan Mars look with a big white cap (real: Qiedea NM-M c10-6 A 2 d a)
+            bool icyWhite = false;    // icy body under a thin-to-moderate non-methane atmosphere: white ice shell with cyclones and cracks (real: Qiedea SA-U d4-21 4 a, 6)
+            bool argonTan = false;    // cold thick argon-rich: muted tan-brown under a lilac veil (real: Qiedea SA-U d4-21 3)
+            bool icyKeep = IcyKeepLook.Contains(detail.BodyName ?? "") || IcyConfirmedLegacy.Contains(detail.BodyName ?? "") || IcyRightKeep.Contains(detail.BodyName ?? "");   // icy bodies marked right: later icy atmosphere changes leave them alone
             int pick = hash % 10;
             Color s0, s1;
             double contrast = 1.0;
@@ -920,6 +952,10 @@ namespace EliteBioRadar
                 else if (rk == 1) { s0 = rgb(116, 108, 98); s1 = rgb(198, 190, 178); }   // grey-tan
                 else              { s0 = rgb(160, 162, 164); s1 = rgb(228, 230, 230); }   // pale grey-white
                 contrast = 0.7;
+                // 2026-11-25: Qiedea NM-M c10-6 A 2 d a (41 kPa CO2, 213 K, silicate vapour geysers) was Mars-like ochre-tan with a big white cap and white streaky cloud, not grey-tan:
+                // two in three of the cold rocky ones with 10 kPa and more take it.
+                if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 260 && detail.SurfacePressure >= 10000 && (((hash >> 3) % 3) != 0 || detail.BodyName == "Qiedea NM-M c10-6 A 2 d a"))
+                { s0 = rgb(166, 118, 66); s1 = rgb(222, 180, 112); contrast = 0.6; rockyMars = true; }
             }
             else if (water)
             {
@@ -965,10 +1001,16 @@ namespace EliteBioRadar
                 if (ip == 0)      { s0 = rgb(110, 128, 140); s1 = rgb(164, 184, 194); }
                 else if (ip == 1) { s0 = icyMethane ? rgb(150, 188, 180) : rgb(96, 130, 130); s1 = icyMethane ? rgb(204, 232, 224) : rgb(152, 188, 186); }
                 else              { s0 = rgb(118, 120, 140); s1 = rgb(170, 172, 192); }
+                // Methane mint lifted towards white: Qiedea SA-U d4-21 5 (1.4 GPa) was pale mint-white with long dark crevasses. Bodies marked right keep the old mint (AL-W d2-5 6).
+                if (icyMethane && !icyKeep) { s0 = rgb(172, 204, 198); s1 = rgb(218, 238, 234); }
                 contrast = 0.55;
                 // Argon-rich atmospheres tint the shell warm ivory (real: PW-N d6-2 9 a, 704 kPa, 103 K) - hypothesis.
                 if ((detail.AtmosphereType ?? "").Contains("Argon", StringComparison.OrdinalIgnoreCase))
                 { s0 = rgb(188, 184, 166); s1 = rgb(234, 232, 216); }
+                // 2026-11-25: under a thin-to-moderate nitrogen or helium atmosphere (Qiedea SA-U d4-21 4 a, 186 kPa nitrogen, 94 K; SA-U d4-21 6, 46 kPa helium, 71 K) the shell was
+                // white with a mint tint, rough grey-blue patches, cyclones and fine red-brown cracks, where the app drew a slate blue-grey.
+                else if (!icyMethane && detail.SurfacePressure < 1.0e6 && !icyKeep)
+                { s0 = rgb(176, 190, 194); s1 = rgb(236, 242, 240); contrast = 0.7; icyWhite = true; }
             }
             else if (haze > 0.80)
             {
@@ -996,7 +1038,17 @@ namespace EliteBioRadar
                 // Water atmospheres (steam): pale blue-grey, as steam clouds are. One real body so far - Qiedea ZW-R d5-22 A 3,
                 // hot thick water, 951 kPa, 659 K: a pale blue-grey veil with faint brown showing through - a hypothesis for the rest.
                 if ((detail.AtmosphereType ?? "").Contains("Water", StringComparison.OrdinalIgnoreCase) && !(detail.SurfaceTemperature >= 1500)) denseVariant = 6;
+                // 2026-11-25, Qiedea SA-U d4-21: thick ammonia (2: ammonia/nitrogen/methane, 1.7 MPa, 450 K) was a warm mauve-brown ground under grey-white swirling cloud with a
+                // peach limb and a cream cap, not the pale blue-grey shell; cold thick argon-rich (3: 4.5 MPa, 139 K) was a muted tan-brown ground under a thin lilac veil with grey-white
+                // wisps. (QY-P c6-0 B 2, argon-rich 1.26 MPa 173 K, was the lilac-grey veil, so the argon look takes half of them.)
+                bool ammoniaThick = !rocky && (detail.AtmosphereType ?? "").Contains("Ammonia", StringComparison.OrdinalIgnoreCase) && !veryHot;
+                if (ammoniaThick) denseVariant = 10;
+                else if (!rocky && denseVariant == 6 && detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 200 && detail.SurfacePressure < 5.0e6 && (detail.AtmosphereType ?? "").Contains("Argon", StringComparison.OrdinalIgnoreCase)
+                    && detail.BodyName != "Qiedea QY-P c6-0 B 2" && (((hash >> 17) & 1) == 0 || detail.BodyName == "Qiedea SA-U d4-21 3"))   // only the cold veil picks: the argon-rich references AQ-N c7-0 A 6/A 7 (navy basins) and ZW-R d5-22 A 5 (ochre) keep theirs
+                { denseVariant = 7; argonTan = true; }
                 if (veryHot)                { denseVariant = 4; s0 = rgb(14, 14, 17); s1 = rgb(34, 33, 38); contrast = 0.8; }
+                else if (denseVariant == 10) { s0 = rgb(104, 80, 72); s1 = rgb(170, 140, 122); contrast = 0.8; }   // warm mauve-brown (ammonia)
+                else if (argonTan)          { s0 = rgb(140, 106, 82); s1 = rgb(204, 166, 130); contrast = 0.6; }   // muted tan-brown (cold argon)
                 else if (denseVariant == 6) { s0 = rgb(112, 98, 98); s1 = rgb(146, 162, 188); contrast = 0.75; }   // faint brown-grey under a pale blue-grey steam veil (see the atmoLook override below)
                 else if (denseVariant == 7) { s0 = rgb(176, 120, 66); s1 = rgb(230, 182, 108); contrast = 0.45; }   // ochre-tan, Mars-like (atmoLook override below)
                 else if (denseVariant == 3) { s0 = rgb(74, 78, 44); s1 = rgb(132, 130, 78); contrast = 0.5; }   // olive-green
@@ -1142,6 +1194,16 @@ namespace EliteBioRadar
                 atmoLook.HazeAmt = 0.28; atmoLook.SurfContrast = 0.8;
                 atmoLook.Cap = rgb(232, 230, 236); atmoLook.CapAmt = Math.Clamp(0.10 + (300.0 - detail.SurfaceTemperature) / 800.0, 0.10, 0.30);
                 atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.35, 0.30, 0.89);
+                if (argonTan) { atmoLook.Haze = rgb(170, 160, 196); atmoLook.Glow = rgb(184, 176, 220); atmoLook.HazeAmt = 0.36; atmoLook.Cloud = rgb(210, 212, 224); atmoLook.CloudAmt = 0.35; atmoLook.CapAmt = 0; atmoLook.FleckAmt = 0.6; }
+            }
+            else if (!icy && !rockyIce && denseVariant == 10)
+            {
+                // Thick ammonia: mauve-brown ground showing through grey-white swirling cloud, a peach-tan limb and a cream polar cap (real: Qiedea SA-U d4-21 2).
+                atmoLook.Haze = rgb(184, 156, 140); atmoLook.Glow = rgb(224, 176, 138);
+                atmoLook.Cloud = rgb(178, 180, 194); atmoLook.CycloneAmt = 0.0; atmoLook.CloudAmt = 0.75; atmoLook.CloudScale = 1.6;
+                atmoLook.HazeAmt = 0.42; atmoLook.SurfContrast = 0.9;
+                atmoLook.Cap = rgb(228, 216, 198); atmoLook.CapAmt = 0.22;
+                atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.25, 0.25, 0.93);
             }
             else
             if (!icy && !rockyIce && denseVariant == 6)
@@ -1239,6 +1301,7 @@ namespace EliteBioRadar
                 atmoLook.CycloneAmt = 0.7; atmoLook.CloudAmt = 0.8; atmoLook.CrackAmt = 0.0;
                 atmoLook.Cap = rgb(232, 232, 230); atmoLook.CapAmt = ((hash >> 5) % 10) < 5 ? 0.25 + 0.2 * (((hash >> 9) % 100) / 100.0) : 0.0;
                 atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.40, 0.38, 0.84);
+                if (rockyMars) { atmoLook.CapAmt = 0.42; atmoLook.CloudAmt = 0.35; atmoLook.CycloneAmt = 0.5; atmoLook.Haze = rgb(150, 170, 196); atmoLook.HazeAmt = 0.18; }   // a big white cap, sparse white streak cloud
             }
             else if (water)
             {
@@ -1348,6 +1411,8 @@ namespace EliteBioRadar
                 atmoLook.CloudAmt = 0.30 * (1.0 - 0.6 * haze);
                 atmoLook.CapAmt = 0.0;
                 atmoLook.HazeAmt = Math.Clamp(haze * 0.80 + 0.12, 0, 1);
+                if (icyWhite) { atmoLook.Haze = rgb(196, 212, 216); atmoLook.HazeAmt = Math.Min(atmoLook.HazeAmt, 0.18); atmoLook.CycloneAmt = 0.4; atmoLook.CloudAmt = 0.3; atmoLook.Cloud = rgb(226, 232, 236); atmoLook.CrackAmt = 0.7; atmoLook.FleckAmt = 0.5; }
+                if ((detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase) && !icyKeep) atmoLook.CrackAmt = 0.75;   // long dark crevasses through the haze (SA-U d4-21 5)
             }
             return atmoLook;
         }
