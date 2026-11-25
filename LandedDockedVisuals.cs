@@ -197,23 +197,28 @@ namespace EliteBioRadar
             dc.DrawLine(FrameEdge, new Point(8, H - 30), new Point(W - 8, H - 30));
             dc.Pop();   // backdrop opacity
 
-            // Text, drawn at full strength over the scene.
-            DrawText(dc, "ALT", MonoFace, 10, DimBrush, 30, H - 22, env * 0.9, TextAlignment.Left);
-            double alt = Rising ? 1240 * Math.Pow(Smooth(0.5, 4.2, t), 2) : 0;
-            DrawText(dc, $"{alt:N0} m", MonoFace, 13, WhiteBrush, 52, H - 24, env, TextAlignment.Left);
-            DrawText(dc, Rising ? (alt > 0 ? "CLIMBING" : "LIFTING") : "ON GROUND", MonoFace, 11, GreenBrush, W - 30, H - 22, env, TextAlignment.Right);
+            // Text, drawn at full strength over the scene. Lift-off shows only its title, on a strip as tall as the title text.
+            if (!Rising)
+            {
+                DrawText(dc, "ALT", MonoFace, 10, DimBrush, 30, H - 22, env * 0.9, TextAlignment.Left);
+                DrawText(dc, "0 m", MonoFace, 13, WhiteBrush, 52, H - 24, env, TextAlignment.Left);
+                DrawText(dc, "ON GROUND", MonoFace, 11, GreenBrush, W - 30, H - 22, env, TextAlignment.Right);
+            }
 
             double pt = Phase(t, 1.5, 0.8);
             if (pt > 0)
             {
                 double ease = EaseOut(pt), titleY = H * 0.28;
                 dc.PushOpacity(ease * fadeOut);
-                dc.DrawRectangle(StripBrush, null, new Rect(-40, titleY - 14, W + 80, 86));
+                dc.DrawRectangle(StripBrush, null, Rising ? new Rect(-40, titleY, W + 80, 22 * 1.17) : new Rect(-40, titleY - 14, W + 80, 86));
                 dc.Pop();
                 DrawSpaced(dc, Title, MonoFace, 22, TitleBrush, W / 2, titleY, 1.0 - 0.58 * ease, ease * fadeOut);
-                double ps = Phase(t, 2.1, 0.5);
-                DrawText(dc, _subject, MonoFace, 12, SubjectBrush, W / 2, titleY + 34, ps * fadeOut);
-                DrawStats(dc, _stats, MonoFace, W / 2, titleY + 56, W - 80, t, 2.5, fadeOut);
+                if (!Rising)
+                {
+                    double ps = Phase(t, 2.1, 0.5);
+                    DrawText(dc, _subject, MonoFace, 12, SubjectBrush, W / 2, titleY + 34, ps * fadeOut);
+                    DrawStats(dc, _stats, MonoFace, W / 2, titleY + 56, W - 80, t, 2.5, fadeOut);
+                }
             }
             dc.Pop();   // scale
         }
