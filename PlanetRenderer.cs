@@ -180,19 +180,24 @@ namespace EliteBioRadar
         }
 
         // Atmosphere worlds around an L dwarf are lit red too (real: the thick-atmosphere icy bodies B 1 and B 2 of the L1 dwarf B in Qiedea DL-N c7-0 were rose-pink).
+        // T dwarfs (about 700-1300 K): the game lights them neither pink nor dim but a pale lilac, at any distance (real: Qiedea TE-K a49-2 1 and 7, T0 1279 K, and BC-F a52-1 1, T4 1050 K,
+        // helium icy worlds 325 to 4,700 ls out: all pale lilac, about (166, 139, 172), with dark cyclones, where the app drew them salmon pink or, far out, nearly black).
+        public static bool IsTDwarfLight(double starK) => starK >= 700 && starK < 1300;
+        private static readonly (double r, double g, double b) TDwarfLilac = (0.75, 0.61, 0.77);
+
         public static void ApplyAtmoStarTint(AtmoWorldLook l, double starK)
         {
             if (!(starK > 0 && starK < LowStarTintMaxK)) return;
-            var k = StarLightTint(starK);
+            var k = IsTDwarfLight(starK) ? TDwarfLilac : StarLightTint(starK);
             l.Surf0 = Tinted(l.Surf0, k); l.Surf1 = Tinted(l.Surf1, k); l.Haze = Tinted(l.Haze, k); l.Cloud = Tinted(l.Cloud, k); l.Cap = Tinted(l.Cap, k); l.Glow = Tinted(l.Glow, k);
         }
 
         // Atmosphere worlds are dimmed by the same relative-flux rule as the landable worlds, with a lower floor: Qiedea DL-N c7-0 B 8 (a neon-rich icy world
         // 7 AU from the L1 dwarf B, 315 AU from the M0 primary A) was almost black in game, with only a faint sliver lit on the A side, while the app drew it
         // fully lit. (Two stars lighting it from opposite sides is not modelled: one light, from the star that gives the most.)
-        public static void ApplyAtmoStarFlux(AtmoWorldLook l, double flux)
+        public static void ApplyAtmoStarFlux(AtmoWorldLook l, double flux, double starK = 0)
         {
-            if (flux <= 0) return;
+            if (flux <= 0 || IsTDwarfLight(starK)) return;   // T dwarfs: no distance dimming (TE-K a49-2 7, 0.016 of full light, was as bright as TE-K a49-2 1 at 3.3)
             double k = Math.Clamp(Math.Sqrt(flux), 0.12, 1.0);
             if (k >= 0.999) return;
             (double, double, double) m = (k, k, k);
@@ -206,7 +211,24 @@ namespace EliteBioRadar
         {
             if (!(starK > 0 && starK < LowStarTintMaxK)) return;
             Color rgb(int r, int gr, int b) => Color.FromRgb((byte)r, (byte)gr, (byte)b);
-            if (iconCode == "GG1" && d.SurfaceTemperature > 0 && d.SurfaceTemperature < 60)
+            bool veryColdGG1 = iconCode == "GG1" && d.SurfaceTemperature > 0 && d.SurfaceTemperature < 60;
+            // 2026-11-26: two more very cold Class I giants, neither of them dark. Qiedea XV-G a51-1 3 (28 K, L3 1749 K, 0.6 of full light) was a purple-mauve, about (91, 51, 85), with
+            // faint orange streaks: the lilac look under a muted red light. Qiedea BC-F a52-1 3 (5 K, T4 1050 K, 0.002 of full light) was a pale pink-lilac with white streaky bands,
+            // about (175, 138, 149). So neither is dimmed by distance; IG-R a45-0 10 (dark maroon-brown) keeps the rule below.
+            if (veryColdGG1 && d.BodyName != "Qiedea IG-R a45-0 10")
+            {
+                if (IsTDwarfLight(starK))
+                {
+                    g.C0 = rgb(150, 112, 124); g.C1 = rgb(172, 134, 146); g.C2 = rgb(200, 168, 178); g.C3 = rgb(226, 204, 212); g.Band4 = rgb(132, 96, 108); g.Glow = rgb(200, 170, 182);
+                }
+                else
+                {
+                    (double, double, double) lm = (0.74, 0.48, 0.56);
+                    g.C0 = Tinted(g.C0, lm); g.C1 = Tinted(g.C1, lm); g.C2 = Tinted(g.C2, lm); g.C3 = Tinted(g.C3, lm); g.Band4 = Tinted(g.Band4, lm); g.Glow = Tinted(g.Glow, lm);
+                }
+                return;
+            }
+            if (veryColdGG1)
             {
                 g.C0 = rgb(80, 74, 74); g.C1 = rgb(104, 98, 98); g.C2 = rgb(130, 122, 120); g.C3 = rgb(146, 138, 136); g.Band4 = rgb(66, 60, 60); g.Glow = rgb(130, 122, 120);
             }
@@ -720,6 +742,13 @@ namespace EliteBioRadar
             if (icyRedLit && starK < 1300 && detail.BodyName != "Qiedea AI-Y a41-2 3" && (((hash >> 6) % 4) == 0 || detail.BodyName == "Qiedea AI-Y a41-2 4") && !IcyKeepLook.Contains(detail.BodyName ?? "") && !IcyRightKeep.Contains(detail.BodyName ?? "") && !IcyConfirmedLegacy.Contains(detail.BodyName ?? ""))
             {
                 SetRedLitPurple(l);
+                // T dwarfs (700-1300 K) do not give the dim purple: Qiedea BC-F a52-1 2 (neon 236 Pa) and 1 a (airless), round a T4 at 1050 K, were a pale lilac-pink, about (158, 124, 143)
+                // with dark patches and a rayed crater, and (202, 166, 187) almost featureless. Game colours and brightness, so neither tinted nor dimmed.
+                if (IsTDwarfLight(starK))
+                {
+                    l.Light = rgb(214, 174, 196); l.Dark = rgb(180, 142, 162); l.Bright = rgb(232, 204, 220); l.BrightAmt = 0.3; l.Accent = rgb(96, 68, 84); l.RustAmt = 0.4;
+                    l.Ice = rgb(84, 58, 72); l.LineAmt = 0.5; l.LineFine = 1.0; l.Contrast = 0.45; l.CraterAmt = 0.3; l.RayAmt = 0.4; l.SpecAmt = 0.3;
+                }
                 return l;
             }
             // Round an L dwarf (1300-1950 K) the game showed three icy looks: pink-white (the salmon-white look under the red light, most of them), white with dark charcoal
@@ -728,22 +757,48 @@ namespace EliteBioRadar
             bool lDwarf = icyRedLit && starK >= 1300;
             bool icyKeepAny = IcyKeepLook.Contains(detail.BodyName ?? "") || IcyRightKeep.Contains(detail.BodyName ?? "") || IcyConfirmedLegacy.Contains(detail.BodyName ?? "");
             bool lDwarfFree = lDwarf && !icyKeepAny && !LDwarfIcyRight.Contains(detail.BodyName ?? "");
-            int ldPick = -1;   // 0 veined, 1 maroon
+            int ldPick = -1;   // 0 veined, 1 maroon, 2 salmon-white, 3 maroon-brown
             if (lDwarfFree)
             {
                 // (ES-P c7-2 C 2, 3, 4 and 6 a were pale pink with dark maroon patches in game: the veined look under the red light)
-                if (detail.BodyName is "Qiedea IG-R a45-0 1" or "Qiedea IG-R a45-0 3" or "Qiedea ES-P c7-2 C 2" or "Qiedea ES-P c7-2 C 3" or "Qiedea ES-P c7-2 C 4" or "Qiedea ES-P c7-2 C 6 a") ldPick = 0;
+                if (detail.BodyName is "Qiedea IG-R a45-0 1" or "Qiedea IG-R a45-0 3" or "Qiedea ES-P c7-2 C 2" or "Qiedea ES-P c7-2 C 3" or "Qiedea ES-P c7-2 C 4" or "Qiedea ES-P c7-2 C 6 a"
+                    or "Qiedea WK-I a50-2 3" or "Qiedea WK-I a50-2 2" or "Qiedea WK-I a50-2 4" or "Qiedea WK-I a50-2 6") ldPick = 0;   // WK-I a50-2 (L7 1486 K) 2, 4 and 6: greyish pale pink with dark crack networks and patches; 3 was right
                 else if (detail.BodyName is "Qiedea IG-R a45-0 4" or "Qiedea GL-V b22-2 B 5") ldPick = 1;
+                else if (detail.BodyName is "Qiedea WK-I a50-2 6 a") ldPick = 2;   // pale pink with orange patches and maroon edge patches
+                else if (detail.BodyName is "Qiedea WK-I a50-2 1" or "Qiedea WK-I a50-2 2 a") ldPick = 3;
                 else if (detail.BodyName is "Qiedea BO-W a42-1 1" or "Qiedea BO-W a42-1 9" or "Qiedea BO-W a42-1 10") ldPick = -1;   // pink-white in game (9 and 10 dimmed)
                 else { uint r = ((uint)hash >> 26) % 8; ldPick = r < 2 ? 0 : r == 2 ? 1 : -1; }
             }
+            // Brightness round L, T and Y dwarfs (2026-11-26): the pale looks were as bright in game far out as close in (Qiedea TE-K a49-2 8, 0.016 of full light, a bright salmon pink;
+            // WK-I a50-2 6 and 6 a at 0.06 and 4 and 5 at 0.19, pale pink), so they are not dimmed with distance. The dark ones are dark looks, and the bodies that were dim in game
+            // (BO-W a42-1 9 and 10, IG-R a45-0 8; the dark maroon look 10, BO-W a42-1 6 and 11 right) keep the dimming.
+            // (Not round Y dwarfs, under 700 K: no bright one seen there, and AI-Y a41-2 3, right, is dimmed.)
+            bool brownLitBright = icyRedLit && starK >= 700 && !LDwarfIcyRight.Contains(detail.BodyName ?? "") && !icyKeepAny
+                && detail.BodyName is not ("Qiedea BO-W a42-1 9" or "Qiedea BO-W a42-1 10" or "Qiedea IG-R a45-0 8");
             if (ldPick == 0)
             {
                 l.Light = rgb(236, 235, 232); l.Dark = rgb(214, 212, 208); l.Bright = rgb(226, 196, 160); l.BrightAmt = 0.35; l.Accent = rgb(52, 44, 46); l.RustAmt = 0.55;
                 l.Ice = rgb(44, 36, 38); l.LineAmt = 1.0; l.LineFine = 1.0; l.Contrast = 0.35; l.CraterAmt = 0.2; l.RayAmt = 0.1; l.SpecAmt = 0.5;
+                // Seen in game (WK-I a50-2 2, 4 and 6): a greyish pale pink, about (175-188, 132-145, 132-145), not the saturated pink the star tint gives white ice, with large dark
+                // grey-maroon patches as well as the cracks. Game colours, so no tint. (WK-I a50-2 3, right on the tinted version, keeps it.)
+                if (detail.BodyName != "Qiedea WK-I a50-2 3")
+                {
+                    l.Light = rgb(214, 166, 166); l.Dark = rgb(190, 146, 148); l.Bright = rgb(226, 186, 176); l.Accent = rgb(92, 70, 72); l.RustAmt = 0.65;
+                    l.Ice = rgb(64, 42, 46); l.Pretinted = true;
+                }
+                if (brownLitBright) l.GameLit = true;
+                return l;
+            }
+            if (ldPick == 3)
+            {
+                // Dark maroon-brown with greyish-pink patches and small orange flecks (real: Qiedea WK-I a50-2 1, 47 K, about (105, 65, 64); 2 a, 31 K, a little lighter and mottled).
+                l.Light = rgb(128, 80, 78); l.Dark = rgb(96, 56, 56); l.Accent = rgb(206, 126, 84); l.Bright = rgb(170, 126, 124); l.Ice = rgb(70, 44, 44);
+                l.Contrast = 0.6; l.RustAmt = 0.25; l.BrightAmt = 0.6; l.CraterAmt = 0.25; l.RayAmt = 0.1; l.LineAmt = 0.0; l.SpecAmt = 0.4; l.Pretinted = true;
+                if (brownLitBright) l.GameLit = true;
                 return l;
             }
             if (ldPick == 1) look = 10;
+            if (ldPick == 2) look = 9;
             // The tuned real looks (7-13) and the very cold light-grey look keep their picks; everything else (the old guessed looks 0-6) is now generated from the name hash,
             // because the 21 icy moons of Qiedea QB-C b17-0 (one star, 47-117 K) were all different combinations of base tone, accent colour, accent form and crater density.
             bool coldKeep = look == 2 && temp > 0 && temp < 35;
@@ -751,13 +806,14 @@ namespace EliteBioRadar
             if (ldPick != 1 && temp >= 40 && temp <= 125 && ((hash >> 5) % 10) < 5 && !IcyKeepLook.Contains(detail.BodyName ?? "") && !IcyRightKeep.Contains(detail.BodyName ?? "") && !IcyConfirmedLegacy.Contains(detail.BodyName ?? ""))
             {
                 ApplyParametricIcyLook(l, hash, out _, detail.BodyName, true, starK);
+                if (brownLitBright) l.GameLit = true;
                 return l;
             }
             bool icyKeep = icyKeepAny;
             if (look <= 6 && !coldKeep && !IcyConfirmedLegacy.Contains(detail.BodyName ?? ""))
             {
                 ApplyParametricIcyLook(l, hash, out bool salmonWhite, detail.BodyName, false, starK);
-                if (!salmonWhite) return l;
+                if (!salmonWhite) { if (brownLitBright) l.GameLit = true; return l; }
                 // Keep-set bodies keep their parametric look: run it again without the star (past the redirect, nothing in it depends on the star).
                 if (icyKeep) { ApplyParametricIcyLook(l, hash, out _, detail.BodyName, false, 0); return l; }
                 look = 9;   // falls through to the switch (nothing of the parametric look was set)
@@ -818,6 +874,7 @@ namespace EliteBioRadar
             if (maroonFromGrey) l.LineAmt = 0.0;   // GL-V b22-2 B 5 showed blotches, no crack lines
             // Blue crevasses do not show blue under an L dwarf's red light: Qiedea IG-R a45-0 8 (20 K) was dim mauve with a black crack network in game, where the app drew blue-violet streaks.
             if (look == 7 && lDwarfFree) { l.Ice = rgb(30, 22, 26); l.Bright = rgb(150, 140, 142); l.BrightAmt = 0.3; l.Contrast = 0.35; }
+            if (brownLitBright && look != 10) l.GameLit = true;   // the dark maroon look keeps its distance dimming
             return l;
         }
 
@@ -918,6 +975,9 @@ namespace EliteBioRadar
                     else if ((detail.Volcanism ?? "").Contains("metallic magma", StringComparison.OrdinalIgnoreCase)) look = 15;
                     else if ((look == 1 || look == 3 || look == 5 || look == 2) && ((hash >> 8) % 10) < 5) look = 15;
                 }
+                // 2026-11-26: Qiedea PS-K c11-7 2 a (airless, 104 K) was a light grey-tan, about (137, 128, 120), with small orange flecks, where the app drew the dark charcoal look 2:
+                // half of the cold airless ones on that look take the pale grey with orange-gold patches (11) instead.
+                else if (pr <= 0 && tp > 0 && tp < 200 && look == 2 && (((hash >> 11) & 1) == 0 || detail.BodyName == "Qiedea PS-K c11-7 2 a")) look = 11;
             }
             switch (look)
             {
@@ -1006,6 +1066,8 @@ namespace EliteBioRadar
             bool rockyMars = false;   // cold rocky body with a moderate atmosphere: ochre-tan Mars look with a big white cap (real: Qiedea NM-M c10-6 A 2 d a)
             bool icyWhite = false;    // icy body under a thin-to-moderate non-methane atmosphere: white ice shell with cyclones and cracks (real: Qiedea SA-U d4-21 4 a, 6)
             bool argonTan = false;    // cold thick argon-rich: muted tan-brown under a lilac veil (real: Qiedea SA-U d4-21 3)
+            bool coldSlate = detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 200 && detail.SurfacePressure >= 5.0e6 && detail.BodyName != "Qiedea KP-G b14-0 1"
+                && (((StableHash(detail.BodyName) >> 17) & 1) == 0 || detail.BodyName == "Qiedea PS-K c11-7 1");   // dark slate-lavender veil (see the dense-atmosphere picks)
             bool icyKeep = IcyKeepLook.Contains(detail.BodyName ?? "") || IcyConfirmedLegacy.Contains(detail.BodyName ?? "") || IcyRightKeep.Contains(detail.BodyName ?? "");   // icy bodies marked right: later icy atmosphere changes leave them alone
             int pick = hash % 10;
             Color s0, s1;
@@ -1090,7 +1152,9 @@ namespace EliteBioRadar
                 denseVariant = (hash >> 2) % 4;
                 if (denseVariant == 3) denseVariant = 5;   // 4 is reserved for the very-hot lava look
                 // Very dense and cold (under 300 K): dark navy basins on cream land under a huge ice cap (real: Qiedea AQ-N c7-0 A 7, 31 MPa of argon-rich nitrogen, 254 K) or on red-orange land with almost no cap (its barycentre partner A 6, 11 MPa, 244 K); both of the two seen, so three in four.
-                if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 300 && detail.SurfacePressure >= 5.0e6 && ((hash >> 13) % 4) != 3) denseVariant = 9;
+                // Half of those under 200 K: Qiedea PS-K c11-7 1 (10 MPa nitrogen, 164 K, M2 star) was a smooth dark slate-lavender veil, about (88, 92, 112), with only faint cloud texture
+                // (KP-G b14-0 1, 15.7 MPa at 132 K, was ochre-tan with navy patches and keeps the look below).
+                if (!coldSlate && detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 300 && detail.SurfacePressure >= 5.0e6 && ((hash >> 13) % 4) != 3) denseVariant = 9;
                 // Cold and dense but under 5 MPa: a smooth pale lilac-grey veil over the whole disc about six times in ten (real: Qiedea QY-P c6-0 B 2, argon-rich 1.26 MPa, 173 K).
                 else if (detail.SurfaceTemperature > 0 && detail.SurfaceTemperature < 300 && (detail.SurfaceTemperature < 200 || ((hash >> 13) % 10) < 6)) denseVariant = 6;   // under 200 K always the veil: Qiedea KG-O c9-0 C 2 (128 K, 1.9 MPa nitrogen) was a smooth pale blue-grey haze with no caps, where the ochre-tan Mars look came from bodies of 214 K and up
                 // Extremely hot bodies (real: RR-N d6-47 A 1, 2,154 K) are near-black with glowing red lava patches.
@@ -1099,7 +1163,7 @@ namespace EliteBioRadar
                 // that methane tints the surface that way, to be confirmed with more methane bodies.
                 // Two real methane bodies, two looks: PW-N d6-2 8 was olive-green under a teal haze, Qiedea JC-U d3-1 A 10 (hot thick methane-rich, 11.5 MPa, 577 K)
                 // a pale blue-grey veil with pink and blue patches and a pale cap. The body name picks.
-                if ((detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase)) { int mv = (hash >> 6) % 3; denseVariant = mv == 0 ? 3 : mv == 1 ? 6 : 9; if (detail.SurfaceTemperature >= 550 && detail.BodyName != "Qiedea TA-U d4-50 AB 6") denseVariant = 6; }   // AB 6 (550 K, 4 MPa) was khaki land with dark teal basins and a white cap in game   // hot thick methane (577 K, 627 K: JC-U d3-1 A 10, UP-V d3-0 AB 1) was a smooth pale blue-grey shell both times   // 9: khaki land under a beige haze with dark navy basins (real: Qiedea MX-T d3-0 7, 19.9 MPa, 467 K)
+                if ((detail.AtmosphereType ?? "").Contains("Methane", StringComparison.OrdinalIgnoreCase)) { int mv = (hash >> 6) % 3; denseVariant = mv == 0 ? 3 : 9; /* 2026-11-26: the pale blue-grey (6) third went to the khaki-navy look: no real body under 550 K had the pale shell, and Qiedea PS-K c11-7 2 (15 MPa, 288 K) was beige haze with dark navy spots */ if (detail.SurfaceTemperature >= 550 && detail.BodyName != "Qiedea TA-U d4-50 AB 6") denseVariant = 6; }   // AB 6 (550 K, 4 MPa) was khaki land with dark teal basins and a white cap in game   // hot thick methane (577 K, 627 K: JC-U d3-1 A 10, UP-V d3-0 AB 1) was a smooth pale blue-grey shell both times   // 9: khaki land under a beige haze with dark navy basins (real: Qiedea MX-T d3-0 7, 19.9 MPa, 467 K)
                 if (detail.BodyName == "Qiedea TA-U d4-50 AB 6") denseVariant = 9;
                 if (rocky) denseVariant = 0;   // real dense rocky bodies (RR-N d6-47 A 2 a, 3.3 MPa) were a pale blue-grey shell
                 // Cold thick atmospheres (real: Qiedea ZW-R d5-22 A 5, 3.49 MPa nitrogen/argon, 214 K): a Mars-like ochre-tan surface under a thin
@@ -1284,6 +1348,13 @@ namespace EliteBioRadar
                 atmoLook.Cloud = rgb(168, 186, 210); atmoLook.CycloneAmt = 0.0; atmoLook.CloudAmt = 0.6; atmoLook.CapAmt = 0;
                 atmoLook.HazeAmt = 0.62; atmoLook.SurfContrast = 1.0;
                 atmoLook.LightDir = new System.Windows.Media.Media3D.Vector3D(-0.20, 0.20, 0.96);
+                // Cold (under 200 K) and 5 MPa or more: the veil is a dark slate-lavender, not pale (real: Qiedea PS-K c11-7 1, 10 MPa nitrogen, 164 K: about (88, 92, 112), smooth).
+                if (coldSlate && !(detail.AtmosphereType ?? "").Contains("Water", StringComparison.OrdinalIgnoreCase))
+                {
+                    atmoLook.Surf0 = rgb(70, 70, 88); atmoLook.Surf1 = rgb(98, 100, 122);
+                    atmoLook.Haze = rgb(100, 104, 128); atmoLook.Cloud = rgb(112, 116, 140); atmoLook.Glow = rgb(132, 140, 182);
+                    atmoLook.HazeAmt = 0.75; atmoLook.CloudAmt = 0.4; atmoLook.SurfContrast = 0.5;
+                }
             }
             else
             if (!icy && !rockyIce && denseVariant == 5)
