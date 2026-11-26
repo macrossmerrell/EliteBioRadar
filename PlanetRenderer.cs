@@ -1048,7 +1048,8 @@ namespace EliteBioRadar
             else if (water)
             {
                 s0 = rgb(20, 34, 50); s1 = rgb(58, 86, 110); contrast = 0.5;   // deep ocean blue, slightly lighter in places
-                if (detail.SurfaceTemperature >= 290 && detail.SurfaceTemperature < 330) { s0 = rgb(40, 38, 26); s1 = rgb(86, 80, 52); contrast = 0.45; }   // the warm one (Qiedea ER-U d3-6 8, 300 K) was a dark brown-olive ocean, the 275 K and 274 K ones blue; one data point for the brown; TA-U d4-50 AB 5 (343 K, 79 kPa nitrogen) was a dark navy ocean, so the brown stops at 330 K
+                // 2026-11-26: the brown band ends at 315 K, not 330: Qiedea VE-H c13-4 A 1 (328 K, 75 kPa nitrogen-oxygen, terraformable) was a deep navy-blue ocean with white clouds and cyclones in person.
+                if (detail.SurfaceTemperature >= 290 && detail.SurfaceTemperature < 315) { s0 = rgb(40, 38, 26); s1 = rgb(86, 80, 52); contrast = 0.45; }   // the warm one (Qiedea ER-U d3-6 8, 300 K) was a dark brown-olive ocean, the 275 K and 274 K ones blue; one data point for the brown; TA-U d4-50 AB 5 (343 K, 79 kPa nitrogen) was a dark navy ocean, so the brown stops at 330 K
             }
             else if (elw)
             {
