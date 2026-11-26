@@ -86,7 +86,7 @@ namespace EliteBioRadar
                     {
                         var atmoLook = PlanetRenderer.GetAtmoWorldLook(d, iconCode);
                         PlanetRenderer.ApplyAtmoStarTint(atmoLook, starK);
-                        PlanetRenderer.ApplyAtmoStarFlux(atmoLook, starFlux, starK);
+                        PlanetRenderer.ApplyAtmoStarFlux(atmoLook, starFlux);
                         var e = AtmoWorldShaderEffect.Create(atmoLook, centre, radius);
                         Clock(e, AtmoWorldShaderEffect.TimeProperty);
                         planet = Host(e);
