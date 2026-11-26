@@ -135,7 +135,7 @@ namespace EliteBioRadar
         // Rings are tinted from A stars up: the rocky rings of Qiedea JC-U d3-1 A 3 (A5 star) read cream-white and tan in game, lighter than their class colours.
         public const double RingTintMinK = 8000;   // an A9 (7712 K, Qiedea OS-T d3-2) had plain brown-tan rings
         // The coolest stars (L dwarfs, about 1500 K): the body is lit almost purely red and reads monochrome red-pink (real: Qiedea TU-M c8-0 B 1, an L6 star at 1521 K, 6 ls away).
-        public const double LowStarTintMaxK = 1950;   // 2026-11-23: was 2100; Qiedea QJ-F a38-0 3 (M9, 2008 K) was plain white snow in game, while the L1 dwarfs at 1866 and 1879 K did tint pink-red. Before that 2400 (1800 before that): the L1 dwarfs of Qiedea DL-N c7-0 (1866 K) and ES-P c7-2 (1879 K) tint their bodies pink-red, but the very cool M dwarfs of YT-D b17-0 (2262 K) and SS-F b16-0 (2233 K) lit white icy bodies plain white in game
+        public const double LowStarTintMaxK = 1990;   // 2026-11-26: was 1950; Qiedea GD-D a53-0 A (L0, 1967 K) lights its planets pink-red in person (A 4: dark maroon), and the app drew them grey. 2026-11-23: was 2100; Qiedea QJ-F a38-0 3 (M9, 2008 K) was plain white snow in game, while the L1 dwarfs at 1866 and 1879 K did tint pink-red. Before that 2400 (1800 before that): the L1 dwarfs of Qiedea DL-N c7-0 (1866 K) and ES-P c7-2 (1879 K) tint their bodies pink-red, but the very cool M dwarfs of YT-D b17-0 (2262 K) and SS-F b16-0 (2233 K) lit white icy bodies plain white in game
 
         public static (double r, double g, double b) StarLightTint(double kelvin)
         {
