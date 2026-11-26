@@ -876,7 +876,9 @@ namespace EliteBioRadar
                     if (pid < 0) break;
                     var parent = all.FirstOrDefault(x => x.BodyID == pid) ?? (primary?.BodyID == pid ? primary : null);
                     if (parent == null) break;
-                    if (parent.IsStar) { ownStarId = parent.BodyID; ownDist = cur.SemiMajorAxis; break; }
+                    // A pair partner's SemiMajorAxis is its orbit round the shared barycentre, not round the star: left unknown (0) so the arrival distances are used. (Real: Qiedea BO-W
+                    // a42-1 9 and 10, 1.2e9 and 1.7e9 m round their barycentre but 6.5 AU from the L dwarf, were dark mauve in game and drawn fully lit while that orbit passed for the distance.)
+                    if (parent.IsStar) { ownStarId = parent.BodyID; ownDist = cur.PairBarycenterID >= 0 ? 0 : cur.SemiMajorAxis; break; }
                     cur = parent;
                 }
 

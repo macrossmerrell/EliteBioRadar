@@ -13,6 +13,7 @@ namespace EliteBioRadar
         public double Contrast, CraterAmt, RayAmt, RustAmt, BrightAmt, IceAmt, HotAmt, AtmGlow, Tilt, Pitch, Mottle, Seed, SpecAmt, LineAmt, LineFine;
         public bool NoFrost;   // the frost rule leaves this look alone
         public bool Pretinted;   // colours were taken from game shots already lit by a red or brown dwarf: the star tint is not applied again
+        public bool GameLit;     // colours are the game's brightness as well (taken from a dimly lit body): the distance dimming is not applied either
         public Vector3D LightDir = new Vector3D(-0.55, 0.55, 0.63);   // view space; more frontal = softer terminator
     }
 

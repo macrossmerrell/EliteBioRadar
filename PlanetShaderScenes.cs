@@ -71,8 +71,9 @@ namespace EliteBioRadar
                 {
                     (ringBackImage, glow) = PlanetRenderer.GetGasGiantShaderStaticLayers(d, iconCode, w, h, shaderRings: ringed);
                     (scene.Cx, scene.Cy, planetR) = PlanetRenderer.GetGasGiantSphere(d, w, h);
-                    var e = GasGiantShaderEffect.Create(PlanetRenderer.GetGasGiantLook(d, iconCode),
-                        new Point(scene.Cx / w, scene.Cy / h), new Point(planetR / w, planetR / h));
+                    var ggLook = PlanetRenderer.GetGasGiantLook(d, iconCode);
+                    PlanetRenderer.ApplyGasGiantRedDwarfLight(ggLook, d, iconCode, starK, starFlux);
+                    var e = GasGiantShaderEffect.Create(ggLook, new Point(scene.Cx / w, scene.Cy / h), new Point(planetR / w, planetR / h));
                     Clock(e, GasGiantShaderEffect.TimeProperty);
                     planet = Host(e);
                 }

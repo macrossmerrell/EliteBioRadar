@@ -172,7 +172,7 @@ namespace EliteBioRadar
         // starFlux here is relative to the full-brightness level of the lighting star (1 = full), see EliteWatcherService.PrimaryStarFlux.
         private static void ApplyStarFlux(LandableWorldLook l, double starK, double flux)
         {
-            if (flux <= 0) return;
+            if (flux <= 0 || l.GameLit) return;
             double k = Math.Clamp(Math.Sqrt(flux), 0.2, 1.0);
             if (k >= 0.999) return;
             (double, double, double) m = (k, k, k);
@@ -197,6 +197,23 @@ namespace EliteBioRadar
             if (k >= 0.999) return;
             (double, double, double) m = (k, k, k);
             l.Surf0 = Tinted(l.Surf0, m); l.Surf1 = Tinted(l.Surf1, m); l.Haze = Tinted(l.Haze, m); l.Cloud = Tinted(l.Cloud, m); l.Cap = Tinted(l.Cap, m); l.Glow = Tinted(l.Glow, m);
+        }
+
+        // Gas giants are otherwise neither tinted nor dimmed, but round an L, T or Y dwarf they take its light: Qiedea IG-R a45-0 10 (Class I, 8 K, 0.006 of full light from the
+        // L dwarf) was a dark maroon-brown with faint lighter bands in game, where the app drew its bright lilac very-cold look. The lilac is replaced by a neutral grey (the red
+        // light leaves no blue to show), then tinted, then dimmed with a higher floor (0.5) than the terrain bodies. One real body so far.
+        public static void ApplyGasGiantRedDwarfLight(GasGiantLook g, BodyScanDetail d, string iconCode, double starK, double flux)
+        {
+            if (!(starK > 0 && starK < LowStarTintMaxK)) return;
+            Color rgb(int r, int gr, int b) => Color.FromRgb((byte)r, (byte)gr, (byte)b);
+            if (iconCode == "GG1" && d.SurfaceTemperature > 0 && d.SurfaceTemperature < 60)
+            {
+                g.C0 = rgb(80, 74, 74); g.C1 = rgb(104, 98, 98); g.C2 = rgb(130, 122, 120); g.C3 = rgb(146, 138, 136); g.Band4 = rgb(66, 60, 60); g.Glow = rgb(130, 122, 120);
+            }
+            var k = StarLightTint(starK);
+            double dim = flux > 0 ? Math.Clamp(Math.Sqrt(flux), 0.5, 1.0) : 1.0;
+            (double, double, double) m = (k.r * dim, k.g * dim, k.b * dim);
+            g.C0 = Tinted(g.C0, m); g.C1 = Tinted(g.C1, m); g.C2 = Tinted(g.C2, m); g.C3 = Tinted(g.C3, m); g.Band4 = Tinted(g.Band4, m); g.Glow = Tinted(g.Glow, m);
         }
 
         private static void ApplyStarTint(LandableWorldLook l, double starK)
@@ -235,6 +252,13 @@ namespace EliteBioRadar
             "Qiedea UP-V d3-31 B 7", "Qiedea UP-V d3-31 B 4", "Qiedea UP-V d3-3 2", "Qiedea NK-R c7-4 2", "Qiedea NK-R c7-4 1", "Qiedea NK-R c7-4 3", "Qiedea UP-V d3-5 B 3", "Qiedea UP-V d3-5 B 2",
             "Qiedea UP-V d3-5 C 8", "Qiedea UP-V d3-5 C 2", "Qiedea XP-H b16-1 B 5", "Qiedea TA-G b17-3 A 2", "Qiedea KG-O c9-0 A 5", "Qiedea KG-O c9-0 A 4", "Qiedea KG-O c9-0 C 3",
             "Qiedea TA-U d4-50 AB 1", "Qiedea TA-U d4-50 AB 2", "Qiedea TA-U d4-50 AB 3", "Qiedea TA-U d4-50 D 7",
+        };
+
+        // Icy bodies round L dwarfs marked RIGHT in the verdict log (to 2026-11-25): the L-dwarf look shares in GetIcyLandableLook never move them.
+        private static readonly HashSet<string> LDwarfIcyRight = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Qiedea BO-W a42-1 2", "Qiedea BO-W a42-1 6", "Qiedea BO-W a42-1 11", "Qiedea GL-V b22-2 B 4", "Qiedea YH-Y a41-0 1", "Qiedea YH-Y a41-0 2",
+            "Qiedea TA-G b17-3 B 2", "Qiedea TA-G b17-3 B 4", "Qiedea TA-G b17-3 B 5", "Qiedea IG-R a45-0 2", "Qiedea IG-R a45-0 5", "Qiedea IG-R a45-0 6", "Qiedea IG-R a45-0 7",
         };
 
         private static LandableWorldLook GetLandableWorldLookCore(BodyScanDetail detail, string iconCode, double starK)
@@ -424,6 +448,13 @@ namespace EliteBioRadar
             }
 
             if (redLit) l.NoFrost = true;
+            // Airless high-metal bodies round an L dwarf: Qiedea GL-V b22-2 B 1 (196 K, 0 Pa, L 1421 K) was a bright Mars-like orange-red with darker rust patches, fine grain and a
+            // dark-rayed crater, while its neighbours B 2 and B 3 with a trace of atmosphere were right as the flat red-tinted grey-brown. Game colours, so no tint on top.
+            if (redLit && iconCode == "HMC" && detail.SurfacePressure <= 0 && starK >= 1300 && !HmcRightKeep.Contains(detail.BodyName ?? ""))
+            {
+                l.Light = rgb(204, 96, 70); l.Dark = rgb(166, 72, 54); l.Accent = rgb(136, 56, 42); l.Bright = rgb(222, 124, 92);
+                l.Contrast = 0.5; l.RustAmt = 0.45; l.BrightAmt = 0.45; l.CraterAmt = 0.3; l.RayAmt = -0.8; l.Pretinted = true;
+            }
             // Frost on the cold bodies: small polar patches at most. The first version covered whole hemispheres, but the real airless cold bodies
             // (Qiedea FX-S d4-0 4, 5 and 6 at 232 / 196 / 173 K) showed none or one small polar patch.
             if (temp > 0 && temp < 250 && !l.NoFrost)
@@ -526,10 +557,14 @@ namespace EliteBioRadar
             Color rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
             l.Light = rgb(100, 70, 92); l.Dark = rgb(66, 44, 60); l.Bright = rgb(122, 90, 114); l.BrightAmt = 0.4; l.Accent = rgb(24, 14, 20); l.RustAmt = 0.55;
             l.Ice = rgb(16, 8, 12); l.LineAmt = 1.0; l.LineFine = 1.0; l.Contrast = 0.7; l.CraterAmt = 0.1; l.RayAmt = 0.05; l.SpecAmt = 0.3; l.Pretinted = true;
+            // Already as dim as the game drew them (both real ones are far out from a Y dwarf), so no distance dimming on top.
+            l.GameLit = true;
         }
 
-        private static void ApplyParametricIcyLook(LandableWorldLook l, int hash, string? bodyName = null, bool coldWhite = false, double starK = 0)
+        // useSalmonWhite: set when the pick should be the white-with-salmon-patches look (9) instead; the caller draws that one.
+        private static void ApplyParametricIcyLook(LandableWorldLook l, int hash, out bool useSalmonWhite, string? bodyName = null, bool coldWhite = false, double starK = 0)
         {
+            useSalmonWhite = false;
             Color rgb(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
             bool redLit = starK > 0 && starK < LowStarTintMaxK;
             uint m = (uint)hash * 2654435761u; m ^= m >> 15; m *= 2246822519u; m ^= m >> 13;
@@ -589,6 +624,9 @@ namespace EliteBioRadar
                     return;
                 }
             }
+            // Round an L dwarf the charcoal ground is wrong: Qiedea BO-W a42-1 1 (43 K, L 1689 K, close in) drew dark red from it but was bright pink with orange-red streaks in game,
+            // the white-with-salmon-patches look under the red light (as its right neighbour BO-W a42-1 2 draws).
+            if (redLit && starK >= 1300 && tone == 3) { useSalmonWhite = true; return; }
             l.Light = light[tone]; l.Dark = dark[tone];
             l.Accent = rgb(56, 54, 54); l.Ice = rgb(48, 48, 50); l.Bright = rgb(240, 240, 238);
             l.Contrast = tone <= 1 ? 0.30 + 0.15 * Roll(3, 100) / 100.0 : tone == 2 ? 0.55 : 0.80;
@@ -684,20 +722,50 @@ namespace EliteBioRadar
                 SetRedLitPurple(l);
                 return l;
             }
+            // Round an L dwarf (1300-1950 K) the game showed three icy looks: pink-white (the salmon-white look under the red light, most of them), white with dark charcoal
+            // ragged veins and patches (real: Qiedea IG-R a45-0 1 and 3, 28-33 K) and a dark maroon-brown (GL-V b22-2 B 5, IG-R a45-0 4; BO-W a42-1 6 and 11). The pair
+            // IG-R 3 and 4 showed one of each, so nothing in the scan decides it: a hash share (2 in 8 veined, 1 in 8 maroon), with the real ones fixed and the right ones left alone.
+            bool lDwarf = icyRedLit && starK >= 1300;
+            bool icyKeepAny = IcyKeepLook.Contains(detail.BodyName ?? "") || IcyRightKeep.Contains(detail.BodyName ?? "") || IcyConfirmedLegacy.Contains(detail.BodyName ?? "");
+            bool lDwarfFree = lDwarf && !icyKeepAny && !LDwarfIcyRight.Contains(detail.BodyName ?? "");
+            int ldPick = -1;   // 0 veined, 1 maroon
+            if (lDwarfFree)
+            {
+                // (ES-P c7-2 C 2, 3, 4 and 6 a were pale pink with dark maroon patches in game: the veined look under the red light)
+                if (detail.BodyName is "Qiedea IG-R a45-0 1" or "Qiedea IG-R a45-0 3" or "Qiedea ES-P c7-2 C 2" or "Qiedea ES-P c7-2 C 3" or "Qiedea ES-P c7-2 C 4" or "Qiedea ES-P c7-2 C 6 a") ldPick = 0;
+                else if (detail.BodyName is "Qiedea IG-R a45-0 4" or "Qiedea GL-V b22-2 B 5") ldPick = 1;
+                else if (detail.BodyName is "Qiedea BO-W a42-1 1" or "Qiedea BO-W a42-1 9" or "Qiedea BO-W a42-1 10") ldPick = -1;   // pink-white in game (9 and 10 dimmed)
+                else { uint r = ((uint)hash >> 26) % 8; ldPick = r < 2 ? 0 : r == 2 ? 1 : -1; }
+            }
+            if (ldPick == 0)
+            {
+                l.Light = rgb(236, 235, 232); l.Dark = rgb(214, 212, 208); l.Bright = rgb(226, 196, 160); l.BrightAmt = 0.35; l.Accent = rgb(52, 44, 46); l.RustAmt = 0.55;
+                l.Ice = rgb(44, 36, 38); l.LineAmt = 1.0; l.LineFine = 1.0; l.Contrast = 0.35; l.CraterAmt = 0.2; l.RayAmt = 0.1; l.SpecAmt = 0.5;
+                return l;
+            }
+            if (ldPick == 1) look = 10;
             // The tuned real looks (7-13) and the very cold light-grey look keep their picks; everything else (the old guessed looks 0-6) is now generated from the name hash,
             // because the 21 icy moons of Qiedea QB-C b17-0 (one star, 47-117 K) were all different combinations of base tone, accent colour, accent form and crater density.
             bool coldKeep = look == 2 && temp > 0 && temp < 35;
             // Half of the icy bodies of 40-125 K draw the white family, whatever look the hash had picked (the salmon and maroon picks kept missing there).
-            if (temp >= 40 && temp <= 125 && ((hash >> 5) % 10) < 5 && !IcyKeepLook.Contains(detail.BodyName ?? "") && !IcyRightKeep.Contains(detail.BodyName ?? "") && !IcyConfirmedLegacy.Contains(detail.BodyName ?? ""))
+            if (ldPick != 1 && temp >= 40 && temp <= 125 && ((hash >> 5) % 10) < 5 && !IcyKeepLook.Contains(detail.BodyName ?? "") && !IcyRightKeep.Contains(detail.BodyName ?? "") && !IcyConfirmedLegacy.Contains(detail.BodyName ?? ""))
             {
-                ApplyParametricIcyLook(l, hash, detail.BodyName, true, starK);
+                ApplyParametricIcyLook(l, hash, out _, detail.BodyName, true, starK);
                 return l;
             }
+            bool icyKeep = icyKeepAny;
             if (look <= 6 && !coldKeep && !IcyConfirmedLegacy.Contains(detail.BodyName ?? ""))
             {
-                ApplyParametricIcyLook(l, hash, detail.BodyName, false, starK);
-                return l;
+                ApplyParametricIcyLook(l, hash, out bool salmonWhite, detail.BodyName, false, starK);
+                if (!salmonWhite) return l;
+                // Keep-set bodies keep their parametric look: run it again without the star (past the redirect, nothing in it depends on the star).
+                if (icyKeep) { ApplyParametricIcyLook(l, hash, out _, detail.BodyName, false, 0); return l; }
+                look = 9;   // falls through to the switch (nothing of the parametric look was set)
             }
+            // Round an L dwarf the plain pale grey look is wrong: Qiedea GL-V b22-2 B 5 (88 K, L 1421 K) drew pale pink from it but was a dark maroon-brown with darker blotches in game,
+            // the dark maroon look under the red light (as BO-W a42-1 6 and 11 draw, right).
+            bool maroonFromGrey = (look == 8 && icyRedLit && starK >= 1300 && !icyKeep) || ldPick == 1;
+            if (maroonFromGrey) look = 10;
             switch (look)
             {
                 case 0: // white with teal-green blotches
@@ -747,6 +815,9 @@ namespace EliteBioRadar
                     l.Light = rgb(136, 98, 92); l.Dark = rgb(86, 64, 60); l.Accent = rgb(74, 62, 48); l.Bright = rgb(214, 176, 96);
                     l.Contrast = 0.90; l.RustAmt = 0.30; l.BrightAmt = 0.25; l.CraterAmt = 0.5; l.RayAmt = 0.1; l.SpecAmt = 0.9; break;
             }
+            if (maroonFromGrey) l.LineAmt = 0.0;   // GL-V b22-2 B 5 showed blotches, no crack lines
+            // Blue crevasses do not show blue under an L dwarf's red light: Qiedea IG-R a45-0 8 (20 K) was dim mauve with a black crack network in game, where the app drew blue-violet streaks.
+            if (look == 7 && lDwarfFree) { l.Ice = rgb(30, 22, 26); l.Bright = rgb(150, 140, 142); l.BrightAmt = 0.3; l.Contrast = 0.35; }
             return l;
         }
 
